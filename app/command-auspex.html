@@ -294,6 +294,46 @@ async function loadRosterFile(path) {
   return parseFrontmatter(text);
 }
 
+async function loadFromScenario(s) {
+  const missionText = await readTextFile(repoHandle, s.mission);
+  const mission = await parseFrontmatter(missionText);
+  const defender = await loadRosterFile(s.defender.roster);
+  const attacker = await loadRosterFile(s.attacker.roster);
+  const svg = document.getElementById('board');
+  renderBoard(svg, mission);
+
+  const placements = [];
+  for (const role of ['defender', 'attacker']) {
+    const roster = role === 'defender' ? defender : attacker;
+    for (const entry of s.board_state[role]) {
+      const unit = roster.units.find(u => u.name === entry.unit_ref);
+      if (!unit || !unit.datasheet) continue;
+      const ds = await loadDatasheet(unit.datasheet);
+      placements.push({
+        unit: { ...unit, _base: ds.base },
+        datasheet: ds,
+        centerIn: entry.position,
+        role,
+      });
+    }
+  }
+  renderUnits(svg, placements);
+  renderThreatRanges(svg, placements);
+
+  // Populate the module-scope caches so hover/click/save all work.
+  lastDefender = defender;
+  lastAttacker = attacker;
+  lastPlacements = placements;
+  lastMissionPath = s.mission;
+  lastDefenderPath = s.defender.roster;
+  lastAttackerPath = s.attacker.roster;
+  lastDatasheets.clear();
+  for (const p of placements) lastDatasheets.set(p.unit.name, p.datasheet);
+  document.getElementById('save-scenario').disabled = false;
+
+  statusEl.textContent = `OPENED: ${s.name}`;
+}
+
 loadBtn.addEventListener('click', async () => {
   try {
     const missionText = await readTextFile(repoHandle, missionSel.value);
@@ -437,13 +477,24 @@ document.getElementById('save-scenario').addEventListener('click', async () => {
       missionPath: lastMissionPath,
       defender: { rosterPath: lastDefenderPath, owner: 'Captain Hunter' },
       attacker: { rosterPath: lastAttackerPath, owner: 'Unknown' },
-      placements: lastPlacements.map(p => ({
-        unit_name: p.unit.name,
-        role: p.role,
-        centerIn: p.centerIn,
-        orientation_deg: 0,
-        placement: 'on_board',
-      })),
+      placements: lastPlacements.map(p => {
+        const group = boardEl.querySelector(`.unit[data-unit-name="${CSS.escape(p.unit.name)}"]`);
+        let cx = p.centerIn[0], cy = p.centerIn[1];
+        if (group) {
+          const t = group.transform.baseVal.consolidate();
+          if (t) {
+            cx += t.matrix.e / 10; // INCH_PX = 10
+            cy += t.matrix.f / 10;
+          }
+        }
+        return {
+          unit_name: p.unit.name,
+          role: p.role,
+          centerIn: [cx, cy],
+          orientation_deg: 0,
+          placement: 'on_board',
+        };
+      }),
     });
     const md = serializeScenario(scenario);
     const path = `500 Worlds Campaign/scenarios/${scenario.id}.md`;
@@ -486,8 +537,7 @@ document.getElementById('open-scenario').addEventListener('click', async () => {
     defenderSel.value = s.defender.roster;
     attackerSel.value = s.attacker.roster;
     loadBtn.disabled = false;
-    loadBtn.click(); // trigger normal load; Task 19 will add position restore
-    statusEl.textContent = `OPENED: ${s.name} — POSITIONS FROM SCENARIO WILL APPLY IN TASK 19`;
+    await loadFromScenario(s);
   } catch (err) {
     statusEl.textContent = `ERROR: ${err.message}`;
   }
