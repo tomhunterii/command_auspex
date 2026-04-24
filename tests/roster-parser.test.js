@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
-import { parseRoster } from '../app/lib/roster-parser.js';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { parseRoster, slugify, resolveSlug } from '../app/lib/roster-parser.js';
 
 const SAMPLE = readFileSync(
   new URL('../ultramarines/rosters/norallus-purge-and-burn.txt', import.meta.url),
@@ -85,4 +87,81 @@ test('parseRoster flags section per unit', () => {
   assert.strictEqual(r.units.find(u => u.name === 'Captain Titus').section, 'CHARACTERS');
   assert.strictEqual(r.units.find(u => u.name === 'Impulsor').section, 'DEDICATED TRANSPORTS');
   assert.strictEqual(r.units.find(u => u.name === 'Aggressor Squad').section, 'OTHER DATASHEETS');
+});
+
+// ── slugify ───────────────────────────────────────────────────────────────────
+
+test('slugify: basic multi-word name', () => {
+  assert.strictEqual(slugify('Aggressor Squad'), 'aggressor-squad');
+});
+
+test('slugify: apostrophes and punctuation', () => {
+  assert.strictEqual(slugify("Bjorn the Fell-Handed"), 'bjorn-the-fell-handed');
+});
+
+test('slugify: all caps', () => {
+  assert.strictEqual(slugify('CAPTAIN TITUS'), 'captain-titus');
+});
+
+test('slugify: collapses multiple non-word chars into single dash', () => {
+  assert.strictEqual(slugify("Ol'  Knife--Master"), 'ol-knife-master');
+});
+
+test('slugify: trims leading and trailing dashes', () => {
+  assert.strictEqual(slugify('  hello world  '), 'hello-world');
+});
+
+// ── resolveSlug ───────────────────────────────────────────────────────────────
+
+test('resolveSlug: exact match', () => {
+  const candidates = [
+    { faction: 'space-marines', slug: 'aggressor-squad' },
+    { faction: 'tyranids', slug: 'hormagaunt-brood' },
+  ];
+  assert.strictEqual(resolveSlug('Aggressor Squad', candidates), 'space-marines/aggressor-squad');
+});
+
+test('resolveSlug: -squad suffix stripping fallback', () => {
+  // Hypothetical file named "aggressor.md" (slug "aggressor") with no "-squad" suffix
+  const candidates = [
+    { faction: 'space-marines', slug: 'aggressor' },
+  ];
+  assert.strictEqual(resolveSlug('Aggressor Squad', candidates), 'space-marines/aggressor');
+});
+
+test('resolveSlug: no match returns null', () => {
+  const candidates = [
+    { faction: 'space-marines', slug: 'intercessor-squad' },
+  ];
+  assert.strictEqual(resolveSlug('Lychguard', candidates), null);
+});
+
+test('resolveSlug: first-match-wins across factions', () => {
+  const candidates = [
+    { faction: 'space-marines', slug: 'terminator-squad' },
+    { faction: 'chaos-space-marines', slug: 'terminator-squad' },
+  ];
+  assert.strictEqual(resolveSlug('Terminator Squad', candidates), 'space-marines/terminator-squad');
+});
+
+test('resolveSlug: exact match takes priority over stripped fallback', () => {
+  // If both exact "aggressor-squad" and stripped "aggressor" exist, exact wins
+  const candidates = [
+    { faction: 'space-marines', slug: 'aggressor-squad' },
+    { faction: 'space-marines', slug: 'aggressor' },
+  ];
+  assert.strictEqual(resolveSlug('Aggressor Squad', candidates), 'space-marines/aggressor-squad');
+});
+
+// ── Integration: parseRoster + resolveSlug against real datasheets/ ───────────
+
+test('integration: at least 10 of 16 Norallus units resolve against real datasheets/space-marines/units/', () => {
+  const repoRoot = path.resolve(fileURLToPath(import.meta.url), '../..');
+  const unitsDir = path.join(repoRoot, 'datasheets', 'space-marines', 'units');
+  const files = readdirSync(unitsDir).filter(f => f.endsWith('.md'));
+  const candidates = files.map(f => ({ faction: 'space-marines', slug: f.replace(/\.md$/, '') }));
+
+  const r = parseRoster(SAMPLE);
+  const resolved = r.units.filter(u => resolveSlug(u.name, candidates) !== null);
+  assert.ok(resolved.length >= 10, `Only ${resolved.length}/16 units resolved; expected >= 10`);
 });

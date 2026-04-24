@@ -2,6 +2,40 @@
 // JS port of scripts/parse_gw_roster.py
 // Parses GW Companion App roster exports.
 
+/**
+ * Lowercase a name and replace runs of non-word characters with dashes.
+ * Matches Python: re.sub(r'[^\w]+', '-', name.lower()).strip('-')
+ * @param {string} name
+ * @returns {string}
+ */
+export function slugify(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^\w]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Resolve a unit name to a "<faction>/<slug>" string using a pre-built candidates list.
+ * Pure function — no filesystem access.
+ * @param {string} unitName
+ * @param {Array<{faction: string, slug: string}>} candidates
+ * @returns {string|null}
+ */
+export function resolveSlug(unitName, candidates) {
+  const slug = slugify(unitName);
+  const toTry = [slug];
+  if (slug.endsWith('-squad')) {
+    toTry.push(slug.slice(0, -'-squad'.length));
+  }
+  for (const cand of toTry) {
+    const match = candidates.find(c => c.slug === cand);
+    if (match) return `${match.faction}/${cand}`;
+  }
+  return null;
+}
+
 const SECTION_HEADERS = new Set([
   'CHARACTERS', 'EPIC HEROES', 'BATTLELINE',
   'DEDICATED TRANSPORTS', 'OTHER DATASHEETS',

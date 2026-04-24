@@ -87,6 +87,11 @@ test('smoke: all lib/ modules imported', () => {
   }
 });
 
+test('smoke: resolveSlug is imported from roster-parser.js', () => {
+  assert.match(HTML, /import\s*\{[^}]*resolveSlug[^}]*\}\s*from\s*'\.\/lib\/roster-parser\.js'/,
+    'resolveSlug not imported from ./lib/roster-parser.js');
+});
+
 test('smoke: four corner reticles + hex sidebar background', () => {
   for (const cls of ['reticle-tl', 'reticle-tr', 'reticle-bl', 'reticle-br']) {
     assert.match(HTML, new RegExp(`class="reticle ${cls}"`), `missing reticle ${cls}`);
