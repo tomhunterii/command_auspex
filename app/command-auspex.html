@@ -339,7 +339,7 @@
 </div>
 
 <script type="module">
-import { listDir, readTextFile, writeTextFile } from './lib/fs.js';
+import { listDir, readTextFile, writeTextFile, fileExists } from './lib/fs.js';
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
 import { parseRoster, resolveSlug } from './lib/roster-parser.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
@@ -600,6 +600,12 @@ document.getElementById('save-scenario').addEventListener('click', async () => {
     });
     const md = serializeScenario(scenario);
     const path = `500 Worlds Campaign/scenarios/${scenario.id}.md`;
+    if (await fileExists(repoHandle, path)) {
+      if (!confirm(`SCENARIO "${scenario.id}" ALREADY INTERRED.\n\nOVERWRITE THE ARCHIVE?`)) {
+        statusEl.textContent = 'SCRIBE ABORTED — ARCHIVE UNTOUCHED';
+        return;
+      }
+    }
     await writeTextFile(repoHandle, path, md);
     statusEl.textContent = `SCENARIO INTERRED AT: ${path}`;
   } catch (err) {
@@ -670,11 +676,8 @@ function closePasteModal() {
   pasteModal.classList.remove('show');
 }
 
-/**
- * Walk datasheets/*/units/*.md via the FSA and return a flat candidates array.
- * Factions without a units/ subdirectory are skipped silently.
- * @returns {Promise<Array<{faction: string, slug: string}>>}
- */
+// Walk datasheets/<faction>/units/<slug>.md via the FSA and return a flat
+// candidates array. Factions without a units/ subdirectory are skipped silently.
 async function listDatasheetCandidates() {
   const candidates = [];
   let factionEntries;

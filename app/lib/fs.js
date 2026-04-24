@@ -60,6 +60,28 @@ export async function readTextFile(root, path) {
 }
 
 /**
+ * Check whether a file exists at the given repo-relative path.
+ * Returns true only when the final segment is a file (not a directory).
+ * Returns false for any missing segment or type mismatch — never throws.
+ * @param {FileSystemDirectoryHandle} root
+ * @param {string} path
+ * @returns {Promise<boolean>}
+ */
+export async function fileExists(root, path) {
+  try {
+    const parts = path.split('/').filter(Boolean);
+    let handle = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      handle = await handle.getDirectoryHandle(parts[i]);
+    }
+    await handle.getFileHandle(parts[parts.length - 1]);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
  * Write a text file at the given repo-relative path.
  * Auto-creates any missing parent directories. Truncates any existing file
  * at `path` (FSA `createWritable()` defaults to `keepExistingData: false`).
