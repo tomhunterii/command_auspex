@@ -239,7 +239,7 @@ import { listDir, readTextFile } from './lib/fs.js';
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
 import { parseRoster } from './lib/roster-parser.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
-import { renderBoard, renderUnits } from './lib/render.js';
+import { renderBoard, renderUnits, renderThreatRanges } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
 
 const statusEl = document.getElementById('status');
@@ -339,6 +339,7 @@ loadBtn.addEventListener('click', async () => {
       lastDatasheets.set(p.unit.name, p.datasheet);
     }
     renderUnits(svg, placements);
+    renderThreatRanges(svg, placements);
     statusEl.textContent = `LOADED: ${mission.name} · ${placements.length} UNITS PLACED`;
   } catch (err) {
     statusEl.textContent = `ERROR: ${err.message}`;

@@ -165,6 +165,27 @@ export function makeUnitDraggable(group, onDragEnd) {
   });
 }
 
+export function renderThreatRanges(svg, placements) {
+  const layer = svg.querySelector('#layer-threat');
+  if (!layer) return;
+  while (layer.firstChild) layer.removeChild(layer.firstChild);
+  for (const p of placements) {
+    const range = p.datasheet?.max_range_in;
+    if (!range || range === 0) continue;
+    const [cx, cy] = [p.centerIn[0] * INCH_PX, p.centerIn[1] * INCH_PX];
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', cx);
+    circle.setAttribute('cy', cy);
+    circle.setAttribute('r', range * INCH_PX);
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke', p.role === 'attacker' ? '#ff5d6c' : '#6fff8e');
+    circle.setAttribute('stroke-width', '0.8');
+    circle.setAttribute('stroke-dasharray', '3 3');
+    circle.setAttribute('opacity', '0.45');
+    layer.appendChild(circle);
+  }
+}
+
 function renderUnit({ unit, datasheet, centerIn, role }) {
   const color = role === 'attacker' ? '#ff5d6c' : '#6fff8e';
   const fill  = role === 'attacker' ? 'rgba(255,93,108,0.6)' : 'rgba(111,255,142,0.55)';
