@@ -18,3 +18,8 @@ test('pathJoin joins segments with /', () => {
   assert.strictEqual(pathJoin('a/', '/b/', '/c'), 'a/b/c');
   assert.strictEqual(pathJoin('a', '', 'b'), 'a/b');
 });
+
+test('pathJoin returns empty string when given no or only empty segments', () => {
+  assert.strictEqual(pathJoin(), '');
+  assert.strictEqual(pathJoin('', '', ''), '');
+});

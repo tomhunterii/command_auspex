@@ -29,7 +29,10 @@ export async function resolveFile(root, path) {
 }
 
 /**
- * List entries in a subdirectory of root. Returns [{name, kind}].
+ * List entries in a subdirectory of root.
+ * @param {FileSystemDirectoryHandle} root
+ * @param {string} path
+ * @returns {Promise<Array<{name: string, kind: 'file' | 'directory'}>>}
  */
 export async function listDir(root, path) {
   const parts = path.split('/').filter(Boolean);
@@ -44,12 +47,27 @@ export async function listDir(root, path) {
   return out;
 }
 
+/**
+ * Read a text file at the given repo-relative path.
+ * @param {FileSystemDirectoryHandle} root
+ * @param {string} path
+ * @returns {Promise<string>}
+ */
 export async function readTextFile(root, path) {
   const fh = await resolveFile(root, path);
   const file = await fh.getFile();
   return file.text();
 }
 
+/**
+ * Write a text file at the given repo-relative path.
+ * Auto-creates any missing parent directories. Truncates any existing file
+ * at `path` (FSA `createWritable()` defaults to `keepExistingData: false`).
+ * @param {FileSystemDirectoryHandle} root
+ * @param {string} path
+ * @param {string} content
+ * @returns {Promise<void>}
+ */
 export async function writeTextFile(root, path, content) {
   const parts = path.split('/').filter(Boolean);
   let handle = root;
