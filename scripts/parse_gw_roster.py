@@ -261,8 +261,11 @@ def _parse_unit(block: list[str], section: Optional[str]) -> Unit:
         if content == 'Warlord':
             warlord = True
             continue
-        if content.lower().startswith('enhancement:'):
-            enhancement = content.split(':', 1)[1].strip()
+        # Match both "Enhancement:" (singular) and "Enhancements:" (plural — how the
+        # GW Companion App actually emits it). Match is case-insensitive.
+        m_enh = re.match(r'^enhancements?:\s*(.+)$', content, re.IGNORECASE)
+        if m_enh:
+            enhancement = m_enh.group(1).strip()
             continue
 
         nx = NX_ITEM_RE.match(content)
