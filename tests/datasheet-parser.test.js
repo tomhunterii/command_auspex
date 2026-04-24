@@ -54,3 +54,26 @@ test('parseDatasheet extracts unit name from title', () => {
   const ds = parseDatasheet(load('intercessor-squad'));
   assert.strictEqual(ds.name, 'Intercessor Squad');
 });
+
+test('parseDatasheet extracts per-model bases from Wardens of Ultramar', () => {
+  const ds = parseDatasheet(load('wardens-of-ultramar'));
+  assert.ok(Array.isArray(ds.base.per_model), 'per_model should be an array');
+  assert.strictEqual(ds.base.per_model.length, 6);
+
+  const gadriel = ds.base.per_model.find(m => m.submodel === 'Ancient Gadriel');
+  assert.deepStrictEqual(gadriel, { submodel: 'Ancient Gadriel', shape: 'round', diameter_mm: 40 });
+
+  const metaurus = ds.base.per_model.find(m => m.submodel === 'Veteran Sergeant Metaurus');
+  assert.strictEqual(metaurus.diameter_mm, 40);
+
+  const silva = ds.base.per_model.find(m => m.submodel === 'Gaius Silva');
+  assert.strictEqual(silva.diameter_mm, 28.5);
+
+  const vestha = ds.base.per_model.find(m => m.submodel === 'Lucia Vestha');
+  assert.strictEqual(vestha.diameter_mm, 28.5);
+});
+
+test('parseDatasheet leaves per_model undefined for normal single-base units', () => {
+  const ds = parseDatasheet(load('intercessor-squad'));
+  assert.strictEqual(ds.base.per_model, undefined);
+});

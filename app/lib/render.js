@@ -218,26 +218,33 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
   group.setAttribute('class', `unit unit-${role}`);
   group.dataset.unitName = unit.name;
 
-  const baseMm = datasheet?.base?.diameter_mm ?? 32;
-  const basePx = baseDiameterPx(baseMm);
-  const r = basePx / 2;
+  const defaultMm = datasheet?.base?.diameter_mm ?? 32;
+  const perModel = datasheet?.base?.per_model ?? null;
 
   const [cx, cy] = [centerIn[0] * INCH_PX, centerIn[1] * INCH_PX];
 
+  // Flatten to per-model list. When the datasheet enumerates per-model bases
+  // (e.g., Wardens of Ultramar: 2 × 40mm + 4 × 28.5mm), each submodel carries
+  // its own diameter; otherwise every model uses the unit's default.
   const models = [];
   for (const sub of unit.models) {
+    const match = perModel?.find(pm => pm.submodel === sub.submodel);
+    const mm = match?.diameter_mm ?? defaultMm;
     for (let k = 0; k < sub.count; k++) {
-      models.push({ sub });
+      models.push({ sub, mm });
     }
   }
-  const offsets = clusterOffsets(models.length, basePx);
+
+  // Cluster spacing uses the largest base so smaller bases never collide.
+  const maxMm = models.reduce((m, x) => Math.max(m, x.mm), defaultMm);
+  const offsets = clusterOffsets(models.length, baseDiameterPx(maxMm));
 
   models.forEach((m, i) => {
     const isSergeant = (i === 0);
     const circle = document.createElementNS(SVG_NS, 'circle');
     circle.setAttribute('cx', cx + offsets[i][0]);
     circle.setAttribute('cy', cy + offsets[i][1]);
-    circle.setAttribute('r', r);
+    circle.setAttribute('r', baseDiameterPx(m.mm) / 2);
     circle.setAttribute('fill', fill);
     circle.setAttribute('stroke', color);
     circle.setAttribute('stroke-width', isSergeant ? 2 : 1);

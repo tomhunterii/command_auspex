@@ -39,6 +39,18 @@ function parseBase(body) {
   const flightMatch = /\*\*Flight stem:\*\*\s*(yes|no)/i.exec(body);
   if (flightMatch) result.flight_stem = flightMatch[1].toLowerCase() === 'yes';
 
+  // Per-model bases (optional). Format under `- **Per-model bases:**`:
+  //   `  - <Submodel>: <shape>, <N>mm`
+  // e.g. Wardens of Ultramar has mixed 40mm + 28.5mm bases across 6 named models.
+  const perModelMatches = [...body.matchAll(/^\s{2,}-\s+(.+?):\s+(\w+),\s+([\d.]+)\s*mm/gim)];
+  if (perModelMatches.length > 0) {
+    result.per_model = perModelMatches.map(m => ({
+      submodel: m[1].trim(),
+      shape: m[2].toLowerCase(),
+      diameter_mm: parseFloat(m[3]),
+    }));
+  }
+
   return result;
 }
 
