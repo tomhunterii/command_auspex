@@ -1,0 +1,171 @@
+// app/lib/roster-parser.js
+// JS port of scripts/parse_gw_roster.py
+// Parses GW Companion App roster exports.
+
+const SECTION_HEADERS = new Set([
+  'CHARACTERS', 'EPIC HEROES', 'BATTLELINE',
+  'DEDICATED TRANSPORTS', 'OTHER DATASHEETS',
+  'INFANTRY', 'VEHICLES', 'MONSTERS', 'WALKERS',
+  'ALLIED UNITS', 'FORTIFICATIONS', 'SWARMS',
+]);
+
+const UNIT_HEADER_RE = /^(.+?) \(([\d,]+) Points\)$/;
+const TOP_BULLET_RE = /^  • (.+?)\s*$/;
+const NESTED_BULLET_RE = /^\s{5}◦ (.+?)\s*$/;
+const NX_ITEM_RE = /^(\d+)x (.+)$/;
+const ENHANCEMENT_RE = /^enhancements?:\s*(.+)$/i;
+const EXPORT_FOOTER_RE = /^Exported with App Version:\s*(.+?),\s*Data Version:\s*(.+?)\s*$/;
+
+function isSectionHeader(line) {
+  const s = line.trim();
+  if (!s || s.length < 2) return false;
+  if (SECTION_HEADERS.has(s)) return true;
+  return /^[A-Z ]+$/.test(s) && /[A-Z]/.test(s);
+}
+
+export function parseRoster(text) {
+  const lines = text.split(/\r?\n/);
+  let i = 0;
+
+  while (i < lines.length && lines[i].trim() === '') i++;
+  if (i >= lines.length) throw new Error('Empty export');
+
+  const headerMatch = UNIT_HEADER_RE.exec(lines[i].trim());
+  if (!headerMatch) throw new Error(`Expected list header at line ${i+1}, got: ${JSON.stringify(lines[i])}`);
+  const list_name = headerMatch[1];
+  const list_points = parseInt(headerMatch[2].replace(/,/g, ''), 10);
+  i++;
+
+  function nextNonblank() {
+    while (i < lines.length && lines[i].trim() === '') i++;
+    if (i >= lines.length) throw new Error('Unexpected end of input in header');
+    const v = lines[i].trim();
+    i++;
+    return v;
+  }
+
+  const faction = nextNonblank();
+  const subfaction = nextNonblank();
+  const detachment = nextNonblank();
+
+  const bsLine = nextNonblank();
+  let battle_size_name, max_points = null;
+  const bsMatch = UNIT_HEADER_RE.exec(bsLine);
+  if (bsMatch) {
+    battle_size_name = bsMatch[1];
+    max_points = parseInt(bsMatch[2].replace(/,/g, ''), 10);
+  } else {
+    battle_size_name = bsLine;
+  }
+
+  const units = [];
+  let current_section = null;
+  let app_version = null;
+  let data_version = null;
+
+  while (i < lines.length) {
+    const raw = lines[i];
+    const stripped = raw.trim();
+
+    if (stripped === '') { i++; continue; }
+
+    const fm = EXPORT_FOOTER_RE.exec(stripped);
+    if (fm) {
+      app_version = fm[1].trim();
+      data_version = fm[2].trim();
+      break;
+    }
+
+    if (isSectionHeader(raw)) {
+      current_section = stripped;
+      i++;
+      continue;
+    }
+
+    const um = UNIT_HEADER_RE.exec(stripped);
+    if (um && !raw.startsWith('  ')) {
+      const block = [raw];
+      i++;
+      while (i < lines.length) {
+        const nxt = lines[i];
+        if (nxt.trim() === '') { i++; continue; }
+        if (nxt.startsWith('  •') || nxt.startsWith('     ◦')) {
+          block.push(nxt);
+          i++;
+          continue;
+        }
+        break;
+      }
+      units.push(parseUnit(block, current_section));
+    } else {
+      i++;
+    }
+  }
+
+  return {
+    list_name, list_points, faction, subfaction, detachment,
+    battle_size_name, max_points, app_version, data_version,
+    units,
+  };
+}
+
+function parseUnit(block, section) {
+  const headerMatch = UNIT_HEADER_RE.exec(block[0].trim());
+  const name = headerMatch[1];
+  const points = parseInt(headerMatch[2].replace(/,/g, ''), 10);
+
+  const entries = [];
+  let current_top = null;
+  for (const raw of block.slice(1)) {
+    const tm = TOP_BULLET_RE.exec(raw);
+    const nm = NESTED_BULLET_RE.exec(raw);
+    if (tm) {
+      current_top = { content: tm[1].trim(), children: [] };
+      entries.push(current_top);
+    } else if (nm && current_top !== null) {
+      current_top.children.push(nm[1].trim());
+    }
+  }
+
+  let warlord = false;
+  let enhancement = null;
+  const models = [];
+  const flat_wargear = [];
+
+  for (const entry of entries) {
+    const content = entry.content;
+
+    if (content === 'Warlord') { warlord = true; continue; }
+    const enhMatch = ENHANCEMENT_RE.exec(content);
+    if (enhMatch) { enhancement = enhMatch[1].trim(); continue; }
+
+    const nx = NX_ITEM_RE.exec(content);
+    if (entry.children.length > 0) {
+      let count, submodel;
+      if (nx) { count = parseInt(nx[1], 10); submodel = nx[2]; }
+      else { count = 1; submodel = content; }
+      const wargear = entry.children.map(child => {
+        const cnx = NX_ITEM_RE.exec(child);
+        return cnx
+          ? { count: parseInt(cnx[1], 10), item: cnx[2] }
+          : { count: 1, item: child };
+      });
+      models.push({ submodel, count, wargear });
+    } else {
+      if (nx) flat_wargear.push({ count: parseInt(nx[1], 10), item: nx[2] });
+      else flat_wargear.push({ count: 1, item: content });
+    }
+  }
+
+  if (models.length === 0 && flat_wargear.length > 0) {
+    models.push({ submodel: name, count: 1, wargear: flat_wargear });
+  }
+
+  const total_models = models.reduce((a, m) => a + m.count, 0);
+
+  return {
+    name, section, points,
+    warlord, enhancement,
+    total_models, models,
+  };
+}
