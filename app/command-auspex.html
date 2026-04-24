@@ -390,7 +390,9 @@ function updateLoadBtn() {
 [missionSel, defenderSel, attackerSel].forEach(s => s.addEventListener('change', updateLoadBtn));
 
 async function loadDatasheet(slug) {
-  const text = await readTextFile(repoHandle, `datasheets/${slug}.md`);
+  // slug is "<faction>/<unit-slug>" — actual path is datasheets/<faction>/units/<unit-slug>.md
+  const [faction, unitSlug] = slug.split('/');
+  const text = await readTextFile(repoHandle, `datasheets/${faction}/units/${unitSlug}.md`);
   return parseDatasheet(text);
 }
 
