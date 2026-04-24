@@ -1,0 +1,101 @@
+// tests/e2e-smoke.test.js
+//
+// Lightweight smoke test for app/command-auspex.html.
+//
+// The plan originally called for Playwright. A live-browser smoke was run via
+// the Playwright MCP at Task 22 and verified the app renders correctly. This
+// test captures the same structural invariants without requiring a 250MB
+// Playwright install: it reads the HTML from disk and asserts the key IDs,
+// imports, and liturgical strings are present. If any are missing, something
+// has regressed in the controls / boot sequence / polish layers.
+//
+// To run: `npm test`
+// To run live-browser smoke: navigate to `http://localhost:<port>/app/command-auspex.html`
+// after `python3 -m http.server` from the repo root, then click CONNECT REPO.
+
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+
+const HTML = readFileSync(new URL('../app/command-auspex.html', import.meta.url), 'utf8');
+
+test('smoke: page title and meta', () => {
+  assert.match(HTML, /<title>COMMAND AUSPEX \/\/ HOLOLITH-SIGMA<\/title>/);
+});
+
+test('smoke: topbar chrome — title, subtitle, status, LED', () => {
+  assert.match(HTML, /class="title">COMMAND AUSPEX</);
+  assert.match(HTML, /HOLOLITH-SIGMA · VOX-CHANNEL SIGMA-09/);
+  assert.match(HTML, /id="status"/);
+  assert.match(HTML, /class="led"/);
+});
+
+test('smoke: all control element IDs exist', () => {
+  for (const id of [
+    'pick-repo',
+    'mission-select',
+    'defender-select',
+    'attacker-select',
+    'load-scenario',
+    'open-scenario',
+    'save-scenario',
+    'paste-defender',
+    'paste-attacker',
+    'paste-modal',
+    'paste-textarea',
+    'paste-cancel',
+    'paste-confirm',
+    'board',
+    'sidebar',
+    'tooltip',
+    'boot-overlay',
+  ]) {
+    assert.match(HTML, new RegExp(`id="${id}"`), `missing id="${id}"`);
+  }
+});
+
+test('smoke: liturgical UI strings applied', () => {
+  assert.match(HTML, />ENGAGE</);
+  assert.match(HTML, />RECALL SCENARIO</);
+  assert.match(HTML, />COMMIT TO ARCHIVE</);
+  assert.match(HTML, />\+ VOX-SCRIBE DEFENDER</);
+  assert.match(HTML, />\+ VOX-SCRIBE ATTACKER</);
+  assert.match(HTML, /ENGAGEMENT/);
+  assert.match(HTML, /FRIENDLY FORCE/);
+  assert.match(HTML, /HOSTILE FORCE/);
+  assert.match(HTML, /MACHINE-SPIRIT OBJECTS/);
+  assert.match(HTML, /COGITATOR LINK/);
+});
+
+test('smoke: layer toggle buttons present', () => {
+  for (const layer of ['deployment', 'edges', 'scoring', 'threat', 'coherency', 'auspex-sweep']) {
+    assert.match(HTML, new RegExp(`data-layer="${layer}"`), `missing layer button ${layer}`);
+  }
+});
+
+test('smoke: all lib/ modules imported', () => {
+  for (const mod of [
+    './lib/fs.js',
+    './lib/yaml-frontmatter.js',
+    './lib/roster-parser.js',
+    './lib/datasheet-parser.js',
+    './lib/render.js',
+    './lib/auto-placement.js',
+    './lib/scenario.js',
+  ]) {
+    assert.match(HTML, new RegExp(`from '${mod.replace(/\./g, '\\.')}'`), `missing import from ${mod}`);
+  }
+});
+
+test('smoke: four corner reticles + hex sidebar background', () => {
+  for (const cls of ['reticle-tl', 'reticle-tr', 'reticle-bl', 'reticle-br']) {
+    assert.match(HTML, new RegExp(`class="reticle ${cls}"`), `missing reticle ${cls}`);
+  }
+  assert.match(HTML, /background-image:\s*\n?\s*linear-gradient.*\n.*url\("data:image\/svg\+xml/s);
+});
+
+test('smoke: boot sequence markup + animation', () => {
+  assert.match(HTML, /AUSPEX PRIMARIS \/\/ COGITATOR HANDSHAKE/);
+  assert.match(HTML, /AUSPEX ONLINE ✠ BY THE EMPEROR'S WILL/);
+  assert.match(HTML, /@keyframes boot-fade/);
+});
