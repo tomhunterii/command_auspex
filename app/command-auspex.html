@@ -215,6 +215,7 @@
       <label class="status-msg">DEFENDER <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
       <label class="status-msg">ATTACKER <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
       <button id="load-scenario" class="btn" disabled>LOAD SCENARIO</button>
+      <button id="open-scenario" class="btn">OPEN SCENARIO</button>
       <button id="save-scenario" class="btn" disabled>SAVE</button>
     </div>
   </div>
@@ -242,7 +243,7 @@ import { parseRoster } from './lib/roster-parser.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
 import { renderBoard, renderUnits, renderThreatRanges } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
-import { buildScenario, serializeScenario } from './lib/scenario.js';
+import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
 
 const statusEl = document.getElementById('status');
 const missionSel = document.getElementById('mission-select');
@@ -448,6 +449,45 @@ document.getElementById('save-scenario').addEventListener('click', async () => {
     const path = `500 Worlds Campaign/scenarios/${scenario.id}.md`;
     await writeTextFile(repoHandle, path, md);
     statusEl.textContent = `SAVED: ${path}`;
+  } catch (err) {
+    statusEl.textContent = `ERROR: ${err.message}`;
+  }
+});
+
+document.getElementById('open-scenario').addEventListener('click', async () => {
+  if (!repoHandle) {
+    statusEl.textContent = 'CONNECT REPO FIRST';
+    return;
+  }
+  try {
+    const items = await listDir(repoHandle, '500 Worlds Campaign/scenarios');
+    const scenarios = items.filter(i => i.kind === 'file' && i.name.endsWith('.md'));
+    if (scenarios.length === 0) {
+      statusEl.textContent = 'NO SAVED SCENARIOS';
+      return;
+    }
+    const pick = prompt(
+      'Scenario to open (enter number or full filename):\n' +
+      scenarios.map((s, i) => `${i+1}. ${s.name}`).join('\n')
+    );
+    if (!pick) return;
+    const byIndex = scenarios[parseInt(pick, 10) - 1];
+    const byName = scenarios.find(s => s.name === pick);
+    const file = byIndex ?? byName;
+    if (!file) {
+      statusEl.textContent = 'SCENARIO NOT FOUND';
+      return;
+    }
+    const text = await readTextFile(repoHandle, `500 Worlds Campaign/scenarios/${file.name}`);
+    const s = await parseScenario(text);
+    if (!s) throw new Error('Scenario has no frontmatter');
+    // Populate dropdowns from the scenario file
+    missionSel.value = s.mission;
+    defenderSel.value = s.defender.roster;
+    attackerSel.value = s.attacker.roster;
+    loadBtn.disabled = false;
+    loadBtn.click(); // trigger normal load; Task 19 will add position restore
+    statusEl.textContent = `OPENED: ${s.name} — POSITIONS FROM SCENARIO WILL APPLY IN TASK 19`;
   } catch (err) {
     statusEl.textContent = `ERROR: ${err.message}`;
   }
