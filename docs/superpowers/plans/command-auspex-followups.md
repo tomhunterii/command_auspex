@@ -51,6 +51,10 @@ Shipped: `yamlString(s)` helper in `scenario.js` (escapes `\` then `"`, mirrors 
 ### Auto-save race on tab close within 500ms (working as designed)
 If the Captain drags and immediately closes the tab within 500ms, the debounced write never fires. Trade-off for a local single-user tool — not worth a `beforeunload` handler unless it bites in practice.
 
+## Known data issues (upstream, not code bugs)
+
+- **Norallus roster misspells "Dainal Kornelius" as "Dainal Komelius"** (missing `r`). The GW Companion App export itself has the typo, which propagates through `parseRoster` into the .md file. Effect: per-model base lookup fails for this one submodel and falls back to the default 32mm. Canonical spelling in `datasheets/space-marines/units/wardens-of-ultramar.md` matches Wahapedia and MFM v3.9. Fix: either correct the roster file by hand, or the Companion App data will need to be patched upstream.
+
 ## Known non-issues (flagged but working as designed)
 
 - `@playwright/test` not installed. The Milestone 11 plan called for it; I substituted a lightweight `tests/e2e-smoke.test.js` that runs via `node --test` and a live-browser verification via Playwright MCP. Rationale: 250MB install for two smoke tests against a static HTML file is overkill.
