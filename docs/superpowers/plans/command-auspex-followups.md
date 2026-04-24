@@ -47,6 +47,14 @@ Purge and Burn's attacker has two corner triangles. The current logic shuffles t
 ### ~~No auto-persistence~~ ✅ Done `1c766a1` (+ `01e751f` name-preservation fix)
 Shipped: once a scenario is explicitly saved or recalled, every drag-end schedules a 500ms debounced silent re-write to the same file. `currentScenarioPath` + `currentScenarioName` track the target; `buildCurrentScenarioMarkdown` shared between explicit and auto paths. Status flashes "AUTO-SCRIBED" for 1500ms. Auto-save is a no-op before the first explicit save.
 
+### YAML injection in scenario serialization (surfaced by auto-save review)
+`app/lib/scenario.js` `serializeScenario` wraps `name`, `id`, paths, and `owner` fields in double quotes but does NOT escape `"` or `\` in the values. A scenario name containing a double quote (reachable via the explicit save `prompt()`) produces invalid YAML. Auto-save re-writes the same bad payload on every drag, so the file stays broken.
+
+**Scope:** Add a `yamlString(s)` helper in `scenario.js` that escapes `\` then `"`; use it for every string scalar (mirrors the Python `_yaml_str` in `scripts/parse_gw_roster.py`). Apply to `id`, `name`, `mission`, `defender.roster`, `attacker.roster`, `defender.owner`, `attacker.owner`, and each placement's `unit_name`.
+
+### Auto-save race on tab close within 500ms (working as designed)
+If the Captain drags and immediately closes the tab within 500ms, the debounced write never fires. Trade-off for a local single-user tool — not worth a `beforeunload` handler unless it bites in practice.
+
 ## Known non-issues (flagged but working as designed)
 
 - `@playwright/test` not installed. The Milestone 11 plan called for it; I substituted a lightweight `tests/e2e-smoke.test.js` that runs via `node --test` and a live-browser verification via Playwright MCP. Rationale: 250MB install for two smoke tests against a static HTML file is overkill.
