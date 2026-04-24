@@ -136,6 +136,18 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
+
+  .btn {
+    background: var(--void);
+    color: var(--paper);
+    border: 1px solid var(--phosphor-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--phosphor); background: rgba(111,255,142,0.06); }
 </style>
 </head>
 <body>
@@ -145,6 +157,10 @@
     <div class="title">COMMAND AUSPEX</div>
     <div class="subtitle">HOLOLITH-SIGMA · VOX-CHANNEL SIGMA-09</div>
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
+    <div style="margin-top:8px;">
+      <button id="pick-repo" class="btn">CONNECT TO REPO</button>
+      <span id="repo-path" class="status-msg" style="margin-left:12px;"></span>
+    </div>
   </div>
   <div class="stage">
     <div class="canvas-wrap"><svg id="board" width="600" height="440" viewBox="0 0 600 440"></svg></div>
@@ -153,9 +169,24 @@
 </div>
 
 <script type="module">
-import { helloWorld } from './lib/bootstrap.js';
+const statusEl = document.getElementById('status');
+const repoPathEl = document.getElementById('repo-path');
+let repoHandle = null;
 
-document.getElementById('status').textContent = helloWorld();
+document.getElementById('pick-repo').addEventListener('click', async () => {
+  try {
+    repoHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    repoPathEl.textContent = `REPO: ${repoHandle.name}`;
+    statusEl.textContent = 'REPO CONNECTED — SELECT MISSION AND ROSTERS.';
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      statusEl.textContent = `ERROR: ${err.message}`;
+    }
+  }
+});
+
+// Make the handle available to other modules
+window.__repoHandle = () => repoHandle;
 </script>
 </body>
 </html>
