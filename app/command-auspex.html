@@ -371,13 +371,37 @@ async function populateDropdown(select, dir, ext = '.md') {
     mds.map(i => `<option value="${dir}/${i.name}">${i.name.replace(ext, '')}</option>`).join('');
 }
 
+// Roster-specific dropdown population: parse each .md and keep only files with
+// structured frontmatter (YAML with `units:` array). Hand-written markdown
+// tables are filtered out. Returns { kept, skipped } counts for status reporting.
+async function populateRosterDropdowns(dir, selects) {
+  const items = await listDir(repoHandle, dir);
+  const mds = items.filter(i => i.kind === 'file' && i.name.endsWith('.md'));
+  const kept = [];
+  let skipped = 0;
+  for (const item of mds) {
+    try {
+      const text = await readTextFile(repoHandle, `${dir}/${item.name}`);
+      const fm = await parseFrontmatter(text);
+      if (fm && Array.isArray(fm.units)) kept.push(item);
+      else skipped++;
+    } catch {
+      skipped++;
+    }
+  }
+  const html = '<option value="">— SELECT —</option>' +
+    kept.map(i => `<option value="${dir}/${i.name}">${i.name.replace('.md', '')}</option>`).join('');
+  for (const sel of selects) sel.innerHTML = html;
+  return { kept: kept.length, skipped };
+}
+
 document.getElementById('pick-repo').addEventListener('click', async () => {
   try {
     repoHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    statusEl.textContent = `COGITATOR LINK ESTABLISHED · REPOSITORY ${repoHandle.name}`;
     await populateDropdown(missionSel, '500 Worlds Campaign/missions');
-    await populateDropdown(defenderSel, 'ultramarines/rosters');
-    await populateDropdown(attackerSel, 'ultramarines/rosters');
+    const { kept, skipped } = await populateRosterDropdowns('ultramarines/rosters', [defenderSel, attackerSel]);
+    const tail = skipped > 0 ? ` · ${skipped} UNSTRUCTURED SKIPPED` : '';
+    statusEl.textContent = `COGITATOR LINK ESTABLISHED · REPOSITORY ${repoHandle.name} · ${kept} ROSTER${kept === 1 ? '' : 'S'} RECOGNIZED${tail}`;
     window.__repoHandle = () => repoHandle;
   } catch (err) {
     if (err.name !== 'AbortError') statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
@@ -769,8 +793,7 @@ async function handlePasteConfirm() {
     const mdContent = buildRosterMarkdown(roster, `${slug}.txt`);
     await writeTextFile(repoHandle, mdPath, mdContent);
     // Refresh both roster dropdowns
-    await populateDropdown(defenderSel, 'ultramarines/rosters');
-    await populateDropdown(attackerSel, 'ultramarines/rosters');
+    await populateRosterDropdowns('ultramarines/rosters', [defenderSel, attackerSel]);
     const sel = pasteTarget === 'defender' ? defenderSel : attackerSel;
     sel.value = mdPath;
     updateLoadBtn();
