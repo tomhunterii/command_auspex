@@ -108,8 +108,34 @@ export function renderUnits(svg, placements) {
 
   for (const p of placements) {
     const group = renderUnit(p);
+    makeUnitDraggable(group);
     layer.appendChild(group);
   }
+}
+
+export function makeUnitDraggable(group, onDragEnd) {
+  let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  group.style.cursor = 'grab';
+  group.addEventListener('mousedown', (e) => {
+    dragging = true;
+    sx = e.clientX; sy = e.clientY;
+    const transform = group.transform.baseVal.consolidate();
+    [ox, oy] = transform ? [transform.matrix.e, transform.matrix.f] : [0, 0];
+    group.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    group.setAttribute('transform', `translate(${ox + dx}, ${oy + dy})`);
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    group.style.cursor = 'grab';
+    const transform = group.transform.baseVal.consolidate();
+    onDragEnd?.(transform ? [transform.matrix.e, transform.matrix.f] : [0, 0]);
+  });
 }
 
 function renderUnit({ unit, datasheet, centerIn, role }) {
