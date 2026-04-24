@@ -117,6 +117,26 @@
   }
 
   .stage { display: grid; grid-template-columns: 1fr 340px; overflow: hidden; }
+  .canvas-col { display: grid; grid-template-rows: auto 1fr; overflow: hidden; min-width: 0; }
+  .toolbar {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--phosphor-dim);
+    display: flex;
+    gap: 8px;
+    background: var(--void-2);
+  }
+  .layer-btn {
+    background: var(--void);
+    color: var(--dim);
+    border: 1px solid var(--phosphor-dim);
+    padding: 4px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+  }
+  .layer-btn.active { color: var(--phosphor); border-color: var(--phosphor); }
+  .layer-btn:hover { background: rgba(111,255,142,0.06); }
   .canvas-wrap { overflow: auto; padding: 16px; background: var(--void); }
   .sidebar { border-left: 1px solid var(--phosphor-dim); background: var(--void-2); padding: 16px; overflow-y: auto; }
   .status-msg { font-size: 11px; color: var(--dim); letter-spacing: 1.5px; padding: 8px 0; }
@@ -198,8 +218,19 @@
     </div>
   </div>
   <div class="stage">
-    <div class="canvas-wrap"><svg id="board" width="600" height="440" viewBox="0 0 600 440"></svg></div>
-    <div class="sidebar" id="sidebar"><div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div></div>
+    <div class="canvas-col">
+      <div class="toolbar">
+        <button class="layer-btn active" data-layer="deployment">DEPLOYMENT</button>
+        <button class="layer-btn active" data-layer="edges">EDGES</button>
+        <button class="layer-btn active" data-layer="scoring">SCORING</button>
+        <button class="layer-btn" data-layer="threat">THREAT RANGES</button>
+        <button class="layer-btn" data-layer="coherency">COHERENCY (DBG)</button>
+      </div>
+      <div class="canvas-wrap"><svg id="board" width="600" height="440" viewBox="0 0 600 440"></svg></div>
+    </div>
+    <div class="sidebar" id="sidebar">
+      <div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div>
+    </div>
   </div>
 </div>
 
@@ -374,6 +405,14 @@ function escapeHtml(s) {
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
   );
 }
+
+document.querySelectorAll('.layer-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('active');
+    const layer = document.getElementById(`layer-${btn.dataset.layer}`);
+    if (layer) layer.style.display = btn.classList.contains('active') ? '' : 'none';
+  });
+});
 
 function renderDetailPanel(unit, ds) {
   if (!unit) return;

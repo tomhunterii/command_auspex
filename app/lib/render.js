@@ -23,7 +23,7 @@ export function renderBoard(svg, mission) {
   const { width_in, height_in } = mission.board;
   setBoardSize(svg, width_in, height_in);
 
-  // background
+  // background (always visible, not in a togglable layer)
   const bg = document.createElementNS(SVG_NS, 'rect');
   bg.setAttribute('x', 0);
   bg.setAttribute('y', 0);
@@ -34,14 +34,16 @@ export function renderBoard(svg, mission) {
   bg.setAttribute('stroke-width', '2');
   svg.appendChild(bg);
 
-  // grid (10-inch majors)
+  // grid (in its own layer)
+  const gridLayer = document.createElementNS(SVG_NS, 'g');
+  gridLayer.setAttribute('id', 'layer-grid');
   for (let x = 10; x < width_in; x += 10) {
     const line = document.createElementNS(SVG_NS, 'line');
     line.setAttribute('x1', x * INCH_PX); line.setAttribute('x2', x * INCH_PX);
     line.setAttribute('y1', 0); line.setAttribute('y2', height_in * INCH_PX);
     line.setAttribute('stroke', 'rgba(111,255,142,0.15)');
     line.setAttribute('stroke-width', '0.8');
-    svg.appendChild(line);
+    gridLayer.appendChild(line);
   }
   for (let y = 10; y < height_in; y += 10) {
     const line = document.createElementNS(SVG_NS, 'line');
@@ -49,48 +51,73 @@ export function renderBoard(svg, mission) {
     line.setAttribute('x1', 0); line.setAttribute('x2', width_in * INCH_PX);
     line.setAttribute('stroke', 'rgba(111,255,142,0.15)');
     line.setAttribute('stroke-width', '0.8');
-    svg.appendChild(line);
+    gridLayer.appendChild(line);
   }
+  svg.appendChild(gridLayer);
 
   // deployment zones
-  const attPolys = mission.deployment?.attacker?.polygons ?? [];
-  const defPolys = mission.deployment?.defender?.polygons ?? [];
-  attPolys.forEach(p => drawPolygon(svg, p.vertices, 'rgba(255,93,108,0.25)', '#ff5d6c'));
-  defPolys.forEach(p => drawPolygon(svg, p.vertices, 'rgba(111,255,142,0.22)', '#6fff8e'));
+  const zonesLayer = document.createElementNS(SVG_NS, 'g');
+  zonesLayer.setAttribute('id', 'layer-deployment');
+  (mission.deployment?.attacker?.polygons ?? []).forEach(p =>
+    drawPolygon(zonesLayer, p.vertices, 'rgba(255,93,108,0.25)', '#ff5d6c')
+  );
+  (mission.deployment?.defender?.polygons ?? []).forEach(p =>
+    drawPolygon(zonesLayer, p.vertices, 'rgba(111,255,142,0.22)', '#6fff8e')
+  );
+  svg.appendChild(zonesLayer);
 
-  // battlefield edges (thick)
-  const attEdges = mission.battlefield_edges?.attacker ?? [];
-  const defEdges = mission.battlefield_edges?.defender ?? [];
-  attEdges.forEach(e => drawSegment(svg, e.segment, '#ff5d6c', 6));
-  defEdges.forEach(e => drawSegment(svg, e.segment, '#6fff8e', 6));
+  // battlefield edges
+  const edgesLayer = document.createElementNS(SVG_NS, 'g');
+  edgesLayer.setAttribute('id', 'layer-edges');
+  (mission.battlefield_edges?.attacker ?? []).forEach(e =>
+    drawSegment(edgesLayer, e.segment, '#ff5d6c', 6)
+  );
+  (mission.battlefield_edges?.defender ?? []).forEach(e =>
+    drawSegment(edgesLayer, e.segment, '#6fff8e', 6)
+  );
+  svg.appendChild(edgesLayer);
 
   // scoring zones
-  const objs = mission.scoring?.objectives ?? [];
-  for (const obj of objs) {
+  const scoringLayer = document.createElementNS(SVG_NS, 'g');
+  scoringLayer.setAttribute('id', 'layer-scoring');
+  (mission.scoring?.objectives ?? []).forEach(obj => {
     if (obj.scoring_zone?.polygon) {
-      drawPolygon(svg, obj.scoring_zone.polygon, 'rgba(255,179,71,0.07)', '#ffb347', { dashed: true });
+      drawPolygon(scoringLayer, obj.scoring_zone.polygon, 'rgba(255,179,71,0.07)', '#ffb347', { dashed: true });
     }
-  }
+  });
+  svg.appendChild(scoringLayer);
+
+  // threat ranges layer (hidden by default; populated by renderThreatRanges in Task 16)
+  const threatLayer = document.createElementNS(SVG_NS, 'g');
+  threatLayer.setAttribute('id', 'layer-threat');
+  threatLayer.style.display = 'none';
+  svg.appendChild(threatLayer);
+
+  // coherency layer (debug; hidden by default)
+  const coherencyLayer = document.createElementNS(SVG_NS, 'g');
+  coherencyLayer.setAttribute('id', 'layer-coherency');
+  coherencyLayer.style.display = 'none';
+  svg.appendChild(coherencyLayer);
 }
 
-function drawPolygon(svg, vertices, fill, stroke, { dashed = false } = {}) {
+function drawPolygon(parent, vertices, fill, stroke, { dashed = false } = {}) {
   const poly = document.createElementNS(SVG_NS, 'polygon');
   poly.setAttribute('points', vertices.map(([x, y]) => `${x * INCH_PX},${y * INCH_PX}`).join(' '));
   poly.setAttribute('fill', fill);
   poly.setAttribute('stroke', stroke);
   poly.setAttribute('stroke-width', '1.5');
   if (dashed) poly.setAttribute('stroke-dasharray', '4 3');
-  svg.appendChild(poly);
+  parent.appendChild(poly);
 }
 
-function drawSegment(svg, [[x1, y1], [x2, y2]], stroke, width) {
+function drawSegment(parent, [[x1, y1], [x2, y2]], stroke, width) {
   const line = document.createElementNS(SVG_NS, 'line');
   line.setAttribute('x1', x1 * INCH_PX); line.setAttribute('y1', y1 * INCH_PX);
   line.setAttribute('x2', x2 * INCH_PX); line.setAttribute('y2', y2 * INCH_PX);
   line.setAttribute('stroke', stroke);
   line.setAttribute('stroke-width', width);
   line.setAttribute('stroke-linecap', 'round');
-  svg.appendChild(line);
+  parent.appendChild(line);
 }
 
 /**
