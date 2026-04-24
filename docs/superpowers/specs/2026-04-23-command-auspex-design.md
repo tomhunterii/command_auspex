@@ -1,4 +1,4 @@
-# Tactical Projector App — Design
+# Command Auspex — Design
 
 **Date:** 2026-04-23
 **Author:** Venator (on behalf of Captain Hunter)
@@ -36,7 +36,7 @@ The app is the Captain's tactical planning surface — turn it on, load a missio
 
 ## Architecture
 
-**Delivery:** a single file at `app/tactical-projector.html`. No build step. No server. No framework.
+**Delivery:** a single file at `app/command-auspex.html`. No build step. No server. No framework.
 
 **Runtime dependencies loaded from CDNs:**
 - `js-yaml` for frontmatter parsing.
@@ -272,16 +272,45 @@ On **OPEN**:
 4. Rebuild board state from `board_state[]`. Skip auto-placement.
 5. Render.
 
-## Visual Style
+## Visual Style — Auspex Console Aesthetic
 
-- **Display type:** Bank Gothic (per memory standard, committed 2026-04-23).
-- **Data type:** JetBrains Mono (via Google Fonts).
-- **Theme:** continuation of the phosphor / amber / hostile-red / friendly-green palette established in the geometry visual and the Dylan/Alex projection.
-- **Scan-line overlay + subtle grain + vignette:** same CSS tricks as the Dylan/Alex projection.
+The Command Auspex is styled as a Warhammer 40,000 **auspex console**, not a conventional browser UI. Direct reference points: the opening of *Space Marine 2* (the tactical scan readout as you approach a battlefield), the opening of *Secret Level — "Know No Fear"* (Ultramarines liturgical HUD boot-up). The player should feel they've sat down at a cogitator, not opened a web page.
+
+### Core aesthetic elements
+
+- **Display type:** Bank Gothic (per memory standard, committed 2026-04-23) — all HUD titles, zone labels, status readouts.
+- **Data type:** JetBrains Mono (via Google Fonts) — coordinates, dimensions, points values, wargear lists.
+- **Palette:** phosphor green (primary), amber (warnings, flags, objective markers), hostile red (enemy), friendly green (allied), dim grey (metadata).
+- **Scan-line overlay** across the entire viewport (same CSS trick as `dylan-alex-tactical-projection.html`).
+- **Grain + vignette** on the viewport for CRT feel.
+
+### Auspex-specific decorative vocabulary
+
+The UI chrome should evoke a machine-spirit-blessed tactical display. Expected elements, layered in as polish tasks:
+
+- **Angular panel frames.** Corner brackets (clip-path notched polygons) on the topbar, sidebar, and paste-modal. Not rounded rectangles.
+- **Corner reticles / targeting crosshairs** decorating dormant panel regions.
+- **Imperial iconography.** A small Ultramarines Ω sigil or Chapter Serf aquila in the topbar. An Imperial skull + cog ornament in the footer. Ornamental, not primary.
+- **Pulsing status LEDs.** Small dots that pulse slowly (phosphor green = all-systems-nominal, amber = waiting, red = fault).
+- **Boot sequence.** On first connect, a short (1.5s max) init overlay: "AUSPEX PRIMARIS // BOOTING…", "VOX CHANNEL SIGMA-09 SYNC", "COGITATOR HANDSHAKE", then fade to main interface. Skippable on click.
+- **Radial sweep accent** (stretch) on the main canvas — a faint rotating phosphor line that sweeps the battlefield every few seconds, evoking an active auspex ping. Optional; can be turned off.
+- **Hex-grid texture** on the sidebar background (very low opacity — CSS background-image tiled SVG).
+- **High-gothic headers.** Status line should read "AUSPEX ONLINE // TACTICAL DATA READY" rather than "Connected." All user-visible strings should have a liturgical tone.
+
+### Hard-style-rule: Bank Gothic only for HUD chrome
+
+No Google-fonts sans-serif anywhere else for display type. If the app needs a character / flavour accent beyond Bank Gothic + JetBrains Mono, add a single Cinzel fallback at most (Cinzel is already in the fallback stack for file-load-failure resilience).
+
+### Reference implementations in-repo
+
+- `500 Worlds Campaign/campaign/dylan-alex-tactical-projection.html` — palette, scan-lines, layer-toggle pattern. Lift liberally.
+- `500 Worlds Campaign/campaign/purge-and-burn-geometry.html` — Bank Gothic + phosphor + data-table layout. Lift liberally.
+
+The Command Auspex goes further than either — more radial, more military HUD, more boot-sequence-and-reticle than "styled HTML."
 
 ## File Locations
 
-- App file: `app/tactical-projector.html`
+- App file: `app/command-auspex.html`
 - New folder for saved scenarios: `500 Worlds Campaign/scenarios/`
 - Rosters folder (paste target): `ultramarines/rosters/` (existing; also add `opponents/` when we have opponent rosters)
 
@@ -311,7 +340,7 @@ None at spec approval. Implementation plan (writing-plans skill) will sequence t
 
 - **File System Access API browser support.** Chrome and Edge ship it. Safari and Firefox do not. The Captain uses macOS; Chrome is the assumed primary browser. Falling back to manual download/upload is doable but adds friction — we build for Chrome first and fall back only if the Captain switches browsers.
 - **Auto-placement algorithm quality.** First-iteration packing may produce ugly layouts with mixed base sizes. The drag-to-refine interaction is the mitigation — the Captain is expected to fine-tune.
-- **File size of `tactical-projector.html`.** Likely 2–5k lines monolithic. If it becomes painful to edit, we split into modules. Initial monolithic approach optimises for zero-build iteration.
+- **File size of `command-auspex.html`.** Likely 2–5k lines monolithic. If it becomes painful to edit, we split into modules. Initial monolithic approach optimises for zero-build iteration.
 - **Datasheet parsing brittleness.** The custom datasheet parser is non-trivial — sections, tables, abilities with variable structure. Testing on all 44 datasheets is a plan task.
 
 ## Provenance
