@@ -148,6 +148,15 @@
     cursor: pointer;
   }
   .btn:hover { border-color: var(--phosphor); background: rgba(111,255,142,0.06); }
+  .select {
+    background: var(--void);
+    color: var(--paper);
+    border: 1px solid var(--phosphor-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    margin-left: 6px;
+  }
 </style>
 </head>
 <body>
@@ -157,9 +166,12 @@
     <div class="title">COMMAND AUSPEX</div>
     <div class="subtitle">HOLOLITH-SIGMA · VOX-CHANNEL SIGMA-09</div>
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
-    <div style="margin-top:8px;">
-      <button id="pick-repo" class="btn">CONNECT TO REPO</button>
-      <span id="repo-path" class="status-msg" style="margin-left:12px;"></span>
+    <div id="controls" style="display:grid; grid-template-columns:repeat(4, auto) 1fr; gap:14px; align-items:center; margin-top:10px;">
+      <button id="pick-repo" class="btn">CONNECT REPO</button>
+      <label class="status-msg">MISSION <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">DEFENDER <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">ATTACKER <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
+      <button id="load-scenario" class="btn" disabled>LOAD SCENARIO</button>
     </div>
   </div>
   <div class="stage">
@@ -169,24 +181,40 @@
 </div>
 
 <script type="module">
+import { listDir } from './lib/fs.js';
+
 const statusEl = document.getElementById('status');
-const repoPathEl = document.getElementById('repo-path');
+const missionSel = document.getElementById('mission-select');
+const defenderSel = document.getElementById('defender-select');
+const attackerSel = document.getElementById('attacker-select');
+const loadBtn = document.getElementById('load-scenario');
+
 let repoHandle = null;
+
+async function populateDropdown(select, dir, ext = '.md') {
+  const items = await listDir(repoHandle, dir);
+  const mds = items.filter(i => i.kind === 'file' && i.name.endsWith(ext));
+  select.innerHTML = '<option value="">— SELECT —</option>' +
+    mds.map(i => `<option value="${dir}/${i.name}">${i.name.replace(ext, '')}</option>`).join('');
+}
 
 document.getElementById('pick-repo').addEventListener('click', async () => {
   try {
     repoHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    repoPathEl.textContent = `REPO: ${repoHandle.name}`;
-    statusEl.textContent = 'REPO CONNECTED — SELECT MISSION AND ROSTERS.';
+    statusEl.textContent = `REPO CONNECTED: ${repoHandle.name}`;
+    await populateDropdown(missionSel, '500 Worlds Campaign/missions');
+    await populateDropdown(defenderSel, 'ultramarines/rosters');
+    await populateDropdown(attackerSel, 'ultramarines/rosters');
+    window.__repoHandle = () => repoHandle;
   } catch (err) {
-    if (err.name !== 'AbortError') {
-      statusEl.textContent = `ERROR: ${err.message}`;
-    }
+    if (err.name !== 'AbortError') statusEl.textContent = `ERROR: ${err.message}`;
   }
 });
 
-// Make the handle available to other modules
-window.__repoHandle = () => repoHandle;
+function updateLoadBtn() {
+  loadBtn.disabled = !(missionSel.value && defenderSel.value && attackerSel.value);
+}
+[missionSel, defenderSel, attackerSel].forEach(s => s.addEventListener('change', updateLoadBtn));
 </script>
 </body>
 </html>
