@@ -199,7 +199,7 @@
   </div>
   <div class="stage">
     <div class="canvas-wrap"><svg id="board" width="600" height="440" viewBox="0 0 600 440"></svg></div>
-    <div class="sidebar"><div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div></div>
+    <div class="sidebar" id="sidebar"><div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div></div>
   </div>
 </div>
 
@@ -303,12 +303,19 @@ loadBtn.addEventListener('click', async () => {
     }
 
     const placements = [...defPlacements, ...attPlacements];
+    lastDatasheets.clear();
+    for (const p of placements) {
+      lastDatasheets.set(p.unit.name, p.datasheet);
+    }
     renderUnits(svg, placements);
     statusEl.textContent = `LOADED: ${mission.name} · ${placements.length} UNITS PLACED`;
   } catch (err) {
     statusEl.textContent = `ERROR: ${err.message}`;
   }
 });
+
+const sidebar = document.getElementById('sidebar');
+const lastDatasheets = new Map();
 
 const tooltipEl = document.getElementById('tooltip');
 
@@ -352,6 +359,46 @@ boardEl.addEventListener('mouseout', (e) => {
   if (!group) return;
   tooltipEl.classList.remove('show');
 });
+
+boardEl.addEventListener('click', (e) => {
+  const group = e.target.closest('.unit');
+  if (!group) return;
+  const unitName = group.dataset.unitName;
+  const unit = findUnitByName(unitName);
+  const ds = lastDatasheets.get(unitName);
+  renderDetailPanel(unit, ds);
+});
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
+function renderDetailPanel(unit, ds) {
+  if (!unit) return;
+  const base = ds?.base
+    ? (ds.base.shape === 'oval'
+        ? `${ds.base.length_mm}mm × ${ds.base.width_mm}mm OVAL${ds.base.flight_stem ? ' (FLIGHT STEM)' : ''}`
+        : `${ds.base.diameter_mm}mm ROUND${ds.base.flight_stem ? ' (FLIGHT STEM)' : ''}`)
+    : 'BASE UNKNOWN';
+  const profile = ds?.profile
+    ? `M ${escapeHtml(ds.profile.M)} · T ${escapeHtml(ds.profile.T)} · Sv ${escapeHtml(ds.profile.Sv)} · W ${escapeHtml(ds.profile.W)} · Ld ${escapeHtml(ds.profile.Ld)} · OC ${escapeHtml(ds.profile.OC)}`
+    : '';
+  const wargearList = unit.models.map(m => `
+    <div style="margin:4px 0;">
+      <strong>${m.count}× ${escapeHtml(m.submodel)}</strong>
+      <ul style="margin-left:18px;font-size:10px;">${m.wargear.map(w => `<li>${w.count}× ${escapeHtml(w.item)}</li>`).join('')}</ul>
+    </div>`).join('');
+  sidebar.innerHTML = `
+    <div class="title" style="font-size:13px;">${escapeHtml(unit.name)}</div>
+    <div class="status-msg">${unit.points} PTS · ${unit.total_models} MODEL${unit.total_models > 1 ? 'S' : ''}${unit.warlord ? ' · WARLORD' : ''}${unit.enhancement ? ` · ENHANCEMENT: ${escapeHtml(unit.enhancement)}` : ''}</div>
+    <div class="status-msg" style="color:var(--paper);">${profile}</div>
+    <div class="status-msg" style="color:var(--dim);">${base}</div>
+    <hr style="border:none;border-top:1px dashed var(--phosphor-dim);margin:10px 0;">
+    <div style="font-size:11px;">${wargearList}</div>
+  `;
+}
 </script>
 <div id="tooltip" class="tooltip"></div>
 </body>
