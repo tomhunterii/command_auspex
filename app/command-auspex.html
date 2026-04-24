@@ -191,6 +191,40 @@
     z-index: 100;
   }
   .tooltip.show { opacity: 1; }
+
+  .paste-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(6,8,7,0.85);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+  }
+  .paste-modal.show { display: flex; }
+  .paste-dialog {
+    background: var(--void-2);
+    border: 1px solid var(--phosphor-dim);
+    padding: 24px;
+    width: 620px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .paste-textarea {
+    width: 100%;
+    min-height: 300px;
+    background: var(--void);
+    color: var(--paper);
+    border: 1px solid var(--phosphor-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 10px;
+    resize: vertical;
+    margin-top: 10px;
+  }
+  .paste-textarea:focus { outline: none; border-color: var(--phosphor); }
+
   .tooltip .tt-name {
     font-family: 'Bank Gothic', sans-serif;
     font-weight: 700;
@@ -217,6 +251,8 @@
       <button id="load-scenario" class="btn" disabled>LOAD SCENARIO</button>
       <button id="open-scenario" class="btn">OPEN SCENARIO</button>
       <button id="save-scenario" class="btn" disabled>SAVE</button>
+      <button id="paste-defender" class="btn">+ PASTE DEFENDER</button>
+      <button id="paste-attacker" class="btn">+ PASTE ATTACKER</button>
     </div>
   </div>
   <div class="stage">
@@ -543,6 +579,99 @@ document.getElementById('open-scenario').addEventListener('click', async () => {
   }
 });
 
+// ── Paste-roster flow ──────────────────────────────────────────────────────
+const pasteModal = document.getElementById('paste-modal');
+const pasteTextarea = document.getElementById('paste-textarea');
+let pasteTarget = null;
+
+document.getElementById('paste-defender').addEventListener('click', () => openPasteModal('defender'));
+document.getElementById('paste-attacker').addEventListener('click', () => openPasteModal('attacker'));
+document.getElementById('paste-cancel').addEventListener('click', closePasteModal);
+document.getElementById('paste-confirm').addEventListener('click', handlePasteConfirm);
+
+function openPasteModal(target) {
+  if (!repoHandle) {
+    statusEl.textContent = 'CONNECT REPO FIRST';
+    return;
+  }
+  pasteTarget = target;
+  pasteTextarea.value = '';
+  pasteModal.classList.add('show');
+  pasteTextarea.focus();
+}
+
+function closePasteModal() {
+  pasteModal.classList.remove('show');
+}
+
+async function handlePasteConfirm() {
+  const raw = pasteTextarea.value;
+  if (!raw.trim()) {
+    statusEl.textContent = 'ERROR: EMPTY PASTE';
+    return;
+  }
+  let roster;
+  try {
+    roster = parseRoster(raw);
+  } catch (err) {
+    statusEl.textContent = `ERROR: PARSE FAILED — ${err.message}`;
+    return;
+  }
+  const defaultSlug = roster.list_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const slug = prompt('Save as slug (no extension):', defaultSlug);
+  if (!slug) return;
+  const txtPath = `ultramarines/rosters/${slug}.txt`;
+  const mdPath = `ultramarines/rosters/${slug}.md`;
+  try {
+    await writeTextFile(repoHandle, txtPath, raw);
+    const mdContent = buildRosterMarkdown(roster, `${slug}.txt`);
+    await writeTextFile(repoHandle, mdPath, mdContent);
+    // Refresh both roster dropdowns
+    await populateDropdown(defenderSel, 'ultramarines/rosters');
+    await populateDropdown(attackerSel, 'ultramarines/rosters');
+    const sel = pasteTarget === 'defender' ? defenderSel : attackerSel;
+    sel.value = mdPath;
+    updateLoadBtn();
+    closePasteModal();
+    statusEl.textContent = `SAVED: ${mdPath}`;
+  } catch (err) {
+    statusEl.textContent = `ERROR: WRITE FAILED — ${err.message}`;
+  }
+}
+
+function buildRosterMarkdown(roster, rawFilename) {
+  const y = (v, q = true) => v === null || v === undefined ? 'null' : (q ? `"${v}"` : v);
+  let out = '---\n';
+  out += `list_name: "${roster.list_name}"\n`;
+  out += `list_points: ${roster.list_points}\n`;
+  out += `faction: "${roster.faction}"\n`;
+  out += `subfaction: "${roster.subfaction}"\n`;
+  out += `detachment: "${roster.detachment}"\n`;
+  out += `battle_size:\n  name: "${roster.battle_size_name}"\n  max_points: ${roster.max_points}\n`;
+  out += `export:\n  app_version: ${y(roster.app_version)}\n  data_version: ${y(roster.data_version)}\n\n`;
+  out += `units:\n`;
+  for (const u of roster.units) {
+    out += `  - name: "${u.name}"\n`;
+    out += `    datasheet: null  # resolve manually — not auto-resolved in browser yet\n`;
+    out += `    section: "${u.section}"\n`;
+    out += `    points: ${u.points}\n`;
+    out += `    warlord: ${u.warlord}\n`;
+    out += `    enhancement: ${u.enhancement ? `"${u.enhancement}"` : 'null'}\n`;
+    out += `    total_models: ${u.total_models}\n`;
+    out += `    models:\n`;
+    for (const m of u.models) {
+      out += `      - submodel: "${m.submodel}"\n`;
+      out += `        count: ${m.count}\n`;
+      out += `        wargear:\n`;
+      for (const w of m.wargear) {
+        out += `          - { count: ${w.count}, item: "${w.item}" }\n`;
+      }
+    }
+  }
+  out += `---\n\n# ${roster.list_name}\n\nPasted via the Command Auspex. Source: \`${rawFilename}\`\n`;
+  return out;
+}
+
 function renderDetailPanel(unit, ds) {
   if (!unit) return;
   const base = ds?.base
@@ -568,6 +697,17 @@ function renderDetailPanel(unit, ds) {
   `;
 }
 </script>
+<div id="paste-modal" class="paste-modal">
+  <div class="paste-dialog">
+    <div class="title" style="font-size:13px;">PASTE ROSTER EXPORT</div>
+    <div class="status-msg">Paste a GW Companion App export below.</div>
+    <textarea id="paste-textarea" class="paste-textarea" spellcheck="false"></textarea>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" id="paste-cancel">CANCEL</button>
+      <button class="btn" id="paste-confirm">PARSE + SAVE</button>
+    </div>
+  </div>
+</div>
 <div id="tooltip" class="tooltip"></div>
 </body>
 </html>
