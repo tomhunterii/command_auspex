@@ -194,19 +194,25 @@ export function renderThreatRanges(svg, placements) {
   if (!layer) return;
   while (layer.firstChild) layer.removeChild(layer.firstChild);
   for (const p of placements) {
-    const range = p.datasheet?.max_range_in;
-    if (!range || range === 0) continue;
+    // Prefer per-weapon ranges; fall back to legacy max_range_in (single ring).
+    const ranges = (p.datasheet?.ranges_in?.length ?? 0) > 0
+      ? p.datasheet.ranges_in
+      : (p.datasheet?.max_range_in ? [p.datasheet.max_range_in] : []);
+    if (ranges.length === 0) continue;
     const [cx, cy] = [p.centerIn[0] * INCH_PX, p.centerIn[1] * INCH_PX];
-    const circle = document.createElementNS(SVG_NS, 'circle');
-    circle.setAttribute('cx', cx);
-    circle.setAttribute('cy', cy);
-    circle.setAttribute('r', range * INCH_PX);
-    circle.setAttribute('fill', 'none');
-    circle.setAttribute('stroke', p.role === 'attacker' ? '#ff5d6c' : '#6fff8e');
-    circle.setAttribute('stroke-width', '0.8');
-    circle.setAttribute('stroke-dasharray', '3 3');
-    circle.setAttribute('opacity', '0.45');
-    layer.appendChild(circle);
+    const stroke = p.role === 'attacker' ? '#ff5d6c' : '#6fff8e';
+    for (const range of ranges) {
+      const circle = document.createElementNS(SVG_NS, 'circle');
+      circle.setAttribute('cx', cx);
+      circle.setAttribute('cy', cy);
+      circle.setAttribute('r', range * INCH_PX);
+      circle.setAttribute('fill', 'none');
+      circle.setAttribute('stroke', stroke);
+      circle.setAttribute('stroke-width', '0.8');
+      circle.setAttribute('stroke-dasharray', '3 3');
+      circle.setAttribute('opacity', '0.35');
+      layer.appendChild(circle);
+    }
   }
 }
 

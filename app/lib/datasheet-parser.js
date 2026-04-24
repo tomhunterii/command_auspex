@@ -70,21 +70,20 @@ function parseProfile(body) {
   return profile;
 }
 
-function parseMaxRange(body) {
-  if (!body) return null;
+function parseRanges(body) {
+  if (!body) return [];
   const lines = body.split('\n').filter(l => l.trim().startsWith('|') && !l.includes('---') && !/Weapon/i.test(l));
-  let max = 0;
+  const ranges = new Set();
   for (const line of lines) {
     const cells = line.split('|').map(s => s.trim());
     if (cells.length < 3) continue;
     const rangeCell = cells[2];
-    const m = /(\d+)/.exec(rangeCell);
-    if (m) {
-      const r = parseInt(m[1], 10);
-      if (r > max) max = r;
+    // A weapon cell may list multiple ranges (e.g., "12"/24""); grab every integer.
+    for (const m of rangeCell.matchAll(/(\d+)/g)) {
+      ranges.add(parseInt(m[1], 10));
     }
   }
-  return max || null;
+  return [...ranges].sort((a, b) => a - b);
 }
 
 export function parseDatasheet(text) {
@@ -94,7 +93,8 @@ export function parseDatasheet(text) {
   const base = parseBase(extractSection(text, 'Base'));
   const profile = parseProfile(extractSection(text, 'Profile'));
   const ranged = extractSection(text, 'Ranged Weapons');
-  const max_range_in = parseMaxRange(ranged);
+  const ranges_in = parseRanges(ranged);
+  const max_range_in = ranges_in.length > 0 ? ranges_in[ranges_in.length - 1] : null;
 
-  return { name, base, profile, max_range_in };
+  return { name, base, profile, ranges_in, max_range_in };
 }

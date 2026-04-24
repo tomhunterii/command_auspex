@@ -50,6 +50,23 @@ test('parseDatasheet extracts max weapon range', () => {
   assert.strictEqual(ds.max_range_in, 48);
 });
 
+test('parseDatasheet extracts ranges_in as sorted unique array', () => {
+  const ds = parseDatasheet(load('ballistus-dreadnought'));
+  assert.ok(Array.isArray(ds.ranges_in));
+  // Sorted ascending, deduped
+  for (let i = 1; i < ds.ranges_in.length; i++) {
+    assert.ok(ds.ranges_in[i] > ds.ranges_in[i - 1], 'ranges must be strictly ascending');
+  }
+  assert.strictEqual(ds.ranges_in.at(-1), ds.max_range_in);
+});
+
+test('parseDatasheet ranges_in for aggressor-squad includes 12" and 18"', () => {
+  const ds = parseDatasheet(load('aggressor-squad'));
+  assert.ok(ds.ranges_in.includes(12), '12" flamestorm');
+  assert.ok(ds.ranges_in.includes(18), '18" auto-boltstorm');
+  assert.strictEqual(ds.max_range_in, 18);
+});
+
 test('parseDatasheet extracts unit name from title', () => {
   const ds = parseDatasheet(load('intercessor-squad'));
   assert.strictEqual(ds.name, 'Intercessor Squad');
