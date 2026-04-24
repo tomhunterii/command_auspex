@@ -157,6 +157,29 @@
     padding: 4px 8px;
     margin-left: 6px;
   }
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: rgba(6,8,7,0.95);
+    border: 1px solid var(--phosphor-dim);
+    padding: 10px 14px;
+    font-size: 11px;
+    max-width: 260px;
+    line-height: 1.5;
+    opacity: 0;
+    transition: opacity 120ms;
+    z-index: 100;
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip .tt-name {
+    font-family: 'Bank Gothic', sans-serif;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--phosphor);
+    margin-bottom: 6px;
+  }
+  .tooltip .tt-pts { color: var(--amber); }
+  .tooltip .tt-wargear { color: var(--dim); margin-top: 4px; font-size: 10px; }
 </style>
 </head>
 <body>
@@ -195,6 +218,8 @@ const attackerSel = document.getElementById('attacker-select');
 const loadBtn = document.getElementById('load-scenario');
 
 let repoHandle = null;
+let lastDefender = null;
+let lastAttacker = null;
 
 async function populateDropdown(select, dir, ext = '.md') {
   const items = await listDir(repoHandle, dir);
@@ -237,6 +262,8 @@ loadBtn.addEventListener('click', async () => {
     const mission = await parseFrontmatter(missionText);
     const defender = await loadRosterFile(defenderSel.value);
     const attacker = await loadRosterFile(attackerSel.value);
+    lastDefender = defender;
+    lastAttacker = attacker;
 
     const svg = document.getElementById('board');
     renderBoard(svg, mission);
@@ -282,6 +309,50 @@ loadBtn.addEventListener('click', async () => {
     statusEl.textContent = `ERROR: ${err.message}`;
   }
 });
+
+const tooltipEl = document.getElementById('tooltip');
+
+function findUnitByName(name) {
+  for (const r of [lastDefender, lastAttacker]) {
+    if (!r) continue;
+    const u = r.units.find(u => u.name === name);
+    if (u) return u;
+  }
+  return null;
+}
+
+const boardEl = document.getElementById('board');
+
+boardEl.addEventListener('mouseover', (e) => {
+  const group = e.target.closest('.unit');
+  if (!group) return;
+  const unitName = group.dataset.unitName;
+  const unit = findUnitByName(unitName);
+  if (!unit) return;
+  const wargearSummary = unit.models
+    .flatMap(m => m.wargear.map(w => `${w.count}× ${w.item}`))
+    .slice(0, 5)
+    .join(' · ');
+  tooltipEl.innerHTML = `
+    <div class="tt-name">${unit.name}</div>
+    <div>${unit.total_models} MODEL${unit.total_models > 1 ? 'S' : ''} · <span class="tt-pts">${unit.points} PTS</span></div>
+    <div class="tt-wargear">${wargearSummary || '(no wargear)'}</div>
+  `;
+  tooltipEl.classList.add('show');
+});
+
+boardEl.addEventListener('mousemove', (e) => {
+  if (!tooltipEl.classList.contains('show')) return;
+  tooltipEl.style.left = (e.clientX + 16) + 'px';
+  tooltipEl.style.top  = (e.clientY + 16) + 'px';
+});
+
+boardEl.addEventListener('mouseout', (e) => {
+  const group = e.target.closest('.unit');
+  if (!group) return;
+  tooltipEl.classList.remove('show');
+});
 </script>
+<div id="tooltip" class="tooltip"></div>
 </body>
 </html>
