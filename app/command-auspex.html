@@ -181,7 +181,9 @@
 </div>
 
 <script type="module">
-import { listDir } from './lib/fs.js';
+import { listDir, readTextFile } from './lib/fs.js';
+import { parseFrontmatter } from './lib/yaml-frontmatter.js';
+import { renderBoard } from './lib/render.js';
 
 const statusEl = document.getElementById('status');
 const missionSel = document.getElementById('mission-select');
@@ -215,6 +217,18 @@ function updateLoadBtn() {
   loadBtn.disabled = !(missionSel.value && defenderSel.value && attackerSel.value);
 }
 [missionSel, defenderSel, attackerSel].forEach(s => s.addEventListener('change', updateLoadBtn));
+
+loadBtn.addEventListener('click', async () => {
+  try {
+    const missionText = await readTextFile(repoHandle, missionSel.value);
+    const mission = await parseFrontmatter(missionText);
+    if (!mission) throw new Error('Mission has no frontmatter');
+    renderBoard(document.getElementById('board'), mission);
+    statusEl.textContent = `LOADED: ${mission.name}`;
+  } catch (err) {
+    statusEl.textContent = `ERROR: ${err.message}`;
+  }
+});
 </script>
 </body>
 </html>
