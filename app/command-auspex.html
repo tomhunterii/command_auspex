@@ -138,7 +138,16 @@
   .layer-btn.active { color: var(--phosphor); border-color: var(--phosphor); }
   .layer-btn:hover { background: rgba(111,255,142,0.06); }
   .canvas-wrap { overflow: auto; padding: 16px; background: var(--void); }
-  .sidebar { border-left: 1px solid var(--phosphor-dim); background: var(--void-2); padding: 16px; overflow-y: auto; }
+  .sidebar {
+    border-left: 1px solid var(--phosphor-dim);
+    background-color: var(--void-2);
+    background-image:
+      linear-gradient(to bottom right, rgba(111,255,142,0.015) 0%, rgba(111,255,142,0) 40%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='46' viewBox='0 0 40 46'><polygon points='20,2 38,13 38,34 20,44 2,34 2,13' fill='none' stroke='rgba(111,255,142,0.04)' stroke-width='0.8'/></svg>");
+    background-size: auto, 40px 46px;
+    padding: 16px;
+    overflow-y: auto;
+  }
   .status-msg { font-size: 11px; color: var(--dim); letter-spacing: 1.5px; padding: 8px 0; }
 
   /* Pulsing status indicator LED. */
@@ -235,6 +244,12 @@
   .tooltip .tt-pts { color: var(--amber); }
   .tooltip .tt-wargear { color: var(--dim); margin-top: 4px; font-size: 10px; }
 
+  .reticle { position: absolute; opacity: 0.6; pointer-events: none; }
+  .reticle-tl { top: 6px; left: 6px; }
+  .reticle-tr { top: 6px; right: 6px; }
+  .reticle-bl { bottom: 6px; left: 6px; }
+  .reticle-br { bottom: 6px; right: 6px; }
+
   .boot-overlay {
     position: fixed;
     inset: 0;
@@ -309,7 +324,13 @@
         <button class="layer-btn" data-layer="coherency">COHERENCY (DBG)</button>
         <button class="layer-btn active" data-layer="auspex-sweep">SWEEP</button>
       </div>
-      <div class="canvas-wrap"><svg id="board" width="600" height="440" viewBox="0 0 600 440"></svg></div>
+      <div class="canvas-wrap" style="position:relative;">
+        <svg id="board" width="600" height="440" viewBox="0 0 600 440"></svg>
+        <svg class="reticle reticle-tl" width="24" height="24" viewBox="0 0 24 24"><path d="M2,2 L2,10 M2,2 L10,2" stroke="#6fff8e" stroke-width="1" fill="none"/></svg>
+        <svg class="reticle reticle-tr" width="24" height="24" viewBox="0 0 24 24"><path d="M22,2 L22,10 M22,2 L14,2" stroke="#6fff8e" stroke-width="1" fill="none"/></svg>
+        <svg class="reticle reticle-bl" width="24" height="24" viewBox="0 0 24 24"><path d="M2,22 L2,14 M2,22 L10,22" stroke="#6fff8e" stroke-width="1" fill="none"/></svg>
+        <svg class="reticle reticle-br" width="24" height="24" viewBox="0 0 24 24"><path d="M22,22 L22,14 M22,22 L14,22" stroke="#6fff8e" stroke-width="1" fill="none"/></svg>
+      </div>
     </div>
     <div class="sidebar" id="sidebar">
       <div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div>
