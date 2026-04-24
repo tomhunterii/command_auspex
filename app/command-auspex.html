@@ -183,7 +183,9 @@
 <script type="module">
 import { listDir, readTextFile } from './lib/fs.js';
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
-import { renderBoard } from './lib/render.js';
+import { parseRoster } from './lib/roster-parser.js';
+import { parseDatasheet } from './lib/datasheet-parser.js';
+import { renderBoard, renderUnits } from './lib/render.js';
 
 const statusEl = document.getElementById('status');
 const missionSel = document.getElementById('mission-select');
@@ -218,13 +220,49 @@ function updateLoadBtn() {
 }
 [missionSel, defenderSel, attackerSel].forEach(s => s.addEventListener('change', updateLoadBtn));
 
+async function loadDatasheet(slug) {
+  const text = await readTextFile(repoHandle, `datasheets/${slug}.md`);
+  return parseDatasheet(text);
+}
+
+async function loadRosterFile(path) {
+  const text = await readTextFile(repoHandle, path);
+  return parseFrontmatter(text);
+}
+
+function polygonCentroid(vertices) {
+  const n = vertices.length;
+  let x = 0, y = 0;
+  for (const v of vertices) { x += v[0]; y += v[1]; }
+  return [x / n, y / n];
+}
+
 loadBtn.addEventListener('click', async () => {
   try {
     const missionText = await readTextFile(repoHandle, missionSel.value);
     const mission = await parseFrontmatter(missionText);
-    if (!mission) throw new Error('Mission has no frontmatter');
-    renderBoard(document.getElementById('board'), mission);
-    statusEl.textContent = `LOADED: ${mission.name}`;
+    const defender = await loadRosterFile(defenderSel.value);
+    const attacker = await loadRosterFile(attackerSel.value);
+
+    const svg = document.getElementById('board');
+    renderBoard(svg, mission);
+
+    const attCenter = polygonCentroid(mission.deployment.attacker.polygons[0].vertices);
+    const defCenter = polygonCentroid(mission.deployment.defender.polygons[0].vertices);
+
+    const placements = [];
+    for (const u of defender.units) {
+      if (!u.datasheet) continue;
+      const ds = await loadDatasheet(u.datasheet);
+      placements.push({ unit: u, datasheet: ds, centerIn: defCenter, role: 'defender' });
+    }
+    for (const u of attacker.units) {
+      if (!u.datasheet) continue;
+      const ds = await loadDatasheet(u.datasheet);
+      placements.push({ unit: u, datasheet: ds, centerIn: attCenter, role: 'attacker' });
+    }
+    renderUnits(svg, placements);
+    statusEl.textContent = `LOADED: ${mission.name} · ${placements.length} UNITS RENDERED`;
   } catch (err) {
     statusEl.textContent = `ERROR: ${err.message}`;
   }

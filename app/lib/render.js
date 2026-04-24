@@ -2,6 +2,8 @@
 // SVG rendering helpers for the Command Auspex.
 // Convention: 1 inch = 10 pixels.
 
+import { baseDiameterPx, clusterOffsets } from './base-geometry.js';
+
 export const INCH_PX = 10;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -89,4 +91,60 @@ function drawSegment(svg, [[x1, y1], [x2, y2]], stroke, width) {
   line.setAttribute('stroke-width', width);
   line.setAttribute('stroke-linecap', 'round');
   svg.appendChild(line);
+}
+
+/**
+ * Render units as per-model bases. `placements` is an array of:
+ *   { unit, datasheet, centerIn: [x, y], role: 'attacker'|'defender' }
+ */
+export function renderUnits(svg, placements) {
+  // Remove any existing unit group
+  const old = svg.querySelector('#layer-units');
+  if (old) old.remove();
+
+  const layer = document.createElementNS(SVG_NS, 'g');
+  layer.setAttribute('id', 'layer-units');
+  svg.appendChild(layer);
+
+  for (const p of placements) {
+    const group = renderUnit(p);
+    layer.appendChild(group);
+  }
+}
+
+function renderUnit({ unit, datasheet, centerIn, role }) {
+  const color = role === 'attacker' ? '#ff5d6c' : '#6fff8e';
+  const fill  = role === 'attacker' ? 'rgba(255,93,108,0.6)' : 'rgba(111,255,142,0.55)';
+
+  const group = document.createElementNS(SVG_NS, 'g');
+  group.setAttribute('class', `unit unit-${role}`);
+  group.dataset.unitName = unit.name;
+
+  const baseMm = datasheet?.base?.diameter_mm ?? 32;
+  const basePx = baseDiameterPx(baseMm);
+  const r = basePx / 2;
+
+  const [cx, cy] = [centerIn[0] * INCH_PX, centerIn[1] * INCH_PX];
+
+  const models = [];
+  for (const sub of unit.models) {
+    for (let k = 0; k < sub.count; k++) {
+      models.push({ sub });
+    }
+  }
+  const offsets = clusterOffsets(models.length, basePx);
+
+  models.forEach((m, i) => {
+    const isSergeant = (i === 0);
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', cx + offsets[i][0]);
+    circle.setAttribute('cy', cy + offsets[i][1]);
+    circle.setAttribute('r', r);
+    circle.setAttribute('fill', fill);
+    circle.setAttribute('stroke', color);
+    circle.setAttribute('stroke-width', isSergeant ? 2 : 1);
+    group.appendChild(circle);
+  });
+
+  return group;
 }
