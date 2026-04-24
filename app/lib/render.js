@@ -34,6 +34,30 @@ export function renderBoard(svg, mission) {
   bg.setAttribute('stroke-width', '2');
   svg.appendChild(bg);
 
+  // Radial auspex sweep — slow rotating phosphor line emanating from board center.
+  const sweep = document.createElementNS(SVG_NS, 'g');
+  sweep.setAttribute('id', 'layer-auspex-sweep');
+  sweep.style.pointerEvents = 'none';
+  const cxSw = (width_in * INCH_PX) / 2;
+  const cySw = (height_in * INCH_PX) / 2;
+  const maxR = Math.hypot(cxSw, cySw);
+  const sweepLine = document.createElementNS(SVG_NS, 'line');
+  sweepLine.setAttribute('x1', cxSw); sweepLine.setAttribute('y1', cySw);
+  sweepLine.setAttribute('x2', cxSw + maxR); sweepLine.setAttribute('y2', cySw);
+  sweepLine.setAttribute('stroke', '#6fff8e');
+  sweepLine.setAttribute('stroke-width', '1');
+  sweepLine.setAttribute('opacity', '0.25');
+  const animT = document.createElementNS(SVG_NS, 'animateTransform');
+  animT.setAttribute('attributeName', 'transform');
+  animT.setAttribute('type', 'rotate');
+  animT.setAttribute('from', `0 ${cxSw} ${cySw}`);
+  animT.setAttribute('to', `360 ${cxSw} ${cySw}`);
+  animT.setAttribute('dur', '8s');
+  animT.setAttribute('repeatCount', 'indefinite');
+  sweepLine.appendChild(animT);
+  sweep.appendChild(sweepLine);
+  svg.appendChild(sweep);
+
   // grid (in its own layer)
   const gridLayer = document.createElementNS(SVG_NS, 'g');
   gridLayer.setAttribute('id', 'layer-grid');
