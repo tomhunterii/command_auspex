@@ -48,3 +48,49 @@ test('round-trip: serialize then parse equals original', async () => {
   assert.strictEqual(s2.board_state.defender.length, 1);
   assert.strictEqual(s2.board_state.attacker.length, 1);
 });
+
+test('serializeScenario escapes double quotes in string scalars', async () => {
+  const s = buildScenario({
+    id: 'quote-test',
+    name: 'Battle of "Fort Glory"',
+    missionPath: 'm.md',
+    defender: { rosterPath: 'd.md', owner: 'Sgt. "Ironhand" Valerius' },
+    attacker: { rosterPath: 'a.md', owner: 'B' },
+    placements: [
+      { unit_name: 'Brother "Cassius"', role: 'defender', centerIn: [10, 10], orientation_deg: 0, placement: 'on_board' },
+    ],
+  });
+  const md = serializeScenario(s);
+  // Must be parseable despite the quotes in the input
+  const parsed = await parseScenario(md);
+  assert.strictEqual(parsed.name, 'Battle of "Fort Glory"');
+  assert.strictEqual(parsed.defender.owner, 'Sgt. "Ironhand" Valerius');
+  assert.strictEqual(parsed.board_state.defender[0].unit_ref, 'Brother "Cassius"');
+});
+
+test('serializeScenario escapes backslashes in string scalars', async () => {
+  const s = buildScenario({
+    id: 'bs-test',
+    name: 'C:\\path\\battle',
+    missionPath: 'm.md',
+    defender: { rosterPath: 'd.md', owner: 'A' },
+    attacker: { rosterPath: 'a.md', owner: 'B' },
+    placements: [],
+  });
+  const md = serializeScenario(s);
+  const parsed = await parseScenario(md);
+  assert.strictEqual(parsed.name, 'C:\\path\\battle');
+});
+
+test('serializeScenario emits null for missing roster/owner rather than ""', async () => {
+  const s = buildScenario({
+    id: 'null-test', name: 'Null Test', missionPath: 'm.md',
+    defender: { rosterPath: 'd.md', owner: 'A' },
+    attacker: { rosterPath: null, owner: null },
+    placements: [],
+  });
+  const md = serializeScenario(s);
+  const parsed = await parseScenario(md);
+  assert.strictEqual(parsed.attacker.roster, null);
+  assert.strictEqual(parsed.attacker.owner, null);
+});

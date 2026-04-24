@@ -3,6 +3,14 @@
 
 import { parseFrontmatter } from './yaml-frontmatter.js';
 
+// Escape a string for a YAML double-quoted scalar. Mirrors the Python
+// _yaml_str in scripts/parse_gw_roster.py: backslash first, then quote.
+function yamlString(s) {
+  if (s === null || s === undefined) return 'null';
+  const escaped = String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
 export function buildScenario({ id, name, missionPath, defender, attacker, placements }) {
   const now = new Date().toISOString();
   const state = { defender: [], attacker: [] };
@@ -28,19 +36,19 @@ export function buildScenario({ id, name, missionPath, defender, attacker, place
 
 export function serializeScenario(s) {
   let out = '---\n';
-  out += `id: "${s.id}"\n`;
-  out += `name: "${s.name}"\n`;
-  out += `created: "${s.created}"\n`;
-  out += `last_modified: "${s.last_modified}"\n`;
-  out += `mission: "${s.mission}"\n`;
-  out += `defender:\n  roster: ${s.defender.roster ? `"${s.defender.roster}"` : 'null'}\n  owner: ${s.defender.owner ? `"${s.defender.owner}"` : 'null'}\n`;
-  out += `attacker:\n  roster: ${s.attacker.roster ? `"${s.attacker.roster}"` : 'null'}\n  owner: ${s.attacker.owner ? `"${s.attacker.owner}"` : 'null'}\n`;
+  out += `id: ${yamlString(s.id)}\n`;
+  out += `name: ${yamlString(s.name)}\n`;
+  out += `created: ${yamlString(s.created)}\n`;
+  out += `last_modified: ${yamlString(s.last_modified)}\n`;
+  out += `mission: ${yamlString(s.mission)}\n`;
+  out += `defender:\n  roster: ${yamlString(s.defender.roster)}\n  owner: ${yamlString(s.defender.owner)}\n`;
+  out += `attacker:\n  roster: ${yamlString(s.attacker.roster)}\n  owner: ${yamlString(s.attacker.owner)}\n`;
   out += `board_state:\n`;
   for (const role of ['defender', 'attacker']) {
     out += `  ${role}:\n`;
     for (const u of s.board_state[role]) {
-      out += `    - unit_ref: "${u.unit_ref}"\n`;
-      out += `      placement: ${u.placement}\n`;
+      out += `    - unit_ref: ${yamlString(u.unit_ref)}\n`;
+      out += `      placement: ${yamlString(u.placement)}\n`;
       out += `      position: [${u.position[0]}, ${u.position[1]}]\n`;
       out += `      orientation_deg: ${u.orientation_deg}\n`;
     }
