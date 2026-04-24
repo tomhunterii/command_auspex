@@ -111,6 +111,9 @@ export function parseRoster(text) {
 
 function parseUnit(block, section) {
   const headerMatch = UNIT_HEADER_RE.exec(block[0].trim());
+  if (!headerMatch) {
+    throw new Error(`parseUnit: malformed block header: ${JSON.stringify(block[0])}`);
+  }
   const name = headerMatch[1];
   const points = parseInt(headerMatch[2].replace(/,/g, ''), 10);
 
