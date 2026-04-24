@@ -360,6 +360,8 @@ let lastPlacements = [];
 let lastMissionPath = null;
 let lastDefenderPath = null;
 let lastAttackerPath = null;
+let currentScenarioPath = null;
+let autoSaveTimer = null;
 
 async function populateDropdown(select, dir, ext = '.md') {
   const items = await listDir(repoHandle, dir);
@@ -419,7 +421,7 @@ async function loadFromScenario(s) {
       });
     }
   }
-  renderUnits(svg, placements);
+  renderUnits(svg, placements, scheduleAutoSave);
   renderThreatRanges(svg, placements);
 
   // Populate the module-scope caches so hover/click/save all work.
@@ -432,6 +434,9 @@ async function loadFromScenario(s) {
   lastDatasheets.clear();
   for (const p of placements) lastDatasheets.set(p.unit.name, p.datasheet);
   document.getElementById('save-scenario').disabled = false;
+
+  const filename = (s.id || s.name.toLowerCase().replace(/[^a-z0-9-]/gi, '-')) + '.md';
+  currentScenarioPath = `500 Worlds Campaign/scenarios/${filename}`;
 
   statusEl.textContent = `SCENARIO RECALLED: ${s.name}`;
 }
@@ -487,7 +492,7 @@ loadBtn.addEventListener('click', async () => {
     for (const p of placements) {
       lastDatasheets.set(p.unit.name, p.datasheet);
     }
-    renderUnits(svg, placements);
+    renderUnits(svg, placements, scheduleAutoSave);
     renderThreatRanges(svg, placements);
     lastPlacements = placements;
     lastMissionPath = missionSel.value;
@@ -569,36 +574,58 @@ document.querySelectorAll('.layer-btn').forEach(btn => {
   });
 });
 
+function buildCurrentScenarioMarkdown(id, name) {
+  const scenario = buildScenario({
+    id,
+    name,
+    missionPath: lastMissionPath,
+    defender: { rosterPath: lastDefenderPath, owner: 'Captain Hunter' },
+    attacker: { rosterPath: lastAttackerPath, owner: 'Unknown' },
+    placements: lastPlacements.map(p => {
+      const group = boardEl.querySelector(`.unit[data-unit-name="${CSS.escape(p.unit.name)}"]`);
+      let cx = p.centerIn[0], cy = p.centerIn[1];
+      if (group) {
+        const t = group.transform.baseVal.consolidate();
+        if (t) {
+          cx += t.matrix.e / 10; // INCH_PX = 10
+          cy += t.matrix.f / 10;
+        }
+      }
+      return {
+        unit_name: p.unit.name,
+        role: p.role,
+        centerIn: [cx, cy],
+        orientation_deg: 0,
+        placement: 'on_board',
+      };
+    }),
+  });
+  return { scenario, md: serializeScenario(scenario) };
+}
+
+function scheduleAutoSave() {
+  if (!currentScenarioPath) return;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(async () => {
+    try {
+      const id = currentScenarioPath.split('/').pop().replace(/\.md$/, '');
+      const { md } = buildCurrentScenarioMarkdown(id, id);
+      await writeTextFile(repoHandle, currentScenarioPath, md);
+      const prev = statusEl.textContent;
+      statusEl.textContent = `AUTO-SCRIBED: ${currentScenarioPath}`;
+      setTimeout(() => { if (statusEl.textContent.startsWith('AUTO-SCRIBED')) statusEl.textContent = prev; }, 1500);
+    } catch (err) {
+      statusEl.textContent = `AUTO-SCRIBE FAILED — ${err.message}`;
+    }
+  }, 500);
+}
+
 document.getElementById('save-scenario').addEventListener('click', async () => {
   const name = prompt('Scenario name?', `${new Date().toISOString().slice(0,10)}-${lastMissionPath.split('/').pop().replace('.md','')}`);
   if (!name) return;
   try {
-    const scenario = buildScenario({
-      id: name.replace(/[^a-z0-9-]/gi, '-').toLowerCase(),
-      name,
-      missionPath: lastMissionPath,
-      defender: { rosterPath: lastDefenderPath, owner: 'Captain Hunter' },
-      attacker: { rosterPath: lastAttackerPath, owner: 'Unknown' },
-      placements: lastPlacements.map(p => {
-        const group = boardEl.querySelector(`.unit[data-unit-name="${CSS.escape(p.unit.name)}"]`);
-        let cx = p.centerIn[0], cy = p.centerIn[1];
-        if (group) {
-          const t = group.transform.baseVal.consolidate();
-          if (t) {
-            cx += t.matrix.e / 10; // INCH_PX = 10
-            cy += t.matrix.f / 10;
-          }
-        }
-        return {
-          unit_name: p.unit.name,
-          role: p.role,
-          centerIn: [cx, cy],
-          orientation_deg: 0,
-          placement: 'on_board',
-        };
-      }),
-    });
-    const md = serializeScenario(scenario);
+    const id = name.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+    const { scenario, md } = buildCurrentScenarioMarkdown(id, name);
     const path = `500 Worlds Campaign/scenarios/${scenario.id}.md`;
     if (await fileExists(repoHandle, path)) {
       if (!confirm(`SCENARIO "${scenario.id}" ALREADY INTERRED.\n\nOVERWRITE THE ARCHIVE?`)) {
@@ -607,6 +634,7 @@ document.getElementById('save-scenario').addEventListener('click', async () => {
       }
     }
     await writeTextFile(repoHandle, path, md);
+    currentScenarioPath = path;
     statusEl.textContent = `SCENARIO INTERRED AT: ${path}`;
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;

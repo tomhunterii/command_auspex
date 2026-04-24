@@ -104,3 +104,8 @@ test('smoke: boot sequence markup + animation', () => {
   assert.match(HTML, /AUSPEX ONLINE ✠ BY THE EMPEROR'S WILL/);
   assert.match(HTML, /@keyframes boot-fade/);
 });
+
+test('smoke: auto-save wired', () => {
+  assert.match(HTML, /scheduleAutoSave/, 'scheduleAutoSave function missing');
+  assert.match(HTML, /currentScenarioPath/, 'currentScenarioPath state missing');
+});

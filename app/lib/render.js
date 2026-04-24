@@ -148,7 +148,7 @@ function drawSegment(parent, [[x1, y1], [x2, y2]], stroke, width) {
  * Render units as per-model bases. `placements` is an array of:
  *   { unit, datasheet, centerIn: [x, y], role: 'attacker'|'defender' }
  */
-export function renderUnits(svg, placements) {
+export function renderUnits(svg, placements, onDragEnd) {
   // Remove any existing unit group
   const old = svg.querySelector('#layer-units');
   if (old) old.remove();
@@ -159,7 +159,7 @@ export function renderUnits(svg, placements) {
 
   for (const p of placements) {
     const group = renderUnit(p);
-    makeUnitDraggable(group);
+    makeUnitDraggable(group, onDragEnd);
     layer.appendChild(group);
   }
 }
