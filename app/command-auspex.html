@@ -209,12 +209,13 @@
     <div class="title">COMMAND AUSPEX</div>
     <div class="subtitle">HOLOLITH-SIGMA · VOX-CHANNEL SIGMA-09</div>
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
-    <div id="controls" style="display:grid; grid-template-columns:repeat(4, auto) 1fr; gap:14px; align-items:center; margin-top:10px;">
+    <div id="controls" style="display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;">
       <button id="pick-repo" class="btn">CONNECT REPO</button>
       <label class="status-msg">MISSION <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
       <label class="status-msg">DEFENDER <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
       <label class="status-msg">ATTACKER <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
       <button id="load-scenario" class="btn" disabled>LOAD SCENARIO</button>
+      <button id="save-scenario" class="btn" disabled>SAVE</button>
     </div>
   </div>
   <div class="stage">
@@ -235,12 +236,13 @@
 </div>
 
 <script type="module">
-import { listDir, readTextFile } from './lib/fs.js';
+import { listDir, readTextFile, writeTextFile } from './lib/fs.js';
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
 import { parseRoster } from './lib/roster-parser.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
 import { renderBoard, renderUnits, renderThreatRanges } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
+import { buildScenario, serializeScenario } from './lib/scenario.js';
 
 const statusEl = document.getElementById('status');
 const missionSel = document.getElementById('mission-select');
@@ -251,6 +253,10 @@ const loadBtn = document.getElementById('load-scenario');
 let repoHandle = null;
 let lastDefender = null;
 let lastAttacker = null;
+let lastPlacements = [];
+let lastMissionPath = null;
+let lastDefenderPath = null;
+let lastAttackerPath = null;
 
 async function populateDropdown(select, dir, ext = '.md') {
   const items = await listDir(repoHandle, dir);
@@ -340,6 +346,11 @@ loadBtn.addEventListener('click', async () => {
     }
     renderUnits(svg, placements);
     renderThreatRanges(svg, placements);
+    lastPlacements = placements;
+    lastMissionPath = missionSel.value;
+    lastDefenderPath = defenderSel.value;
+    lastAttackerPath = attackerSel.value;
+    document.getElementById('save-scenario').disabled = false;
     statusEl.textContent = `LOADED: ${mission.name} · ${placements.length} UNITS PLACED`;
   } catch (err) {
     statusEl.textContent = `ERROR: ${err.message}`;
@@ -413,6 +424,33 @@ document.querySelectorAll('.layer-btn').forEach(btn => {
     const layer = document.getElementById(`layer-${btn.dataset.layer}`);
     if (layer) layer.style.display = btn.classList.contains('active') ? '' : 'none';
   });
+});
+
+document.getElementById('save-scenario').addEventListener('click', async () => {
+  const name = prompt('Scenario name?', `${new Date().toISOString().slice(0,10)}-${lastMissionPath.split('/').pop().replace('.md','')}`);
+  if (!name) return;
+  try {
+    const scenario = buildScenario({
+      id: name.replace(/[^a-z0-9-]/gi, '-').toLowerCase(),
+      name,
+      missionPath: lastMissionPath,
+      defender: { rosterPath: lastDefenderPath, owner: 'Captain Hunter' },
+      attacker: { rosterPath: lastAttackerPath, owner: 'Unknown' },
+      placements: lastPlacements.map(p => ({
+        unit_name: p.unit.name,
+        role: p.role,
+        centerIn: p.centerIn,
+        orientation_deg: 0,
+        placement: 'on_board',
+      })),
+    });
+    const md = serializeScenario(scenario);
+    const path = `500 Worlds Campaign/scenarios/${scenario.id}.md`;
+    await writeTextFile(repoHandle, path, md);
+    statusEl.textContent = `SAVED: ${path}`;
+  } catch (err) {
+    statusEl.textContent = `ERROR: ${err.message}`;
+  }
 });
 
 function renderDetailPanel(unit, ds) {
