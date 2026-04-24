@@ -1,5 +1,10 @@
 // app/lib/yaml-frontmatter.js
-const FRONTMATTER_RE = /^---\r?\n(.*?)\r?\n---\r?\n/s;
+//
+// Extract and parse YAML frontmatter from a markdown file.
+// IMPORTANT: matches on line-boundary ^---, NOT on the substring '---',
+// because markdown tables can contain --- as column separators and would
+// break a naive split.
+const FRONTMATTER_RE = /^---\r?\n(.*?)\r?\n---(?:\r?\n|$)/s;
 
 export function extractFrontmatter(text) {
   const m = FRONTMATTER_RE.exec(text);

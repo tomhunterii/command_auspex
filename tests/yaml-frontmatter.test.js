@@ -26,3 +26,8 @@ test('parseFrontmatter parses valid YAML', async () => {
 test('parseFrontmatter returns null for missing frontmatter', async () => {
   assert.strictEqual(await parseFrontmatter('# No frontmatter'), null);
 });
+
+test('extractFrontmatter handles frontmatter at end of file with no trailing newline', () => {
+  const text = '---\nname: Titus\n---';
+  assert.strictEqual(extractFrontmatter(text), 'name: Titus');
+});
