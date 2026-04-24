@@ -234,9 +234,53 @@
   }
   .tooltip .tt-pts { color: var(--amber); }
   .tooltip .tt-wargear { color: var(--dim); margin-top: 4px; font-size: 10px; }
+
+  .boot-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    background: radial-gradient(ellipse at center, #0a1412 0%, #000 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity 500ms;
+    cursor: pointer;
+  }
+  .boot-overlay.hidden { opacity: 0; pointer-events: none; }
+  .boot-lines {
+    font-family: 'Bank Gothic', sans-serif;
+    letter-spacing: 6px;
+    color: var(--phosphor);
+    font-size: 14px;
+    text-align: center;
+  }
+  .boot-line {
+    opacity: 0;
+    animation: boot-fade 400ms forwards;
+    margin: 10px 0;
+  }
+  .boot-line:nth-child(1) { animation-delay: 0ms; }
+  .boot-line:nth-child(2) { animation-delay: 300ms; }
+  .boot-line:nth-child(3) { animation-delay: 600ms; }
+  .boot-line:nth-child(4) { animation-delay: 900ms; color: var(--amber); }
+  .boot-line.ready { animation-delay: 1300ms; color: var(--phosphor); text-shadow: 0 0 8px var(--phosphor); }
+  @keyframes boot-fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 </style>
 </head>
 <body>
+<div id="boot-overlay" class="boot-overlay">
+  <div class="boot-lines">
+    <div class="boot-line">✠ AUSPEX PRIMARIS // COGITATOR HANDSHAKE ✠</div>
+    <div class="boot-line">VOX-CHANNEL SIGMA-09 // SYNC</div>
+    <div class="boot-line">MACHINE-SPIRIT APPEASED</div>
+    <div class="boot-line">SCANNING FOR TACTICAL DATA…</div>
+    <div class="boot-line ready">AUSPEX ONLINE ✠ BY THE EMPEROR'S WILL</div>
+  </div>
+</div>
 <div class="vignette"></div>
 <div class="shell">
   <div class="topbar">
@@ -696,6 +740,12 @@ function renderDetailPanel(unit, ds) {
     <div style="font-size:11px;">${wargearList}</div>
   `;
 }
+
+// Boot sequence — fade out after 2s or click to skip.
+setTimeout(() => document.getElementById('boot-overlay').classList.add('hidden'), 2000);
+document.getElementById('boot-overlay').addEventListener('click', () => {
+  document.getElementById('boot-overlay').classList.add('hidden');
+});
 </script>
 <div id="paste-modal" class="paste-modal">
   <div class="paste-dialog">
