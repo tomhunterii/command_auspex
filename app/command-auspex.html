@@ -398,7 +398,12 @@ async function loadDatasheet(slug) {
 
 async function loadRosterFile(path) {
   const text = await readTextFile(repoHandle, path);
-  return parseFrontmatter(text);
+  const fm = await parseFrontmatter(text);
+  if (!fm || !Array.isArray(fm.units)) {
+    const name = path.split('/').pop();
+    throw new Error(`${name} has no structured roster frontmatter — paste the GW Companion App export via VOX-SCRIBE to convert it.`);
+  }
+  return fm;
 }
 
 async function loadFromScenario(s) {
