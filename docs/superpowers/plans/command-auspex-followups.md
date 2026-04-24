@@ -20,10 +20,9 @@ Known limitations and deferred enhancements identified during the 26-task build.
 
 ## Deferred
 
-### Paste-to-resolve datasheet slugs (Task 20 follow-up)
-Browser `buildRosterMarkdown` emits `datasheet: null` for every unit. The Python CLI (`scripts/parse_gw_roster.py`) slugifies unit names and tries to match a file in `datasheets/`. Porting this resolver to JS is a ~30-line follow-up.
-
-**Scope:** Add `resolveSlug(unitName, datasheetDir)` to `app/lib/roster-parser.js`; invoke in `handlePasteConfirm` before writing `.md`.
+### ~~Paste-to-resolve datasheet slugs (Task 20 follow-up)~~ ✅ Done `f2d80e8`
+~~Browser `buildRosterMarkdown` emits `datasheet: null` for every unit.~~
+Shipped: `slugify` + `resolveSlug` in `app/lib/roster-parser.js`; `listDatasheetCandidates` in `app/command-auspex.html` walks `datasheets/*/units/*.md` via FSA; invoked in `handlePasteConfirm`. 15/16 Norallus units auto-resolve.
 
 ### Per-model base mixed-size rendering (Task 9 follow-up)
 `renderUnit` reads `datasheet.base.diameter_mm` once and applies it to every model in the unit. Wardens of Ultramar has 6 named models with mixed 40mm / 28.5mm bases. They currently render all at a single base size.
@@ -39,14 +38,14 @@ Task 15 reserved `#layer-coherency` as a debug layer. Nothing populates it. Futu
 ### Threat ranges use longest weapon only
 `datasheet.max_range_in` is the single longest-ranged weapon. Units with both a 24" and a 48" weapon only show the 48" ring. A future enhancement could draw concentric rings per weapon range.
 
-### Scenario save is write-through, no confirmation on overwrite
-`writeTextFile` with `{ create: true }` truncates any existing file. If the Captain enters an existing scenario slug, the file silently overwrites. A UI confirmation prompt for overwrite would be safer.
+### ~~Scenario save is write-through, no confirmation on overwrite~~ ✅ Done `7fc73e2`
+Shipped: `fileExists(root, path)` in `app/lib/fs.js`; explicit save handler calls `confirm()` before overwriting. Auto-save (see below) deliberately bypasses the confirm — it writes to a known, user-sanctioned path.
 
 ### Attacker split across multiple deployment polygons is random
 Purge and Burn's attacker has two corner triangles. The current logic shuffles the unit list and halves it. A smarter split (e.g., balance by points, or keep units with shared transport together) would be a real enhancement.
 
-### No auto-persistence
-Each drag doesn't auto-save. The Captain must click COMMIT TO ARCHIVE explicitly. A debounced auto-save on drop would prevent work loss.
+### ~~No auto-persistence~~ ✅ Done `1c766a1` (+ `01e751f` name-preservation fix)
+Shipped: once a scenario is explicitly saved or recalled, every drag-end schedules a 500ms debounced silent re-write to the same file. `currentScenarioPath` + `currentScenarioName` track the target; `buildCurrentScenarioMarkdown` shared between explicit and auto paths. Status flashes "AUTO-SCRIBED" for 1500ms. Auto-save is a no-op before the first explicit save.
 
 ## Known non-issues (flagged but working as designed)
 
