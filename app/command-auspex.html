@@ -304,14 +304,14 @@
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
     <div id="controls" style="display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;">
       <button id="pick-repo" class="btn">CONNECT REPO</button>
-      <label class="status-msg">MISSION <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
-      <label class="status-msg">DEFENDER <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
-      <label class="status-msg">ATTACKER <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
-      <button id="load-scenario" class="btn" disabled>LOAD SCENARIO</button>
-      <button id="open-scenario" class="btn">OPEN SCENARIO</button>
-      <button id="save-scenario" class="btn" disabled>SAVE</button>
-      <button id="paste-defender" class="btn">+ PASTE DEFENDER</button>
-      <button id="paste-attacker" class="btn">+ PASTE ATTACKER</button>
+      <label class="status-msg">ENGAGEMENT <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">FRIENDLY FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">HOSTILE FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
+      <button id="load-scenario" class="btn" disabled>ENGAGE</button>
+      <button id="open-scenario" class="btn">RECALL SCENARIO</button>
+      <button id="save-scenario" class="btn" disabled>COMMIT TO ARCHIVE</button>
+      <button id="paste-defender" class="btn">+ VOX-SCRIBE DEFENDER</button>
+      <button id="paste-attacker" class="btn">+ VOX-SCRIBE ATTACKER</button>
     </div>
   </div>
   <div class="stage">
@@ -371,13 +371,13 @@ async function populateDropdown(select, dir, ext = '.md') {
 document.getElementById('pick-repo').addEventListener('click', async () => {
   try {
     repoHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    statusEl.textContent = `REPO CONNECTED: ${repoHandle.name}`;
+    statusEl.textContent = `COGITATOR LINK ESTABLISHED · REPOSITORY ${repoHandle.name}`;
     await populateDropdown(missionSel, '500 Worlds Campaign/missions');
     await populateDropdown(defenderSel, 'ultramarines/rosters');
     await populateDropdown(attackerSel, 'ultramarines/rosters');
     window.__repoHandle = () => repoHandle;
   } catch (err) {
-    if (err.name !== 'AbortError') statusEl.textContent = `ERROR: ${err.message}`;
+    if (err.name !== 'AbortError') statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
 });
 
@@ -433,7 +433,7 @@ async function loadFromScenario(s) {
   for (const p of placements) lastDatasheets.set(p.unit.name, p.datasheet);
   document.getElementById('save-scenario').disabled = false;
 
-  statusEl.textContent = `OPENED: ${s.name}`;
+  statusEl.textContent = `SCENARIO RECALLED: ${s.name}`;
 }
 
 loadBtn.addEventListener('click', async () => {
@@ -494,9 +494,9 @@ loadBtn.addEventListener('click', async () => {
     lastDefenderPath = defenderSel.value;
     lastAttackerPath = attackerSel.value;
     document.getElementById('save-scenario').disabled = false;
-    statusEl.textContent = `LOADED: ${mission.name} · ${placements.length} UNITS PLACED`;
+    statusEl.textContent = `ENGAGEMENT PROJECTED: ${mission.name} · ${placements.length} UNITS ARRAYED`;
   } catch (err) {
-    statusEl.textContent = `ERROR: ${err.message}`;
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
 });
 
@@ -601,22 +601,22 @@ document.getElementById('save-scenario').addEventListener('click', async () => {
     const md = serializeScenario(scenario);
     const path = `500 Worlds Campaign/scenarios/${scenario.id}.md`;
     await writeTextFile(repoHandle, path, md);
-    statusEl.textContent = `SAVED: ${path}`;
+    statusEl.textContent = `SCENARIO INTERRED AT: ${path}`;
   } catch (err) {
-    statusEl.textContent = `ERROR: ${err.message}`;
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
 });
 
 document.getElementById('open-scenario').addEventListener('click', async () => {
   if (!repoHandle) {
-    statusEl.textContent = 'CONNECT REPO FIRST';
+    statusEl.textContent = 'COGITATOR LINK REQUIRED';
     return;
   }
   try {
     const items = await listDir(repoHandle, '500 Worlds Campaign/scenarios');
     const scenarios = items.filter(i => i.kind === 'file' && i.name.endsWith('.md'));
     if (scenarios.length === 0) {
-      statusEl.textContent = 'NO SAVED SCENARIOS';
+      statusEl.textContent = 'ARCHIVES EMPTY';
       return;
     }
     const pick = prompt(
@@ -628,7 +628,7 @@ document.getElementById('open-scenario').addEventListener('click', async () => {
     const byName = scenarios.find(s => s.name === pick);
     const file = byIndex ?? byName;
     if (!file) {
-      statusEl.textContent = 'SCENARIO NOT FOUND';
+      statusEl.textContent = 'DESIGNATION UNKNOWN';
       return;
     }
     const text = await readTextFile(repoHandle, `500 Worlds Campaign/scenarios/${file.name}`);
@@ -641,7 +641,7 @@ document.getElementById('open-scenario').addEventListener('click', async () => {
     loadBtn.disabled = false;
     await loadFromScenario(s);
   } catch (err) {
-    statusEl.textContent = `ERROR: ${err.message}`;
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
 });
 
@@ -657,7 +657,7 @@ document.getElementById('paste-confirm').addEventListener('click', handlePasteCo
 
 function openPasteModal(target) {
   if (!repoHandle) {
-    statusEl.textContent = 'CONNECT REPO FIRST';
+    statusEl.textContent = 'COGITATOR LINK REQUIRED';
     return;
   }
   pasteTarget = target;
@@ -673,14 +673,14 @@ function closePasteModal() {
 async function handlePasteConfirm() {
   const raw = pasteTextarea.value;
   if (!raw.trim()) {
-    statusEl.textContent = 'ERROR: EMPTY PASTE';
+    statusEl.textContent = 'VOID TRANSMISSION — AWAITING DATA';
     return;
   }
   let roster;
   try {
     roster = parseRoster(raw);
   } catch (err) {
-    statusEl.textContent = `ERROR: PARSE FAILED — ${err.message}`;
+    statusEl.textContent = `SCRIBE FAILED — ${err.message}`;
     return;
   }
   const defaultSlug = roster.list_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -699,9 +699,9 @@ async function handlePasteConfirm() {
     sel.value = mdPath;
     updateLoadBtn();
     closePasteModal();
-    statusEl.textContent = `SAVED: ${mdPath}`;
+    statusEl.textContent = `ROSTER SCRIBED TO: ${mdPath}`;
   } catch (err) {
-    statusEl.textContent = `ERROR: WRITE FAILED — ${err.message}`;
+    statusEl.textContent = `SCRIBE FAILED TO INTER — ${err.message}`;
   }
 }
 
