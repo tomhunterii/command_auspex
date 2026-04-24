@@ -39,16 +39,28 @@ function parseBase(body) {
   const flightMatch = /\*\*Flight stem:\*\*\s*(yes|no)/i.exec(body);
   if (flightMatch) result.flight_stem = flightMatch[1].toLowerCase() === 'yes';
 
-  // Per-model bases (optional). Format under `- **Per-model bases:**`:
-  //   `  - <Submodel>: <shape>, <N>mm`
-  // e.g. Wardens of Ultramar has mixed 40mm + 28.5mm bases across 6 named models.
-  const perModelMatches = [...body.matchAll(/^\s{2,}-\s+(.+?):\s+(\w+),\s+([\d.]+)\s*mm/gim)];
-  if (perModelMatches.length > 0) {
-    result.per_model = perModelMatches.map(m => ({
-      submodel: m[1].trim(),
-      shape: m[2].toLowerCase(),
-      diameter_mm: parseFloat(m[3]),
-    }));
+  // Per-model bases (optional). Only parsed when a `- **Per-model bases:**`
+  // marker is present; nested bullets (2+ leading spaces) under it are then
+  // matched as `  - <Submodel>: <shape>, <N>mm`. Scoped this way so random
+  // non-per-model bullets elsewhere in the Base body can't be captured.
+  const lines = body.split('\n');
+  const markerIdx = lines.findIndex(l => /\*\*Per-model bases:\*\*/i.test(l));
+  if (markerIdx >= 0) {
+    const perModel = [];
+    for (let i = markerIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trim() === '') continue;
+      if (!/^\s{2,}/.test(line)) break; // end of sub-list (next top-level bullet)
+      const m = /^\s{2,}-\s+(.+?):\s+(\w+),\s+([\d.]+)\s*mm/i.exec(line);
+      if (m) {
+        perModel.push({
+          submodel: m[1].trim(),
+          shape: m[2].toLowerCase(),
+          diameter_mm: parseFloat(m[3]),
+        });
+      }
+    }
+    if (perModel.length > 0) result.per_model = perModel;
   }
 
   return result;

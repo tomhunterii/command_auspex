@@ -94,3 +94,26 @@ test('parseDatasheet leaves per_model undefined for normal single-base units', (
   const ds = parseDatasheet(load('intercessor-squad'));
   assert.strictEqual(ds.base.per_model, undefined);
 });
+
+test('parseDatasheet does not false-positive when no Per-model bases marker is present', () => {
+  // Synthetic trap: a nested bullet that LOOKS like a per-model entry but
+  // lives under an unrelated top-level bullet. Without the marker scope,
+  // the old regex would have captured "Note" as a submodel.
+  const text = [
+    '# Trap Unit',
+    '## Base',
+    '- **Shape:** round',
+    '- **Diameter:** 32mm',
+    '- **Flight stem:** no',
+    '  - Note: errata pending, 40mm ruling deferred',
+    '',
+    '## Profile',
+    '| M | T | Sv | W | Ld | OC |',
+    '|---|---|---|---|---|---|',
+    '| 6" | 4 | 3+ | 2 | 6+ | 2 |',
+    '',
+  ].join('\n');
+  const ds = parseDatasheet(text);
+  assert.strictEqual(ds.base.per_model, undefined);
+  assert.strictEqual(ds.base.diameter_mm, 32);
+});
