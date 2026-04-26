@@ -120,4 +120,11 @@ test('smoke: runtime.js imported and connectRepoHandle wired', () => {
 test('smoke: native menu listener wired (Tauri-only path present)', () => {
   assert.match(HTML, /listen\(['"]menu-action['"]/,
     'menu-action listener missing');
+  // Each menu action must click its corresponding existing button id.
+  assert.match(HTML, /e\.payload === 'connect_repo'[\s\S]*?getElementById\(['"]pick-repo['"]\)/,
+    'connect_repo must click #pick-repo');
+  assert.match(HTML, /e\.payload === 'save_scenario'[\s\S]*?getElementById\(['"]save-scenario['"]\)/,
+    'save_scenario must click #save-scenario');
+  assert.match(HTML, /e\.payload === 'recall_scenario'[\s\S]*?getElementById\(['"]open-scenario['"]\)/,
+    'recall_scenario must click #open-scenario (the RECALL SCENARIO button); load-scenario is ENGAGE');
 });
