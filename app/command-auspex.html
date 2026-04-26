@@ -342,6 +342,7 @@
 import { listDir, readTextFile, writeTextFile, fileExists } from './lib/fs.js';
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
 import { parseRoster, resolveSlug } from './lib/roster-parser.js';
+import { connectRepoHandle } from './lib/runtime.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
 import { renderBoard, renderUnits, renderThreatRanges } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
@@ -397,7 +398,7 @@ async function populateRosterDropdowns(dir, selects) {
 
 document.getElementById('pick-repo').addEventListener('click', async () => {
   try {
-    repoHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    repoHandle = await connectRepoHandle();
     await populateDropdown(missionSel, '500 Worlds Campaign/missions');
     const { kept, skipped } = await populateRosterDropdowns('ultramarines/rosters', [defenderSel, attackerSel]);
     const tail = skipped > 0 ? ` · ${skipped} UNSTRUCTURED SKIPPED` : '';

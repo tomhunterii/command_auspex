@@ -109,3 +109,10 @@ test('smoke: auto-save wired', () => {
   assert.match(HTML, /scheduleAutoSave/, 'scheduleAutoSave function missing');
   assert.match(HTML, /currentScenarioPath/, 'currentScenarioPath state missing');
 });
+
+test('smoke: runtime.js imported and connectRepoHandle wired', () => {
+  assert.match(HTML, /import\s*\{[^}]*connectRepoHandle[^}]*\}\s*from\s*'\.\/lib\/runtime\.js'/,
+    'connectRepoHandle not imported from ./lib/runtime.js');
+  assert.match(HTML, /repoHandle = await connectRepoHandle\(\)/,
+    'CONNECT REPO handler must call connectRepoHandle()');
+});
