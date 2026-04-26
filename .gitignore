@@ -3,3 +3,8 @@
 
 # Node
 node_modules/
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/source.png

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Command Auspex",
+  "version": "0.1.0",
+  "identifier": "com.ultramarines.command-auspex",
+  "build": {
+    "frontendDist": "../app",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Command Auspex // Hololith-Sigma",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "../app/**/*",
+      "../datasheets/**/*.md",
+      "../ultramarines/**/*.md",
+      "../500 Worlds Campaign/**/*",
+      "../fonts/**/*"
+    ],
+    "category": "Utility",
+    "shortDescription": "Command Auspex — list-building battle simulator",
+    "longDescription": "Wargame planning tool for Warhammer 40,000 10th edition: place units on mission maps, see threat ranges, and assess list efficiency."
+  }
+}
