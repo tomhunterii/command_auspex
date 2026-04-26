@@ -40,7 +40,7 @@
       "../app/**/*",
       "../datasheets/**/*.md",
       "../ultramarines/**/*.md",
-      "../500 Worlds Campaign/**/*",
+      "../500 Worlds Campaign/**/*.md",
       "../fonts/**/*"
     ],
     "category": "Utility",

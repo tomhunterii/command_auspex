@@ -8,3 +8,11 @@ node_modules/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/icons/source.png
+
+# Icon generator side-effects (we ship desktop only — no Microsoft Store, no mobile)
+src-tauri/icons/64x64.png
+src-tauri/icons/icon.png
+src-tauri/icons/StoreLogo.png
+src-tauri/icons/Square*.png
+src-tauri/icons/android/
+src-tauri/icons/ios/
