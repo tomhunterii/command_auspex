@@ -871,7 +871,7 @@ document.getElementById('boot-overlay').addEventListener('click', () => {
 
 // Native menu plumbing: in Tauri, menu items emit a 'menu-action' event.
 if (window.__TAURI_INTERNALS__) {
-  const { listen } = await import('@tauri-apps/api/event');
+  const { listen } = window.__TAURI__.event;
   await listen('menu-action', (e) => {
     if (e.payload === 'connect_repo') {
       document.getElementById('pick-repo').click();

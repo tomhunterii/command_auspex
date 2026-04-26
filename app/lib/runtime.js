@@ -4,6 +4,10 @@
 // branch between FSA showDirectoryPicker (browser) and the Tauri shim
 // (desktop app).
 
+import { TauriDirectoryHandle } from './tauri-fs-shim.js';
+import { makeTauriDriver } from './tauri-driver.js';
+import { seedIfNeeded } from './seed-appdata.js';
+
 export function isTauri(win = (typeof window !== 'undefined' ? window : undefined)) {
   return Boolean(win && win.__TAURI_INTERNALS__);
 }
@@ -14,24 +18,21 @@ export function isTauri(win = (typeof window !== 'undefined' ? window : undefine
 //
 // Both branches resolve to an object that conforms to the slice of
 // FileSystemDirectoryHandle that app/lib/fs.js consumes.
+//
+// `loadTauriDeps` is an injection seam: production reads window.__TAURI__.fs
+// (exposed by withGlobalTauri); tests pass a stub. Returns an object shaped
+// { fsApi, BaseDirectory } where fsApi is the Tauri filesystem plugin.
 export async function connectRepoHandle({
   win = (typeof window !== 'undefined' ? window : undefined),
-  // Tauri-side wiring (lazy-imported only inside the Tauri branch
-  // so a plain browser never tries to load @tauri-apps modules).
-  loadTauriDeps = async () => {
-    const [{ TauriDirectoryHandle }, { makeTauriDriver }, { seedIfNeeded }, fs] = await Promise.all([
-      import('./tauri-fs-shim.js'),
-      import('./tauri-driver.js'),
-      import('./seed-appdata.js'),
-      import('@tauri-apps/plugin-fs'),
-    ]);
-    return { TauriDirectoryHandle, makeTauriDriver, seedIfNeeded, BaseDirectory: fs.BaseDirectory };
+  loadTauriDeps = () => {
+    const fsApi = win.__TAURI__.fs;
+    return { fsApi, BaseDirectory: fsApi.BaseDirectory };
   },
 } = {}) {
   if (isTauri(win)) {
-    const { TauriDirectoryHandle, makeTauriDriver, seedIfNeeded, BaseDirectory } = await loadTauriDeps();
-    const resourceDriver = makeTauriDriver(BaseDirectory.Resource);
-    const appdataDriver = makeTauriDriver(BaseDirectory.AppData);
+    const { fsApi, BaseDirectory } = await loadTauriDeps();
+    const resourceDriver = makeTauriDriver(BaseDirectory.Resource, fsApi);
+    const appdataDriver = makeTauriDriver(BaseDirectory.AppData, fsApi);
     await seedIfNeeded({
       resource: resourceDriver,
       appdata: appdataDriver,

@@ -1,37 +1,32 @@
 // app/lib/tauri-driver.js
 //
 // Production filesystem driver for TauriDirectoryHandle.
-// Backs the shim with @tauri-apps/plugin-fs. Anchored on a single
-// BaseDirectory (BaseDirectory.AppData for milestone 0.1).
+// Anchored on a single BaseDirectory (e.g. BaseDirectory.AppData) and
+// parameterized over the Tauri fs API. The caller passes window.__TAURI__.fs
+// (exposed when tauri.conf.json has withGlobalTauri: true). This avoids
+// bare-specifier ES module imports, which a no-bundler frontend cannot
+// resolve.
 
-import {
-  readTextFile,
-  writeTextFile,
-  readDir,
-  exists,
-  mkdir,
-} from '@tauri-apps/plugin-fs';
-
-export function makeTauriDriver(baseDir) {
+export function makeTauriDriver(baseDir, fsApi) {
   return {
     async exists(path) {
       try {
-        return await exists(path, { baseDir });
+        return await fsApi.exists(path, { baseDir });
       } catch {
         return false;
       }
     },
     async readTextFile(path) {
-      return readTextFile(path, { baseDir });
+      return fsApi.readTextFile(path, { baseDir });
     },
     async writeTextFile(path, content) {
-      return writeTextFile(path, content, { baseDir });
+      return fsApi.writeTextFile(path, content, { baseDir });
     },
     async mkdir(path) {
-      return mkdir(path, { baseDir, recursive: true });
+      return fsApi.mkdir(path, { baseDir, recursive: true });
     },
     async readDir(path) {
-      const items = await readDir(path === '' ? '.' : path, { baseDir });
+      const items = await fsApi.readDir(path === '' ? '.' : path, { baseDir });
       return items.map(item => ({
         name: item.name,
         isDirectory: item.isDirectory ?? false,
