@@ -4,15 +4,13 @@
   "version": "0.1.0",
   "identifier": "com.ultramarines.command-auspex",
   "build": {
-    "frontendDist": "../app",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "../app"
   },
   "app": {
     "windows": [
       {
         "title": "Command Auspex // Hololith-Sigma",
+        "url": "command-auspex.html",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,

@@ -2,7 +2,7 @@
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
-    Emitter, Manager,
+    Emitter,
 };
 
 fn main() {
