@@ -116,3 +116,8 @@ test('smoke: runtime.js imported and connectRepoHandle wired', () => {
   assert.match(HTML, /repoHandle = await connectRepoHandle\(\)/,
     'CONNECT REPO handler must call connectRepoHandle()');
 });
+
+test('smoke: native menu listener wired (Tauri-only path present)', () => {
+  assert.match(HTML, /listen\(['"]menu-action['"]/,
+    'menu-action listener missing');
+});

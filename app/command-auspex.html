@@ -868,6 +868,20 @@ setTimeout(() => document.getElementById('boot-overlay').classList.add('hidden')
 document.getElementById('boot-overlay').addEventListener('click', () => {
   document.getElementById('boot-overlay').classList.add('hidden');
 });
+
+// Native menu plumbing: in Tauri, menu items emit a 'menu-action' event.
+if (window.__TAURI_INTERNALS__) {
+  const { listen } = await import('@tauri-apps/api/event');
+  await listen('menu-action', (e) => {
+    if (e.payload === 'connect_repo') {
+      document.getElementById('pick-repo').click();
+    } else if (e.payload === 'save_scenario') {
+      document.getElementById('save-scenario').click();
+    } else if (e.payload === 'recall_scenario') {
+      document.getElementById('load-scenario').click();
+    }
+  });
+}
 </script>
 <div id="paste-modal" class="paste-modal">
   <div class="paste-dialog">
