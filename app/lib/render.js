@@ -4,6 +4,43 @@
 
 import { baseDiameterPx, clusterOffsets } from './base-geometry.js';
 
+// Codex Astartes role markings for Space Marine model circles.
+// Per the 10th-edition unit role classification.
+const SM_ROLE_CLOSE_SUPPORT_SLUGS = /^(aggressor|assault[\-_]intercessor|inceptor|reiver|vanguard|bladeguard|jump[\-_]pack)/i;
+const SM_ROLE_FIRE_SUPPORT_SLUGS  = /^(hellblaster|eradicator|devastator|heavy[\-_]intercessor)/i;
+const SM_ROLE_VETERAN_SLUGS       = /^(sternguard|vanguard[\-_]veteran|bladeguard|wardens|company[\-_]heroes|victrix[\-_]honour[\-_]guard)/i;
+
+function isSpaceMarine(keywords) {
+  for (const k of keywords) {
+    const u = String(k).toUpperCase();
+    if (u === 'ADEPTUS ASTARTES' || u === 'SPACE MARINES') return true;
+  }
+  return false;
+}
+
+function hasKeyword(keywords, ...wanted) {
+  const set = new Set(keywords.map(k => String(k).toUpperCase()));
+  return wanted.some(w => set.has(w.toUpperCase()));
+}
+
+function spaceMarineRoleSymbol(unit) {
+  if (!unit) return null;
+  // unit.keywords may be an array of {keyword, ...} or strings — normalize.
+  const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
+  if (!isSpaceMarine(kws)) return null;
+  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return null;
+  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) {
+    // Characters that aren't the named veteran units are command.
+    // (Wardens of Ultramar are EPIC HERO + Veteran — fall through to veteran below.)
+    return '✠';
+  }
+  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '☠';
+  if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '✕';
+  if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '◀';
+  if (hasKeyword(kws, 'BATTLELINE')) return '▲';
+  return null;
+}
+
 // Curated short codes for common weapon systems. The lookup is by lowercase
 // substring match — order matters when multiple substrings could hit (the
 // FIRST match wins). Keep specific entries before generic ones.
@@ -69,13 +106,17 @@ function abbreviateWeapon(name) {
  *    in wargear list).
  */
 export function modelLabel(submodel, unitMeta) {
-  // unitMeta: { totalUnitModels }
+  // unitMeta: { totalUnitModels, unit? }
   if (unitMeta.totalUnitModels <= 1) return '';
   // Sergeant detection by submodel name first.
   const subName = (submodel.submodel ?? '').toLowerCase();
   if (subName.includes('sergeant') || subName.includes('sgt')) return 'S';
-  // Otherwise pick the primary weapon. The submodel's wargear list is the
-  // source. The roster's frontmatter shape: wargear: [{ count, item }].
+  // Try Space Marine role symbol next.
+  const roleSymbol = spaceMarineRoleSymbol(unitMeta.unit);
+  if (roleSymbol) return roleSymbol;
+  // Fall back to weapon-system letter (existing logic).
+  // The submodel's wargear list is the source.
+  // The roster's frontmatter shape: wargear: [{ count, item }].
   const wargear = submodel.wargear ?? submodel.weapons ?? [];
   // Find the first non-sidearm wargear item.
   const primary = wargear.find(w => {
@@ -524,8 +565,14 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     circle.dataset.modelIdx = String(i);
     group.appendChild(circle);
 
-    // --- Per-model label (weapon abbreviation / sergeant marker) ---
-    const label = modelLabel(m.sub, { totalUnitModels });
+    // --- Per-model label (role symbol / sergeant marker / weapon fallback) ---
+    const label = modelLabel(m.sub, {
+      totalUnitModels,
+      unit: {
+        slug: unit.slug ?? unitSlug,
+        keywords: unit.keywords ?? unit.keywordsData ?? [],
+      },
+    });
 
     if (label) {
       const text = document.createElementNS(SVG_NS, 'text');
@@ -535,8 +582,10 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
       text.setAttribute('dominant-baseline', 'central');
       text.setAttribute('font-family', "'JetBrains Mono', monospace");
       text.setAttribute('font-weight', '700');
-      // font-size in inches: clamp between 0.35" and 0.8" (≈ 3.5–8px at 10px/in reference)
-      const fontSize = Math.max(0.35, Math.min(0.8, r * 0.55));
+      // font-size in inches: role symbols get r * 0.7 (triangles/skull need visual room);
+      // letter labels (S, weapon codes) use r * 0.55. Clamped 0.35"–0.8".
+      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠]/.test(label);
+      const fontSize = Math.max(0.35, Math.min(0.8, r * (isRoleSymbol ? 0.7 : 0.55)));
       text.setAttribute('font-size', String(fontSize));
       text.setAttribute('fill', 'var(--phosphor)');
       text.setAttribute('pointer-events', 'none');

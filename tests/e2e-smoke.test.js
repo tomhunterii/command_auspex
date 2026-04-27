@@ -225,3 +225,11 @@ test('smoke: leader attachment wiring present', () => {
   assert.match(HTML, /attach-leader/);
   assert.match(HTML, /attachedLeaderSlug/);
 });
+
+test('smoke: Space Marine role symbols wired in renderer', () => {
+  const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
+  assert.match(RENDER, /spaceMarineRoleSymbol/);
+  assert.match(RENDER, /SM_ROLE_CLOSE_SUPPORT_SLUGS/);
+  assert.match(RENDER, /SM_ROLE_FIRE_SUPPORT_SLUGS/);
+  assert.match(RENDER, /SM_ROLE_VETERAN_SLUGS/);
+});
