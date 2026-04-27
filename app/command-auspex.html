@@ -137,7 +137,13 @@
   }
   .layer-btn.active { color: var(--phosphor); border-color: var(--phosphor); }
   .layer-btn:hover { background: rgba(111,255,142,0.06); }
-  .canvas-wrap { overflow: auto; padding: 16px; background: var(--void); }
+  .canvas-wrap { overflow: auto; padding: 16px; background: var(--void); display: flex; align-items: flex-start; }
+  #board {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: calc(100vh - 120px);
+  }
   .sidebar {
     border-left: 1px solid var(--phosphor-dim);
     background-color: var(--void-2);
@@ -333,7 +339,7 @@
         <button class="layer-btn active" data-layer="auspex-sweep">SWEEP</button>
       </div>
       <div class="canvas-wrap" style="position:relative;">
-        <svg id="board" width="600" height="440" viewBox="0 0 600 440"></svg>
+        <svg id="board"></svg>
         <svg class="reticle reticle-tl" width="24" height="24" viewBox="0 0 24 24"><path d="M2,2 L2,10 M2,2 L10,2" stroke="#6fff8e" stroke-width="1" fill="none"/></svg>
         <svg class="reticle reticle-tr" width="24" height="24" viewBox="0 0 24 24"><path d="M22,2 L22,10 M22,2 L14,2" stroke="#6fff8e" stroke-width="1" fill="none"/></svg>
         <svg class="reticle reticle-bl" width="24" height="24" viewBox="0 0 24 24"><path d="M2,22 L2,14 M2,22 L10,22" stroke="#6fff8e" stroke-width="1" fill="none"/></svg>
@@ -970,8 +976,8 @@ function buildCurrentScenarioMarkdown(id, name) {
       if (group) {
         const t = group.transform.baseVal.consolidate();
         if (t) {
-          cx += t.matrix.e / 10; // INCH_PX = 10
-          cy += t.matrix.f / 10;
+          cx += t.matrix.e; // SVG user units are now inches directly
+          cy += t.matrix.f;
         }
       }
       return {

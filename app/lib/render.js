@@ -1,6 +1,6 @@
 // app/lib/render.js
 // SVG rendering helpers for the Command Auspex.
-// Convention: 1 inch = 10 pixels.
+// Convention: SVG user unit = 1 inch. All coordinates are in inches.
 
 import { baseDiameterPx, clusterOffsets } from './base-geometry.js';
 
@@ -32,7 +32,8 @@ export function modelLabel({ submodelName, indexInSubmodel, submodelCount, total
   return words.slice(0, 3).map(w => w[0].toUpperCase()).join('');
 }
 
-export const INCH_PX = 10;
+// INCH_PX is kept as 1 so all "pixel" math reduces to inches directly.
+export const INCH_PX = 1;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -40,10 +41,19 @@ export function clearSvg(svg) {
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 }
 
+// Padding around the board edge so ruler labels are visible.
+const RULER_PAD = 1.5;
+
 export function setBoardSize(svg, widthIn, heightIn) {
-  svg.setAttribute('width', widthIn * INCH_PX);
-  svg.setAttribute('height', heightIn * INCH_PX);
-  svg.setAttribute('viewBox', `0 0 ${widthIn * INCH_PX} ${heightIn * INCH_PX}`);
+  // Width/height attributes removed — CSS controls sizing (width:100%; height:auto).
+  svg.removeAttribute('width');
+  svg.removeAttribute('height');
+  const vbX = -RULER_PAD;
+  const vbY = -RULER_PAD;
+  const vbW = widthIn + RULER_PAD * 2;
+  const vbH = heightIn + RULER_PAD * 2;
+  svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 }
 
 export function renderBoard(svg, mission) {
@@ -55,25 +65,25 @@ export function renderBoard(svg, mission) {
   const bg = document.createElementNS(SVG_NS, 'rect');
   bg.setAttribute('x', 0);
   bg.setAttribute('y', 0);
-  bg.setAttribute('width', width_in * INCH_PX);
-  bg.setAttribute('height', height_in * INCH_PX);
+  bg.setAttribute('width', width_in);
+  bg.setAttribute('height', height_in);
   bg.setAttribute('fill', '#0f1413');
   bg.setAttribute('stroke', '#3a8a4d');
-  bg.setAttribute('stroke-width', '2');
+  bg.setAttribute('stroke-width', '0.12');
   svg.appendChild(bg);
 
   // Radial auspex sweep — slow rotating phosphor line emanating from board center.
   const sweep = document.createElementNS(SVG_NS, 'g');
   sweep.setAttribute('id', 'layer-auspex-sweep');
   sweep.style.pointerEvents = 'none';
-  const cxSw = (width_in * INCH_PX) / 2;
-  const cySw = (height_in * INCH_PX) / 2;
+  const cxSw = width_in / 2;
+  const cySw = height_in / 2;
   const maxR = Math.hypot(cxSw, cySw);
   const sweepLine = document.createElementNS(SVG_NS, 'line');
   sweepLine.setAttribute('x1', cxSw); sweepLine.setAttribute('y1', cySw);
   sweepLine.setAttribute('x2', cxSw + maxR); sweepLine.setAttribute('y2', cySw);
   sweepLine.setAttribute('stroke', '#6fff8e');
-  sweepLine.setAttribute('stroke-width', '1');
+  sweepLine.setAttribute('stroke-width', '0.1');
   sweepLine.setAttribute('opacity', '0.25');
   const animT = document.createElementNS(SVG_NS, 'animateTransform');
   animT.setAttribute('attributeName', 'transform');
@@ -86,26 +96,57 @@ export function renderBoard(svg, mission) {
   sweep.appendChild(sweepLine);
   svg.appendChild(sweep);
 
-  // grid (in its own layer)
+  // 1″ grid with accent lines every 6″
   const gridLayer = document.createElementNS(SVG_NS, 'g');
   gridLayer.setAttribute('id', 'layer-grid');
-  for (let x = 10; x < width_in; x += 10) {
+  gridLayer.setAttribute('pointer-events', 'none');
+  for (let x = 0; x <= width_in; x++) {
     const line = document.createElementNS(SVG_NS, 'line');
-    line.setAttribute('x1', x * INCH_PX); line.setAttribute('x2', x * INCH_PX);
-    line.setAttribute('y1', 0); line.setAttribute('y2', height_in * INCH_PX);
-    line.setAttribute('stroke', 'rgba(111,255,142,0.15)');
-    line.setAttribute('stroke-width', '0.8');
+    line.setAttribute('x1', x); line.setAttribute('y1', 0);
+    line.setAttribute('x2', x); line.setAttribute('y2', height_in);
+    line.setAttribute('stroke', x % 6 === 0 ? 'rgba(111,255,142,0.25)' : 'rgba(111,255,142,0.08)');
+    line.setAttribute('stroke-width', x % 6 === 0 ? '0.04' : '0.02');
     gridLayer.appendChild(line);
   }
-  for (let y = 10; y < height_in; y += 10) {
+  for (let y = 0; y <= height_in; y++) {
     const line = document.createElementNS(SVG_NS, 'line');
-    line.setAttribute('y1', y * INCH_PX); line.setAttribute('y2', y * INCH_PX);
-    line.setAttribute('x1', 0); line.setAttribute('x2', width_in * INCH_PX);
-    line.setAttribute('stroke', 'rgba(111,255,142,0.15)');
-    line.setAttribute('stroke-width', '0.8');
+    line.setAttribute('x1', 0); line.setAttribute('y1', y);
+    line.setAttribute('x2', width_in); line.setAttribute('y2', y);
+    line.setAttribute('stroke', y % 6 === 0 ? 'rgba(111,255,142,0.25)' : 'rgba(111,255,142,0.08)');
+    line.setAttribute('stroke-width', y % 6 === 0 ? '0.04' : '0.02');
     gridLayer.appendChild(line);
   }
   svg.appendChild(gridLayer);
+
+  // Edge rulers — labels every 6″ along all four edges
+  const rulerGroup = document.createElementNS(SVG_NS, 'g');
+  rulerGroup.setAttribute('id', 'layer-ruler');
+  rulerGroup.setAttribute('pointer-events', 'none');
+  rulerGroup.setAttribute('font-family', "'JetBrains Mono', monospace");
+  rulerGroup.setAttribute('fill', 'var(--phosphor-dim)');
+  rulerGroup.setAttribute('font-size', '0.8');
+  rulerGroup.setAttribute('font-weight', '700');
+  for (let x = 6; x < width_in; x += 6) {
+    for (const yPos of [-0.5, height_in + 0.8]) {
+      const text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('x', x); text.setAttribute('y', yPos);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'central');
+      text.textContent = String(x);
+      rulerGroup.appendChild(text);
+    }
+  }
+  for (let y = 6; y < height_in; y += 6) {
+    for (const xPos of [-0.8, width_in + 0.8]) {
+      const text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('x', xPos); text.setAttribute('y', y);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'central');
+      text.textContent = String(y);
+      rulerGroup.appendChild(text);
+    }
+  }
+  svg.appendChild(rulerGroup);
 
   // deployment zones
   const zonesLayer = document.createElementNS(SVG_NS, 'g');
@@ -154,20 +195,20 @@ export function renderBoard(svg, mission) {
 
 function drawPolygon(parent, vertices, fill, stroke, { dashed = false } = {}) {
   const poly = document.createElementNS(SVG_NS, 'polygon');
-  poly.setAttribute('points', vertices.map(([x, y]) => `${x * INCH_PX},${y * INCH_PX}`).join(' '));
+  poly.setAttribute('points', vertices.map(([x, y]) => `${x},${y}`).join(' '));
   poly.setAttribute('fill', fill);
   poly.setAttribute('stroke', stroke);
-  poly.setAttribute('stroke-width', '1.5');
-  if (dashed) poly.setAttribute('stroke-dasharray', '4 3');
+  poly.setAttribute('stroke-width', '0.12');
+  if (dashed) poly.setAttribute('stroke-dasharray', '0.4 0.3');
   parent.appendChild(poly);
 }
 
-function drawSegment(parent, [[x1, y1], [x2, y2]], stroke, width) {
+function drawSegment(parent, [[x1, y1], [x2, y2]], stroke, widthIn) {
   const line = document.createElementNS(SVG_NS, 'line');
-  line.setAttribute('x1', x1 * INCH_PX); line.setAttribute('y1', y1 * INCH_PX);
-  line.setAttribute('x2', x2 * INCH_PX); line.setAttribute('y2', y2 * INCH_PX);
+  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
   line.setAttribute('stroke', stroke);
-  line.setAttribute('stroke-width', width);
+  line.setAttribute('stroke-width', widthIn * 0.1); // convert old px-width to inches
   line.setAttribute('stroke-linecap', 'round');
   parent.appendChild(line);
 }
@@ -192,8 +233,25 @@ export function renderUnits(svg, placements, onDragEnd) {
   }
 }
 
+/**
+ * Convert a CSS-pixel point to SVG user units (inches) via the SVG's CTM.
+ * Falls back to identity if getScreenCTM is unavailable (e.g. in Node tests).
+ */
+function clientToSvgPoint(svg, clientX, clientY) {
+  if (!svg || typeof svg.getScreenCTM !== 'function') return [clientX, clientY];
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return [clientX, clientY];
+  const inv = ctm.inverse();
+  const pt = svg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const svgPt = pt.matrixTransform(inv);
+  return [svgPt.x, svgPt.y];
+}
+
 export function makeUnitDraggable(group, onDragEnd) {
-  let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  let dragging = false;
+  let startSvg = [0, 0]; // mouse-down position in SVG user units
+  let ox = 0, oy = 0;   // group origin (translate) at mouse-down
   // Track whether the pointer moved enough to be considered a drag.
   // The model-circle click handler reads group.__dragged to skip toggle on drag-end.
   group.__dragged = false;
@@ -201,7 +259,8 @@ export function makeUnitDraggable(group, onDragEnd) {
   group.addEventListener('mousedown', (e) => {
     dragging = true;
     group.__dragged = false;
-    sx = e.clientX; sy = e.clientY;
+    const svg = group.ownerSVGElement;
+    startSvg = clientToSvgPoint(svg, e.clientX, e.clientY);
     const transform = group.transform.baseVal.consolidate();
     [ox, oy] = transform ? [transform.matrix.e, transform.matrix.f] : [0, 0];
     group.style.cursor = 'grabbing';
@@ -209,8 +268,10 @@ export function makeUnitDraggable(group, onDragEnd) {
   });
   window.addEventListener('mousemove', (e) => {
     if (!dragging) return;
-    const dx = e.clientX - sx, dy = e.clientY - sy;
-    if (Math.hypot(dx, dy) > 5) group.__dragged = true;
+    const svg = group.ownerSVGElement;
+    const [curX, curY] = clientToSvgPoint(svg, e.clientX, e.clientY);
+    const dx = curX - startSvg[0], dy = curY - startSvg[1];
+    if (Math.hypot(dx, dy) > 0.3) group.__dragged = true; // 0.3" threshold
     group.setAttribute('transform', `translate(${ox + dx}, ${oy + dy})`);
   });
   window.addEventListener('mouseup', (e) => {
@@ -235,17 +296,17 @@ export function renderThreatRanges(svg, placements) {
       ? p.datasheet.ranges_in
       : (p.datasheet?.max_range_in ? [p.datasheet.max_range_in] : []);
     if (ranges.length === 0) continue;
-    const [cx, cy] = [p.centerIn[0] * INCH_PX, p.centerIn[1] * INCH_PX];
+    const [cx, cy] = [p.centerIn[0], p.centerIn[1]];
     const stroke = p.role === 'attacker' ? '#ff5d6c' : '#6fff8e';
     for (const range of ranges) {
       const circle = document.createElementNS(SVG_NS, 'circle');
       circle.setAttribute('cx', cx);
       circle.setAttribute('cy', cy);
-      circle.setAttribute('r', range * INCH_PX);
+      circle.setAttribute('r', range);
       circle.setAttribute('fill', 'none');
       circle.setAttribute('stroke', stroke);
-      circle.setAttribute('stroke-width', '0.8');
-      circle.setAttribute('stroke-dasharray', '3 3');
+      circle.setAttribute('stroke-width', '0.06');
+      circle.setAttribute('stroke-dasharray', '0.3 0.3');
       circle.setAttribute('opacity', '0.35');
       layer.appendChild(circle);
     }
@@ -269,7 +330,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
   const defaultMm = datasheet?.base?.diameter_mm ?? 32;
   const perModel = datasheet?.base?.per_model ?? null;
 
-  const [cx, cy] = [centerIn[0] * INCH_PX, centerIn[1] * INCH_PX];
+  const [cx, cy] = [centerIn[0], centerIn[1]];
 
   // Flatten to per-model list. When the datasheet enumerates per-model bases
   // (e.g., Wardens of Ultramar: 2 × 40mm + 4 × 28.5mm), each submodel carries
@@ -305,7 +366,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     circle.setAttribute('r', r);
     circle.setAttribute('fill', fill);
     circle.setAttribute('stroke', color);
-    circle.setAttribute('stroke-width', isSergeant ? 2 : 1);
+    circle.setAttribute('stroke-width', isSergeant ? 0.12 : 0.06);
     circle.classList.add('model-circle');
     circle.dataset.unitSlug = unitSlug;
     circle.dataset.modelIdx = String(i);
@@ -334,7 +395,8 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
       text.setAttribute('dominant-baseline', 'central');
       text.setAttribute('font-family', "'JetBrains Mono', monospace");
       text.setAttribute('font-weight', '700');
-      const fontSize = Math.max(8, Math.min(16, r * 0.55));
+      // font-size in inches: clamp between 0.35" and 0.8" (≈ 3.5–8px at 10px/in reference)
+      const fontSize = Math.max(0.35, Math.min(0.8, r * 0.55));
       text.setAttribute('font-size', String(fontSize));
       text.setAttribute('fill', 'var(--phosphor)');
       text.setAttribute('pointer-events', 'none');

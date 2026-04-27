@@ -1,7 +1,7 @@
 // app/lib/base-geometry.js
-// Convert mm base sizes to board pixels and lay out model clusters.
+// Convert mm base sizes to SVG user units (inches) and lay out model clusters.
 
-export const INCH_PX = 10;
+export const INCH_PX = 1;
 export const MM_PER_INCH = 25.4;
 
 export function baseDiameterPx(mm) {
@@ -9,7 +9,7 @@ export function baseDiameterPx(mm) {
 }
 
 /**
- * Return N [dx, dy] offsets (in pixels) arranging `n` bases in a
+ * Return N [dx, dy] offsets (in inches) arranging `n` bases in a
  * tight hex cluster around the origin. Coherency spacing: gap of
  * 0.5" between base edges (well inside 2" coherency).
  */
