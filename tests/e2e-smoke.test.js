@@ -249,6 +249,7 @@ test('smoke: SVG icon sprite system wired', () => {
 test('smoke: render emits use elements for icon-prefixed labels', () => {
   const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
   assert.match(RENDER, /icon:skull/);
-  assert.match(RENDER, /icon:truck-monster/);
+  assert.match(RENDER, /icon:shield/);
+  assert.match(RENDER, /icon:angle-up/);
   assert.match(RENDER, /createElementNS\(SVG_NS,\s*['"]use['"]\)/);
 });
