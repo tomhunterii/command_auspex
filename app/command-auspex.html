@@ -319,8 +319,8 @@
     <div id="controls" style="display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;">
       <button id="pick-repo" class="btn">CONNECT REPO</button>
       <label class="status-msg">ENGAGEMENT <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
-      <label class="status-msg">FRIENDLY FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
-      <label class="status-msg">HOSTILE FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">DEFENDER FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">ATTACKER FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
       <button id="load-scenario" class="btn" disabled>ENGAGE</button>
       <button id="open-scenario" class="btn">RECALL SCENARIO</button>
       <button id="save-scenario" class="btn" disabled>COMMIT TO ARCHIVE</button>
@@ -354,7 +354,7 @@
         <div id="sim-body" style="display:none;">
           <div style="margin-bottom:6px; display:flex; gap:6px;">
             <div style="flex:2;">
-              <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">ATTACKER (FRIENDLY)</label>
+              <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">ATTACKER</label>
               <select id="sim-attacker" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
             </div>
             <div style="flex:1;">
@@ -365,7 +365,7 @@
           <div id="sim-weapon-detail" style="font-size:10px; color:var(--dim); border-top:1px dashed var(--phosphor-dim); padding-top:6px; margin-bottom:8px; display:none;"></div>
           <div style="margin-bottom:6px; display:flex; gap:6px;">
             <div style="flex:2;">
-              <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEFENDER (HOSTILE)</label>
+              <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEFENDER</label>
               <select id="sim-defender" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
             </div>
             <div style="flex:1;">
@@ -649,7 +649,7 @@ function updateLoadBtn() {
 [missionSel, defenderSel, attackerSel].forEach(s => s.addEventListener('change', updateLoadBtn));
 
 // Track which roster is active so the sim can filter to equipped weapons.
-// defenderSel = FRIENDLY FORCE (our side); attackerSel = HOSTILE FORCE.
+// defenderSel = DEFENDER FORCE (our side); attackerSel = ATTACKER FORCE.
 defenderSel.addEventListener('change', async () => {
   friendlyRosterSlug = defenderSel.value || null;
   await ensureRosterCached(friendlyRosterSlug);
@@ -1004,10 +1004,18 @@ function refreshSimPairLine() {
   if (simPairLine) { simPairLine.remove(); simPairLine = null; }
   if (!attackerSlug || !defenderSlug || attackerSlug === defenderSlug) return;
   // Compute centroid of a unit's model circles accounting for group translate.
-  function clusterCenter(slug) {
-    const circle = boardEl.querySelector(`circle.model-circle[data-unit-slug="${CSS.escape(slug)}"]`);
-    if (!circle) return null;
-    const g = circle.closest('g[data-unit-name], g[data-unit-slug]') ?? circle.parentNode;
+  // Queries by both slug AND deployment side so that when both rosters are the
+  // same list, we resolve to the correct physical group rather than the first
+  // DOM match. Falls back to slug-only if no side-tagged group is found.
+  //
+  // Side mapping (intentional, matches roster-population convention):
+  //   sim ATTACKER (the shooting unit)  → drawn on the DEFENDER deployment zone
+  //   sim DEFENDER (the target unit)    → drawn on the ATTACKER deployment zone
+  function clusterCenter(slug, side) {
+    const g = side
+      ? (boardEl.querySelector(`g[data-unit-slug="${CSS.escape(slug)}"][data-side="${side}"]`)
+         ?? boardEl.querySelector(`g[data-unit-slug="${CSS.escape(slug)}"]`))
+      : boardEl.querySelector(`g[data-unit-slug="${CSS.escape(slug)}"]`);
     if (!g) return null;
     const circles = g.querySelectorAll('circle.model-circle');
     if (circles.length === 0) return null;
@@ -1022,8 +1030,9 @@ function refreshSimPairLine() {
     const mat = transform ? transform.matrix : null;
     return mat ? { x: localX + mat.e, y: localY + mat.f } : { x: localX, y: localY };
   }
-  const a = clusterCenter(attackerSlug);
-  const d = clusterCenter(defenderSlug);
+  // sim attacker is drawn on the defender-deployment side; sim defender on attacker side.
+  const a = clusterCenter(attackerSlug, 'defender');
+  const d = clusterCenter(defenderSlug, 'attacker');
   if (!a || !d) return;
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const line = document.createElementNS(SVG_NS, 'line');

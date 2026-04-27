@@ -208,11 +208,11 @@ export function renderBoard(svg, mission) {
   zonesLayer.setAttribute('id', 'layer-deployment');
   (mission.deployment?.attacker?.polygons ?? []).forEach(p => {
     drawPolygon(zonesLayer, p.vertices, 'rgba(255,93,108,0.25)', '#ff5d6c');
-    drawZoneLabel(zonesLayer, p.vertices, 'HOSTILE', 'var(--hostile, #ff5d6c)');
+    drawZoneLabel(zonesLayer, p.vertices, 'ATTACKER', 'var(--hostile, #ff5d6c)');
   });
   (mission.deployment?.defender?.polygons ?? []).forEach(p => {
     drawPolygon(zonesLayer, p.vertices, 'rgba(111,255,142,0.22)', '#6fff8e');
-    drawZoneLabel(zonesLayer, p.vertices, 'FRIENDLY', 'var(--friendly, #6fff8e)');
+    drawZoneLabel(zonesLayer, p.vertices, 'DEFENDER', 'var(--friendly, #6fff8e)');
   });
   svg.appendChild(zonesLayer);
 
@@ -470,6 +470,9 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
   const rawDs = unit.datasheet ?? '';
   const unitSlug = rawDs.includes('/') ? rawDs.split('/').pop() : rawDs;
   group.dataset.unitSlug = unitSlug;
+  // Tag with deployment side so sim-pair line can resolve by slug+side
+  // when both rosters are the same list.
+  group.dataset.side = role; // 'defender' or 'attacker'
 
   const defaultMm = datasheet?.base?.diameter_mm ?? 32;
   const perModel = datasheet?.base?.per_model ?? null;

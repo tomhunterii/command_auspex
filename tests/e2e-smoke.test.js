@@ -61,8 +61,8 @@ test('smoke: liturgical UI strings applied', () => {
   assert.match(HTML, />\+ VOX-SCRIBE DEFENDER</);
   assert.match(HTML, />\+ VOX-SCRIBE ATTACKER</);
   assert.match(HTML, /ENGAGEMENT/);
-  assert.match(HTML, /FRIENDLY FORCE/);
-  assert.match(HTML, /HOSTILE FORCE/);
+  assert.match(HTML, /DEFENDER FORCE/);
+  assert.match(HTML, /ATTACKER FORCE/);
   assert.match(HTML, /MACHINE-SPIRIT OBJECTS/);
   assert.match(HTML, /COGITATOR LINK/);
 });
@@ -190,9 +190,24 @@ test('smoke: press-hold threat rings + zone labels wired', () => {
 
 test('smoke: deployment zone labels rendered', () => {
   const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
-  assert.match(RENDER, /HOSTILE/);
-  assert.match(RENDER, /FRIENDLY/);
+  assert.match(RENDER, /ATTACKER/);
+  assert.match(RENDER, /DEFENDER/);
   assert.match(RENDER, /polygonCentroid/);
+});
+
+test('smoke: deployment-side language uses ATTACKER/DEFENDER', () => {
+  assert.match(HTML, /DEFENDER FORCE/);
+  assert.match(HTML, /ATTACKER FORCE/);
+  assert.doesNotMatch(HTML, /FRIENDLY FORCE|HOSTILE FORCE/);
+});
+
+test('smoke: render emits data-side on unit groups', () => {
+  const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
+  assert.match(RENDER, /dataset\.side|setAttribute\(['"]data-side['"]/);
+});
+
+test('smoke: refreshSimPairLine queries by side', () => {
+  assert.match(HTML, /clusterCenter\([^)]*['"](attacker|defender)['"]/);
 });
 
 test('smoke: sim model-count inputs are read-only', () => {
