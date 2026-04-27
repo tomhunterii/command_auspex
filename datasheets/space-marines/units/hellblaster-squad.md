@@ -33,7 +33,7 @@ led_by:
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Grenades, Imperium, Tacticus, Hellblaster Squad
 
 ---

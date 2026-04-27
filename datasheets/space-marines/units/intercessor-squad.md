@@ -34,7 +34,7 @@ led_by:
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Battleline, Grenades, Imperium, Tacticus, Intercessor Squad
 
 ---
