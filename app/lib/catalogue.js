@@ -132,25 +132,37 @@ export async function getUnit(slug) {
 // Reshape a getUnit() result into the structured input shapes the sim
 // engine (app/lib/sim/combat.js) expects. `kind` filters the weapons
 // list ('ranged' | 'melee' | 'all').
-export function buildSimInputs(unit, { kind = 'ranged', model_count = 1 } = {}) {
+export function buildSimInputs(unit, opts = {}) {
   if (!unit) return null;
+  const { kind = 'ranged', model_count = 1, attacker_model_count = 1 } = opts;
   const filteredWeapons = (unit.weapons ?? []).filter(w =>
     kind === 'all' ? true : w.kind === kind
   );
-  const attacker = {
-    weapons: filteredWeapons.map(w => ({
-      name: w.name,
-      kind: w.kind,
-      range_in: w.range_in,
-      attacks: w.attacks,
-      skill: w.skill,
-      strength: w.strength,
-      ap: w.ap,
-      damage: w.damage,
-      abilities: parseKeywords(w.keywords),
-    })),
-    model_count,
-  };
+  // Each weapon's stat row represents ONE model's allocation. To simulate
+  // a squad of N models, multiply each weapon's attack count by N. We do
+  // this by wrapping the original attacks expression in `(N)*(...)`. The
+  // dice parser doesn't support multiplication; instead emit a synthetic
+  // expression that runs N copies of the same weapon (preserves dice
+  // variance).
+  // For now we keep it simple: split each weapon into N copies. The sim
+  // engine doesn't care if there are repeated weapon entries.
+  const weapons = [];
+  for (const w of filteredWeapons) {
+    for (let i = 0; i < attacker_model_count; i++) {
+      weapons.push({
+        name: w.name,
+        kind: w.kind,
+        range_in: w.range_in,
+        attacks: w.attacks,
+        skill: w.skill,
+        strength: w.strength,
+        ap: w.ap,
+        damage: w.damage,
+        abilities: parseKeywords(w.keywords),
+      });
+    }
+  }
+  const attacker = { weapons, model_count: attacker_model_count };
   const defenderKeywords = (unit.keywords ?? []).map(k => String(k.keyword).toUpperCase());
   const defender = {
     toughness: unit.profile?.T ?? 4,

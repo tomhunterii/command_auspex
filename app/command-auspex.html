@@ -335,27 +335,34 @@
     <div class="sidebar" id="sidebar">
       <div class="sim-panel" style="border:1px solid var(--phosphor-dim); padding:12px; margin-bottom:16px;">
         <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">⚔ COMBAT AUSPEX</div>
-        <div style="margin-bottom:6px;">
-          <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">ATTACKER</label>
-          <select id="sim-attacker" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
-        </div>
-        <div style="margin-bottom:6px;">
-          <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEFENDER</label>
-          <select id="sim-defender" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
-        </div>
         <div style="margin-bottom:6px; display:flex; gap:6px;">
+          <div style="flex:2;">
+            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">ATTACKER</label>
+            <select id="sim-attacker" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+          </div>
           <div style="flex:1;">
-            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEF MODELS</label>
+            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">MODELS</label>
+            <input id="sim-attacker-models" type="number" min="1" value="1" class="select" style="margin-left:0; margin-top:3px; width:100%;"/>
+          </div>
+        </div>
+        <div id="sim-weapon-detail" style="font-size:10px; color:var(--dim); border-top:1px dashed var(--phosphor-dim); padding-top:6px; margin-bottom:8px; display:none;"></div>
+        <div style="margin-bottom:6px; display:flex; gap:6px;">
+          <div style="flex:2;">
+            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEFENDER</label>
+            <select id="sim-defender" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">MODELS</label>
             <input id="sim-models" type="number" min="1" value="5" class="select" style="margin-left:0; margin-top:3px; width:100%;"/>
           </div>
-          <div style="flex:1;">
-            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">WEAPONS</label>
-            <select id="sim-kind" class="select" style="margin-left:0; margin-top:3px; width:100%;">
-              <option value="ranged">Ranged</option>
-              <option value="melee">Melee</option>
-              <option value="all">All</option>
-            </select>
-          </div>
+        </div>
+        <div style="margin-bottom:6px;">
+          <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">WEAPONS</label>
+          <select id="sim-kind" class="select" style="margin-left:0; margin-top:3px; width:100%;">
+            <option value="ranged">Ranged</option>
+            <option value="melee">Melee</option>
+            <option value="all">All</option>
+          </select>
         </div>
         <button id="sim-run" class="btn" style="width:100%; margin-top:6px;">SIMULATE</button>
         <div id="sim-result" class="status-msg" style="margin-top:10px; min-height:60px;"></div>
@@ -419,6 +426,72 @@ async function loadCatalogueAndPopulate() {
       allUnits.map(u => `<option value="${u.slug}">${u.name}</option>`).join('');
     document.getElementById('sim-attacker').innerHTML = unitOptHtml;
     document.getElementById('sim-defender').innerHTML = unitOptHtml;
+
+    async function refreshWeaponDetail() {
+      const detailEl = document.getElementById('sim-weapon-detail');
+      const slug = document.getElementById('sim-attacker').value;
+      const kind = document.getElementById('sim-kind').value;
+      if (!slug) {
+        detailEl.style.display = 'none';
+        detailEl.innerHTML = '';
+        return;
+      }
+      try {
+        const unit = await getUnit(slug);
+        if (!unit) {
+          detailEl.style.display = 'block';
+          detailEl.innerHTML = '<span style="color:var(--hostile);">unit not in catalogue</span>';
+          return;
+        }
+        const ranged = unit.weapons.filter(w => w.kind === 'ranged');
+        const melee = unit.weapons.filter(w => w.kind === 'melee');
+        const groups = [];
+        if (kind === 'ranged' || kind === 'all') groups.push(['RANGED', ranged]);
+        if (kind === 'melee'  || kind === 'all') groups.push(['MELEE',  melee]);
+
+        const fmtRow = (w) => {
+          const range = w.kind === 'melee' ? 'Melee' : `${w.range_in}"`;
+          const ap = w.ap >= 0 ? '0' : String(w.ap);
+          const kw = (w.keywords && w.keywords.trim() && w.keywords !== '—')
+            ? ` <span style="color:var(--phosphor);">${w.keywords}</span>` : '';
+          return `<div style="display:grid; grid-template-columns: 1fr 50px 30px 30px 28px 28px 28px; gap:4px; padding:1px 0;">
+            <div style="color:var(--paper); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${w.name}</div>
+            <div>${range}</div>
+            <div>${w.attacks}</div>
+            <div>${w.skill}</div>
+            <div>${w.strength}</div>
+            <div>${ap}</div>
+            <div>${w.damage}</div>
+          </div>${kw ? `<div style="padding-left:4px; padding-bottom:2px;">${kw}</div>` : ''}`;
+        };
+
+        const headerRow = `<div style="display:grid; grid-template-columns: 1fr 50px 30px 30px 28px 28px 28px; gap:4px; color:var(--phosphor); font-weight:700; padding-bottom:2px; border-bottom:1px solid var(--phosphor-dim); margin-bottom:2px;">
+          <div>WEAPON</div><div>RANGE</div><div>A</div><div>SKILL</div><div>S</div><div>AP</div><div>D</div>
+        </div>`;
+
+        const sections = groups
+          .filter(([_, ws]) => ws.length > 0)
+          .map(([title, ws]) => `
+            <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); margin-top:6px; margin-bottom:2px;">${title}</div>
+            ${headerRow}
+            ${ws.map(fmtRow).join('')}
+          `).join('');
+
+        if (sections === '') {
+          detailEl.innerHTML = `<span style="color:var(--dim);">no ${kind} weapons</span>`;
+        } else {
+          detailEl.innerHTML = sections;
+        }
+        detailEl.style.display = 'block';
+      } catch (err) {
+        console.error('refreshWeaponDetail failed:', err);
+        detailEl.style.display = 'block';
+        detailEl.innerHTML = `<span style="color:var(--hostile);">${err.message ?? err}</span>`;
+      }
+    }
+
+    document.getElementById('sim-attacker').addEventListener('change', refreshWeaponDetail);
+    document.getElementById('sim-kind').addEventListener('change', refreshWeaponDetail);
   } catch (err) {
     console.error('catalogue load failed:', err);
     const msg = (err && err.message) || (typeof err === 'string' ? err : JSON.stringify(err));
@@ -801,7 +874,8 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       resultEl.textContent = 'UNIT NOT FOUND IN CATALOGUE';
       return;
     }
-    const { attacker } = buildSimInputs(attackerUnit, { kind, model_count: 1 });
+    const attackerModels = Math.max(1, parseInt(document.getElementById('sim-attacker-models').value, 10) || 1);
+    const { attacker } = buildSimInputs(attackerUnit, { kind, attacker_model_count: attackerModels });
     const { defender } = buildSimInputs(defenderUnit, { kind: 'all', model_count: modelCount });
 
     if (attacker.weapons.length === 0) {
@@ -816,14 +890,19 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     const pKill = (result.p_target_destroyed * 100).toFixed(1);
     const wounds = result.expected_wounds_dealt.toFixed(2);
     const modelsLost = result.expected_models_lost.toFixed(2);
+    const unmodelled = result.unmodelled_abilities ?? [];
+    const warnLine = unmodelled.length > 0
+      ? `<div style="color:var(--amber); margin-top:6px; font-size:10px; letter-spacing:1px;">⚠ APPROX · NOT YET MODELED: ${unmodelled.join(', ')}</div>`
+      : '';
     resultEl.innerHTML = `
       <div style="font-family:'Bank Gothic',sans-serif; font-size:11px; letter-spacing:2px; color:var(--phosphor); margin-bottom:4px;">
-        ${attackerUnit.name.toUpperCase()} → ${defenderUnit.name.toUpperCase()} <span style="color:var(--dim);">(${kind.toUpperCase()}, ${modelCount} DEF)</span>
+        ${attackerUnit.name.toUpperCase()} (×${attackerModels}) → ${defenderUnit.name.toUpperCase()} <span style="color:var(--dim);">(${kind.toUpperCase()}, ${modelCount} DEF)</span>
       </div>
       <div>P(kill all): <span style="color:var(--amber);">${pKill}%</span></div>
       <div>E[wounds]:   <span style="color:var(--amber);">${wounds}</span></div>
       <div>E[models lost]: <span style="color:var(--amber);">${modelsLost} / ${modelCount}</span></div>
       <div style="color:var(--dim); margin-top:4px;">${result.trials} trials · ${ms}ms</div>
+      ${warnLine}
     `;
   } catch (err) {
     console.error('SIMULATE failed:', err);
