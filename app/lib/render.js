@@ -8,7 +8,7 @@ import { baseDiameterPx, clusterOffsets } from './base-geometry.js';
 // Per the 10th-edition unit role classification.
 const SM_ROLE_CLOSE_SUPPORT_SLUGS = /^(assault[\-_]intercessor|inceptor|reiver|vanguard|bladeguard|jump[\-_]pack)/i;
 const SM_ROLE_FIRE_SUPPORT_SLUGS  = /^(hellblaster|eradicator|devastator|heavy[\-_]intercessor|aggressor)/i;
-const SM_ROLE_VETERAN_SLUGS       = /^(sternguard|vanguard[\-_]veteran|bladeguard|company[\-_]heroes|victrix[\-_]honour[\-_]guard)/i;
+const SM_ROLE_VETERAN_SLUGS       = /^(sternguard|vanguard[\-_]veteran|bladeguard|company[\-_]heroes|victrix[\-_]honour[\-_]guard|terminator|assault[\-_]terminator)/i;
 
 function isSpaceMarine(keywords) {
   for (const k of keywords) {
@@ -33,8 +33,10 @@ function spaceMarineRoleSymbol(unit) {
   // Tested before veteran so a leader who is also tagged as a veteran unit
   // still reads as leader.
   if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:skull';
-  // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans).
-  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:plus';
+  // Veteran units (Sternguard, Bladeguard, Vanguard veterans, Terminators).
+  // Uses the unicode templar cross (✠) — Captain prefers the typographic glyph
+  // over the FA cross/plus SVGs for the veteran caste.
+  if (hasKeyword(kws, 'VETERAN', 'TERMINATOR') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '✠';
   if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:angle-up';
   if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:xmark';
   if (hasKeyword(kws, 'BATTLELINE')) return 'icon:chevron-up';

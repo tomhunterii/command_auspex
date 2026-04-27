@@ -20,10 +20,10 @@ const ICONS = [
   'chevron-up',  // Battleline
   'xmark',       // Close Support
   'angle-up',    // Fire Support
-  'plus',        // Veteran
   'skull',       // Leader
   'shield',      // Vehicle / Walker
   'star',        // Sergeant
+  // Veterans use unicode ✠ rendered as <text> — no SVG icon needed.
 ];
 
 mkdirSync(OUT, { recursive: true });
