@@ -32,7 +32,7 @@ function spaceMarineRoleSymbol(unit) {
   // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as
   // fleur-de-lis (heraldic command marker). Tested before veteran so a
   // leader who is also tagged as a veteran unit still reads as leader.
-  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '⚜';
+  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '★';
   // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans)
   // — venerable ceremonial cross.
   if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '✠';
@@ -110,7 +110,7 @@ export function modelLabel(submodel, unitMeta) {
   // unitMeta: { totalUnitModels, unit? }
   // Sergeant detection by submodel name first — overrides role symbol.
   const subName = (submodel.submodel ?? '').toLowerCase();
-  if (subName.includes('sergeant') || subName.includes('sgt')) return '★';
+  if (subName.includes('sergeant') || subName.includes('sgt')) return '◆';
   // Space Marine role symbol — applies to single-model units (vehicles,
   // characters) too, so a lone Ballistus Dreadnought reads as ▣ and a
   // standalone Captain reads as ✠.
@@ -593,7 +593,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
       // bigger glyphs. Role symbols fill the base (×1.1); letter labels stay
       // tighter (×0.55) so multi-character codes still fit. Lower floor only
       // prevents tiny bases from rendering invisible glyphs.
-      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠▣★⚜]/.test(label);
+      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠▣★⚜◆]/.test(label);
       const fontSize = isRoleSymbol
         ? Math.max(0.3, r * 1.1)
         : Math.max(0.25, r * 0.55);
