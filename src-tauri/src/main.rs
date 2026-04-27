@@ -1,15 +1,44 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::fs;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
-    Emitter,
+    Emitter, Manager,
 };
+
+const CATALOGUE_FILENAME: &str = "catalogue.db";
+
+// Copy the bundled catalogue.db from the resource directory into the app data
+// directory on every launch so plugin-sql (which always resolves paths relative
+// to BaseDirectory::App) can find it. The bundled DB is read-only canonical
+// data; overwriting on every launch ensures app upgrades pick up the latest
+// schema and content. User-mutable state lives in a separate user.db (future).
+fn install_catalogue(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    // Bundle.resources entry is "resources/catalogue.db" (relative to src-tauri/)
+    // so the bundled file lives at <resource_dir>/resources/catalogue.db.
+    let resource_db = app
+        .path()
+        .resource_dir()?
+        .join("resources")
+        .join(CATALOGUE_FILENAME);
+    let app_data_dir = app.path().app_data_dir()?;
+    fs::create_dir_all(&app_data_dir)?;
+    let dest_db = app_data_dir.join(CATALOGUE_FILENAME);
+    if !resource_db.exists() {
+        return Err(format!("bundled catalogue.db not found at {}", resource_db.display()).into());
+    }
+    fs::copy(&resource_db, &dest_db)?;
+    Ok(())
+}
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(|app| {
+            install_catalogue(&app.handle())?;
+
             let handle = app.handle();
 
             let connect = MenuItem::with_id(handle, "connect_repo", "Connect Repo", true, None::<&str>)?;

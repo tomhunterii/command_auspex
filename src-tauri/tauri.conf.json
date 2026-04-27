@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.ultramarines.command-auspex",
   "build": {
-    "frontendDist": "../app"
+    "frontendDist": "../app",
+    "beforeBuildCommand": "npm run build:catalogue"
   },
   "app": {
     "windows": [
@@ -35,11 +36,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../app/**/*",
-      "../datasheets/**/*.md",
-      "../ultramarines/**/*.md",
-      "../500 Worlds Campaign/**/*.md",
-      "../fonts/**/*"
+      "resources/catalogue.db"
     ],
     "category": "Utility",
     "shortDescription": "Command Auspex — list-building battle simulator",

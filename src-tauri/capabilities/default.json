@@ -1,51 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities: filesystem (resource + appdata) and dialogs.",
+  "description": "Default capabilities: SQL catalogue (read-only bundled) + user.db, dialogs.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:default",
-    "fs:default",
-    {
-      "identifier": "fs:allow-read-text-file",
-      "allow": [
-        { "path": "$RESOURCE/**" },
-        { "path": "$APPDATA" },
-        { "path": "$APPDATA/**" }
-      ]
-    },
-    {
-      "identifier": "fs:allow-write-text-file",
-      "allow": [
-        { "path": "$APPDATA" },
-        { "path": "$APPDATA/**" }
-      ]
-    },
-    {
-      "identifier": "fs:allow-read-dir",
-      "allow": [
-        { "path": "$RESOURCE" },
-        { "path": "$RESOURCE/**" },
-        { "path": "$APPDATA" },
-        { "path": "$APPDATA/**" }
-      ]
-    },
-    {
-      "identifier": "fs:allow-mkdir",
-      "allow": [
-        { "path": "$APPDATA" },
-        { "path": "$APPDATA/**" }
-      ]
-    },
-    {
-      "identifier": "fs:allow-exists",
-      "allow": [
-        { "path": "$RESOURCE/**" },
-        { "path": "$APPDATA" },
-        { "path": "$APPDATA/**" }
-      ]
-    },
+    "sql:default",
+    "sql:allow-load",
+    "sql:allow-select",
+    "sql:allow-execute",
+    "sql:allow-close",
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save"
