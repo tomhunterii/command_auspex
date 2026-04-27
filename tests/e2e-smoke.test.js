@@ -121,10 +121,16 @@ test('smoke: catalogue.js wired and CONNECT REPO loads via openCatalogue', () =>
 });
 
 test('smoke: combat sim panel + controls present', () => {
-  for (const id of ['sim-attacker', 'sim-attacker-models', 'sim-defender', 'sim-models', 'sim-kind', 'sim-run', 'sim-result', 'sim-weapon-detail']) {
+  for (const id of ['sim-panel', 'sim-gate', 'sim-body', 'sim-attacker', 'sim-attacker-models', 'sim-defender', 'sim-models', 'sim-kind', 'sim-run', 'sim-result', 'sim-weapon-detail']) {
     assert.match(HTML, new RegExp(`id="${id}"`), `missing combat-sim id="${id}"`);
   }
   assert.match(HTML, /COMBAT AUSPEX/);
+  assert.match(HTML, /SELECT BOTH FORCES TO ENGAGE/);
+});
+
+test('smoke: combat sim gates on both rosters being selected', () => {
+  assert.match(HTML, /async function refreshSimGate/);
+  assert.match(HTML, /populateSimDropdownFromRoster/);
 });
 
 test('smoke: weapon detail panel refreshes on attacker/kind change', () => {
