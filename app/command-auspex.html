@@ -380,7 +380,9 @@
           <div id="sim-result" class="status-msg" style="margin-top:10px; min-height:60px;"></div>
         </div>
       </div>
-      <div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div>
+      <div id="detail-panel">
+        <div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div>
+      </div>
     </div>
   </div>
 </div>
@@ -1082,7 +1084,9 @@ function renderDetailPanel(unit, ds) {
       <strong>${m.count}× ${escapeHtml(m.submodel)}</strong>
       <ul style="margin-left:18px;font-size:10px;">${m.wargear.map(w => `<li>${w.count}× ${escapeHtml(w.item)}</li>`).join('')}</ul>
     </div>`).join('');
-  sidebar.innerHTML = `
+  const detailEl = document.getElementById('detail-panel');
+  if (!detailEl) return;
+  detailEl.innerHTML = `
     <div class="title" style="font-size:13px;">${escapeHtml(unit.name)}</div>
     <div class="status-msg">${unit.points} PTS · ${unit.total_models} MODEL${unit.total_models > 1 ? 'S' : ''}${unit.warlord ? ' · WARLORD' : ''}${unit.enhancement ? ` · ENHANCEMENT: ${escapeHtml(unit.enhancement)}` : ''}</div>
     <div class="status-msg" style="color:var(--paper);">${profile}</div>
