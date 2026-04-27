@@ -366,12 +366,12 @@ let currentScenarioName = null;
 let autoSaveTimer = null;
 
 
-document.getElementById('pick-repo').addEventListener('click', async () => {
+async function loadCatalogueAndPopulate() {
+  if (!isTauri()) {
+    statusEl.textContent = 'COGITATOR LINK SEVERED · DESKTOP BUILD REQUIRED';
+    return;
+  }
   try {
-    if (!isTauri()) {
-      statusEl.textContent = 'COGITATOR LINK SEVERED · DESKTOP BUILD REQUIRED';
-      return;
-    }
     catalogue = await openCatalogue();
     const missions = await listMissions();
     const rosters = await listRosters();
@@ -382,14 +382,19 @@ document.getElementById('pick-repo').addEventListener('click', async () => {
     attackerSel.innerHTML = optHtml(rosters);
     const meta = catalogue.meta;
     const tail = meta.enriched_count ? ` · ${meta.enriched_count}/${meta.unit_count} ENRICHED` : '';
-    statusEl.textContent = `COGITATOR LINK ESTABLISHED · CATALOGUE v${meta.catalogue_version || '1'} · ${meta.unit_count} UNITS · ${rosters.length} ROSTER${rosters.length === 1 ? '' : 'S'}${tail}`;
+    statusEl.textContent = `AUSPEX ONLINE · CATALOGUE v${meta.catalogue_version || '1'} · ${meta.unit_count} UNITS · ${rosters.length} ROSTER${rosters.length === 1 ? '' : 'S'}${tail}`;
     window.__catalogue = () => catalogue;
   } catch (err) {
-    console.error('CONNECT REPO failed:', err);
+    console.error('catalogue load failed:', err);
     const msg = (err && err.message) || (typeof err === 'string' ? err : JSON.stringify(err));
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${msg}`;
   }
-});
+}
+
+// Auto-load at boot — no button click needed. The pick-repo button is
+// retained as a manual refresh / reconnect path.
+document.getElementById('pick-repo').addEventListener('click', loadCatalogueAndPopulate);
+window.addEventListener('DOMContentLoaded', () => { loadCatalogueAndPopulate(); });
 
 function updateLoadBtn() {
   loadBtn.disabled = !(missionSel.value && defenderSel.value && attackerSel.value);
