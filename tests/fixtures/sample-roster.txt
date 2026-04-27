@@ -1,0 +1,146 @@
+Purge and Burn (2000 Points)
+
+Space Marines
+Ultramarines
+Orbital Assault Force
+Strike Force (2,000 Points)
+
+CHARACTERS
+
+Apothecary Biologis (85 Points)
+  • 1x Absolvor bolt pistol
+  • 1x Close combat weapon
+  • Enhancements: Laurels of Thunder
+
+Captain Titus (90 Points)
+  • Warlord
+  • 1x Bolt Pistol
+  • 1x Master-crafted bolter
+  • 1x Master-crafted chainsword
+
+Captain in Terminator Armour (95 Points)
+  • 1x Relic weapon
+  • 1x Storm bolter
+
+Judiciar (70 Points)
+  • 1x Absolvor bolt pistol
+  • 1x Executioner relic blade
+
+Lieutenant (55 Points)
+  • 1x Heavy bolt pistol
+  • 1x Master-crafted bolter
+  • 1x Power fist
+
+DEDICATED TRANSPORTS
+
+Impulsor (80 Points)
+  • 1x Armoured hull
+  • 1x Ironhail heavy stubber
+  • 1x Shield Dome
+  • 2x Storm bolter
+
+OTHER DATASHEETS
+
+Aggressor Squad (190 Points)
+  • 1x Aggressor Sergeant
+     ◦ 1x Auto boltstorm gauntlets
+     ◦ 1x Fragstorm grenade launcher
+     ◦ 1x Twin power fists
+  • 5x Aggressor
+     ◦ 5x Auto boltstorm gauntlets
+     ◦ 5x Fragstorm grenade launcher
+     ◦ 5x Twin power fists
+
+Ballistus Dreadnought (150 Points)
+  • 1x Armoured feet
+  • 1x Ballistus lascannon
+  • 1x Ballistus missile launcher
+  • 1x Twin storm bolter
+
+Bladeguard Veteran Squad (170 Points)
+  • 1x Bladeguard Veteran Sergeant
+     ◦ 1x Master-crafted power weapon
+     ◦ 1x Plasma pistol
+  • 5x Bladeguard Veteran
+     ◦ 5x Heavy bolt pistol
+     ◦ 5x Master-crafted power weapon
+
+Hellblaster Squad (110 Points)
+  • 1x Hellblaster Sergeant
+     ◦ 1x Bolt pistol
+     ◦ 1x Close combat weapon
+     ◦ 1x Plasma incinerator
+  • 4x Hellblaster
+     ◦ 4x Bolt pistol
+     ◦ 4x Close combat weapon
+     ◦ 4x Plasma incinerator
+
+Inceptor Squad (120 Points)
+  • 1x Inceptor Sergeant
+     ◦ 1x Close combat weapon
+     ◦ 1x Plasma exterminators
+  • 2x Inceptor
+     ◦ 2x Close combat weapon
+     ◦ 2x Plasma exterminators
+
+Reiver Squad (80 Points)
+  • 1x Reiver Sergeant
+     ◦ 1x Combat knife
+     ◦ 1x Special issue bolt pistol
+  • 4x Reiver
+     ◦ 4x Combat knife
+     ◦ 4x Special issue bolt pistol
+
+Repulsor Executioner (230 Points)
+  • 1x Armoured hull
+  • 1x Heavy laser destroyer
+  • 1x Heavy onslaught gatling cannon
+  • 1x Icarus rocket pod
+  • 1x Ironhail heavy stubber
+  • 1x Repulsor Executioner defensive array
+  • 1x Twin Icarus ironhail heavy stubber
+  • 1x Twin heavy bolter
+
+Sternguard Veteran Squad (200 Points)
+  • 1x Sternguard Veteran Sergeant
+     ◦ 1x Close combat weapon
+     ◦ 1x Power fist
+     ◦ 1x Sternguard bolt pistol
+     ◦ 1x Sternguard bolt rifle
+  • 9x Sternguard Veteran
+     ◦ 9x Close combat weapon
+     ◦ 9x Sternguard bolt pistol
+     ◦ 7x Sternguard bolt rifle
+     ◦ 2x Sternguard heavy bolter
+
+Terminator Squad (170 Points)
+  • 1x Terminator Sergeant
+     ◦ 1x Power weapon
+     ◦ 1x Storm bolter
+  • 4x Terminator
+     ◦ 4x Power fist
+     ◦ 4x Storm bolter
+
+Wardens of Ultramar (105 Points)
+  • 1x Ancient Gadriel
+     ◦ 1x Bolt rifle
+     ◦ 1x Close combat weapon
+  • 1x Veteran Sergeant Metaurus
+     ◦ 1x Heavy bolt pistol
+     ◦ 1x Master-crafted power weapon
+     ◦ 1x Storm Shield
+  • 1x Gaius Silva
+     ◦ 1x Archeotech laspistol
+     ◦ 1x Power weapon
+     ◦ 1x Refractor Field
+  • 1x Aemelia Minervas
+     ◦ 1x Archeotech laspistol
+     ◦ 1x Power weapon
+  • 1x Dainal Komelius
+     ◦ 1x Astropathic Blast
+     ◦ 1x Force stave
+  • 1x Lucia Vestha
+     ◦ 1x Archeotech laspistol
+     ◦ 1x Close combat weapon
+
+Exported with App Version: v1.51.1 (1), Data Version: v767

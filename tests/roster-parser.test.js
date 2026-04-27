@@ -6,7 +6,7 @@ import path from 'node:path';
 import { parseRoster, slugify, resolveSlug } from '../app/lib/roster-parser.js';
 
 const SAMPLE = readFileSync(
-  new URL('../ultramarines/rosters/norallus-purge-and-burn.txt', import.meta.url),
+  new URL('./fixtures/sample-roster.txt', import.meta.url),
   'utf8'
 );
 
