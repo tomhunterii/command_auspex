@@ -400,6 +400,55 @@ let currentScenarioPath = null;
 let currentScenarioName = null;
 let autoSaveTimer = null;
 
+// Cached parsed rosters for sim filtering. Populated by friendly/hostile
+// dropdown change events. Map<slug, {roster, unitsBySlug}|null>.
+const rosterCache = new Map();
+let friendlyRosterSlug = null;
+let hostileRosterSlug = null;
+
+
+async function ensureRosterCached(rosterSlug) {
+  if (!rosterSlug) return null;
+  if (rosterCache.has(rosterSlug)) return rosterCache.get(rosterSlug);
+  let rosterRecord;
+  try { rosterRecord = await getRoster(rosterSlug); } catch { rosterRecord = null; }
+  if (!rosterRecord) {
+    rosterCache.set(rosterSlug, null);
+    return null;
+  }
+  // Parse the frontmatter to get units[].
+  let fm;
+  try {
+    fm = await parseFrontmatter(rosterRecord.body_md);
+  } catch { fm = null; }
+  // Build a datasheetSlug → { name, equippedWeapons } map for fast lookup.
+  // Roster shape: units[].models[].wargear[].item (confirmed from Step A probe).
+  const unitsBySlug = new Map();
+  for (const u of fm?.units ?? []) {
+    // The datasheet field is "space-marines/some-slug" — take the last segment.
+    let slug = u.datasheet ? String(u.datasheet).split('/').pop().toLowerCase() : null;
+    if (!slug && u.name) {
+      try {
+        const all = await listUnits();
+        const candidates = all.map(c => ({ slug: c.slug, faction: c.faction_slug }));
+        slug = resolveSlug(u.name, candidates);
+        if (slug) slug = slug.split('/').pop();
+      } catch { /* best effort */ }
+    }
+    if (!slug) continue;
+    // Aggregate all wargear item names across the unit's models, lowercased.
+    const equipped = new Set();
+    for (const m of u.models ?? []) {
+      for (const w of m.wargear ?? []) {
+        if (w.item) equipped.add(String(w.item).toLowerCase().trim());
+      }
+    }
+    unitsBySlug.set(slug, { name: u.name, equippedWeapons: equipped });
+  }
+  const cached = { roster: rosterRecord, unitsBySlug };
+  rosterCache.set(rosterSlug, cached);
+  return cached;
+}
 
 async function loadCatalogueAndPopulate() {
   if (!isTauri()) {
@@ -443,8 +492,25 @@ async function loadCatalogueAndPopulate() {
           detailEl.innerHTML = '<span style="color:var(--hostile);">unit not in catalogue</span>';
           return;
         }
-        const ranged = unit.weapons.filter(w => w.kind === 'ranged');
-        const melee = unit.weapons.filter(w => w.kind === 'melee');
+
+        // Roster-aware filter: restrict to equipped weapons when applicable.
+        const attackerInRoster = friendlyRosterSlug
+          ? (await ensureRosterCached(friendlyRosterSlug))?.unitsBySlug?.get(slug)
+          : null;
+        const equipped = attackerInRoster?.equippedWeapons;
+        const displayUnit = equipped && equipped.size > 0
+          ? { ...unit, weapons: unit.weapons.filter(w =>
+              equipped.has(String(w.name).toLowerCase().trim()) ||
+              [...equipped].some(e => String(w.name).toLowerCase().includes(e) || e.includes(String(w.name).toLowerCase()))
+            ) }
+          : unit;
+
+        const filterBadge = equipped && equipped.size > 0
+          ? `<div style="color:var(--amber); font-size:9px; letter-spacing:1.5px; margin-bottom:4px;">&#9881; FROM ROSTER &middot; ${equipped.size} EQUIPPED</div>`
+          : '';
+
+        const ranged = displayUnit.weapons.filter(w => w.kind === 'ranged');
+        const melee = displayUnit.weapons.filter(w => w.kind === 'melee');
         const groups = [];
         if (kind === 'ranged' || kind === 'all') groups.push(['RANGED', ranged]);
         if (kind === 'melee'  || kind === 'all') groups.push(['MELEE',  melee]);
@@ -478,9 +544,9 @@ async function loadCatalogueAndPopulate() {
           `).join('');
 
         if (sections === '') {
-          detailEl.innerHTML = `<span style="color:var(--dim);">no ${kind} weapons</span>`;
+          detailEl.innerHTML = filterBadge + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
         } else {
-          detailEl.innerHTML = sections;
+          detailEl.innerHTML = filterBadge + sections;
         }
         detailEl.style.display = 'block';
       } catch (err) {
@@ -508,6 +574,23 @@ function updateLoadBtn() {
   loadBtn.disabled = !(missionSel.value && defenderSel.value && attackerSel.value);
 }
 [missionSel, defenderSel, attackerSel].forEach(s => s.addEventListener('change', updateLoadBtn));
+
+// Track which roster is active so the sim can filter to equipped weapons.
+// defenderSel = FRIENDLY FORCE (our side); attackerSel = HOSTILE FORCE.
+defenderSel.addEventListener('change', async () => {
+  friendlyRosterSlug = defenderSel.value || null;
+  await ensureRosterCached(friendlyRosterSlug);
+  // Refresh weapon detail panel in case the active sim attacker is now
+  // restricted to roster-equipped weapons.
+  const simAttacker = document.getElementById('sim-attacker');
+  if (simAttacker && simAttacker.value) {
+    simAttacker.dispatchEvent(new Event('change'));
+  }
+});
+attackerSel.addEventListener('change', async () => {
+  hostileRosterSlug = attackerSel.value || null;
+  await ensureRosterCached(hostileRosterSlug);
+});
 
 async function loadDatasheet(slug) {
   // slug is `<faction>/<unit-slug>` from roster references; we only need the unit-slug part.
@@ -874,9 +957,33 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       resultEl.textContent = 'UNIT NOT FOUND IN CATALOGUE';
       return;
     }
+
+    // Roster-aware weapon filter: restrict to equipped weapons when the sim
+    // unit appears in the loaded friendly / hostile roster.
+    const friendlyCached = await ensureRosterCached(friendlyRosterSlug);
+    const hostileCached  = await ensureRosterCached(hostileRosterSlug);
+    const attackerInRoster = friendlyCached?.unitsBySlug?.get(attackerSlug);
+    const defenderInRoster = hostileCached?.unitsBySlug?.get(defenderSlug);
+
+    const filterEquipped = (unit, equippedSet) => {
+      if (!equippedSet || equippedSet.size === 0) return unit;
+      const filtered = unit.weapons.filter(w =>
+        equippedSet.has(String(w.name).toLowerCase().trim()) ||
+        [...equippedSet].some(e => String(w.name).toLowerCase().includes(e) || e.includes(String(w.name).toLowerCase()))
+      );
+      return { ...unit, weapons: filtered };
+    };
+
+    const filteredAttacker = attackerInRoster
+      ? filterEquipped(attackerUnit, attackerInRoster.equippedWeapons)
+      : attackerUnit;
+    const filteredDefender = defenderInRoster
+      ? filterEquipped(defenderUnit, defenderInRoster.equippedWeapons)
+      : defenderUnit;
+
     const attackerModels = Math.max(1, parseInt(document.getElementById('sim-attacker-models').value, 10) || 1);
-    const { attacker } = buildSimInputs(attackerUnit, { kind, attacker_model_count: attackerModels });
-    const { defender } = buildSimInputs(defenderUnit, { kind: 'all', model_count: modelCount });
+    const { attacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels });
+    const { defender } = buildSimInputs(filteredDefender, { kind: 'all', model_count: modelCount });
 
     if (attacker.weapons.length === 0) {
       resultEl.textContent = `${attackerUnit.name} HAS NO ${kind.toUpperCase()} WEAPONS`;
@@ -896,7 +1003,7 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       : '';
     resultEl.innerHTML = `
       <div style="font-family:'Bank Gothic',sans-serif; font-size:11px; letter-spacing:2px; color:var(--phosphor); margin-bottom:4px;">
-        ${attackerUnit.name.toUpperCase()} (×${attackerModels}) → ${defenderUnit.name.toUpperCase()} <span style="color:var(--dim);">(${kind.toUpperCase()}, ${modelCount} DEF)</span>
+        ${attackerUnit.name.toUpperCase()} (×${attackerModels})${attackerInRoster ? ' [ROSTER]' : ''} → ${defenderUnit.name.toUpperCase()}${defenderInRoster ? ' [ROSTER]' : ''} <span style="color:var(--dim);">(${kind.toUpperCase()}, ${modelCount} DEF)</span>
       </div>
       <div>P(kill all): <span style="color:var(--amber);">${pKill}%</span></div>
       <div>E[wounds]:   <span style="color:var(--amber);">${wounds}</span></div>
