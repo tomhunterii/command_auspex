@@ -333,6 +333,33 @@
       </div>
     </div>
     <div class="sidebar" id="sidebar">
+      <div class="sim-panel" style="border:1px solid var(--phosphor-dim); padding:12px; margin-bottom:16px;">
+        <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">⚔ COMBAT AUSPEX</div>
+        <div style="margin-bottom:6px;">
+          <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">ATTACKER</label>
+          <select id="sim-attacker" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+        </div>
+        <div style="margin-bottom:6px;">
+          <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEFENDER</label>
+          <select id="sim-defender" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+        </div>
+        <div style="margin-bottom:6px; display:flex; gap:6px;">
+          <div style="flex:1;">
+            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEF MODELS</label>
+            <input id="sim-models" type="number" min="1" value="5" class="select" style="margin-left:0; margin-top:3px; width:100%;"/>
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">WEAPONS</label>
+            <select id="sim-kind" class="select" style="margin-left:0; margin-top:3px; width:100%;">
+              <option value="ranged">Ranged</option>
+              <option value="melee">Melee</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+        </div>
+        <button id="sim-run" class="btn" style="width:100%; margin-top:6px;">SIMULATE</button>
+        <div id="sim-result" class="status-msg" style="margin-top:10px; min-height:60px;"></div>
+      </div>
       <div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div>
     </div>
   </div>
@@ -342,7 +369,8 @@
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
 import { parseRoster, resolveSlug } from './lib/roster-parser.js';
 import { isTauri } from './lib/runtime.js';
-import { openCatalogue, listMissions, getMission, listRosters, getRoster, getUnit, catalogueMeta } from './lib/catalogue.js';
+import { openCatalogue, listMissions, getMission, listRosters, getRoster, getUnit, listUnits, catalogueMeta, buildSimInputs } from './lib/catalogue.js';
+import { simulate } from './lib/sim/combat.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
 import { renderBoard, renderUnits, renderThreatRanges } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
@@ -384,6 +412,13 @@ async function loadCatalogueAndPopulate() {
     const tail = meta.enriched_count ? ` · ${meta.enriched_count}/${meta.unit_count} ENRICHED` : '';
     statusEl.textContent = `AUSPEX ONLINE · CATALOGUE v${meta.catalogue_version || '1'} · ${meta.unit_count} UNITS · ${rosters.length} ROSTER${rosters.length === 1 ? '' : 'S'}${tail}`;
     window.__catalogue = () => catalogue;
+
+    // Populate the combat sim dropdowns with every unit in the catalogue.
+    const allUnits = await listUnits();
+    const unitOptHtml = '<option value="">— SELECT UNIT —</option>' +
+      allUnits.map(u => `<option value="${u.slug}">${u.name}</option>`).join('');
+    document.getElementById('sim-attacker').innerHTML = unitOptHtml;
+    document.getElementById('sim-defender').innerHTML = unitOptHtml;
   } catch (err) {
     console.error('catalogue load failed:', err);
     const msg = (err && err.message) || (typeof err === 'string' ? err : JSON.stringify(err));
@@ -740,6 +775,62 @@ function renderDetailPanel(unit, ds) {
     <div style="font-size:11px;">${wargearList}</div>
   `;
 }
+
+// ── Combat sim ────────────────────────────────────────────────────────────────
+document.getElementById('sim-run').addEventListener('click', async () => {
+  const resultEl = document.getElementById('sim-result');
+  try {
+    const attackerSlug = document.getElementById('sim-attacker').value;
+    const defenderSlug = document.getElementById('sim-defender').value;
+    if (!attackerSlug || !defenderSlug) {
+      resultEl.textContent = 'SELECT BOTH UNITS';
+      return;
+    }
+    const modelCount = Math.max(1, parseInt(document.getElementById('sim-models').value, 10) || 1);
+    const kind = document.getElementById('sim-kind').value;
+
+    resultEl.textContent = 'COMPUTING…';
+    // Yield to paint so the COMPUTING… text actually shows up.
+    await new Promise(r => setTimeout(r, 0));
+
+    const [attackerUnit, defenderUnit] = await Promise.all([
+      getUnit(attackerSlug),
+      getUnit(defenderSlug),
+    ]);
+    if (!attackerUnit || !defenderUnit) {
+      resultEl.textContent = 'UNIT NOT FOUND IN CATALOGUE';
+      return;
+    }
+    const { attacker } = buildSimInputs(attackerUnit, { kind, model_count: 1 });
+    const { defender } = buildSimInputs(defenderUnit, { kind: 'all', model_count: modelCount });
+
+    if (attacker.weapons.length === 0) {
+      resultEl.textContent = `${attackerUnit.name} HAS NO ${kind.toUpperCase()} WEAPONS`;
+      return;
+    }
+
+    const t0 = performance.now();
+    const result = simulate({ attacker, defender, trials: 5000 });
+    const ms = (performance.now() - t0).toFixed(0);
+
+    const pKill = (result.p_target_destroyed * 100).toFixed(1);
+    const wounds = result.expected_wounds_dealt.toFixed(2);
+    const modelsLost = result.expected_models_lost.toFixed(2);
+    resultEl.innerHTML = `
+      <div style="font-family:'Bank Gothic',sans-serif; font-size:11px; letter-spacing:2px; color:var(--phosphor); margin-bottom:4px;">
+        ${attackerUnit.name.toUpperCase()} → ${defenderUnit.name.toUpperCase()} <span style="color:var(--dim);">(${kind.toUpperCase()}, ${modelCount} DEF)</span>
+      </div>
+      <div>P(kill all): <span style="color:var(--amber);">${pKill}%</span></div>
+      <div>E[wounds]:   <span style="color:var(--amber);">${wounds}</span></div>
+      <div>E[models lost]: <span style="color:var(--amber);">${modelsLost} / ${modelCount}</span></div>
+      <div style="color:var(--dim); margin-top:4px;">${result.trials} trials · ${ms}ms</div>
+    `;
+  } catch (err) {
+    console.error('SIMULATE failed:', err);
+    const msg = (err && err.message) || (typeof err === 'string' ? err : JSON.stringify(err));
+    resultEl.textContent = `MACHINE-SPIRIT OBJECTS: ${msg}`;
+  }
+});
 
 // Boot sequence — fade out after 2s or click to skip.
 setTimeout(() => document.getElementById('boot-overlay').classList.add('hidden'), 2000);

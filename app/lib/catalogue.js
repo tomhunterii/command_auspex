@@ -127,6 +127,37 @@ export async function getUnit(slug) {
   };
 }
 
+// Reshape a getUnit() result into the structured input shapes the sim
+// engine (app/lib/sim/combat.js) expects. `kind` filters the weapons
+// list ('ranged' | 'melee' | 'all').
+export function buildSimInputs(unit, { kind = 'ranged', model_count = 1 } = {}) {
+  if (!unit) return null;
+  const filteredWeapons = (unit.weapons ?? []).filter(w =>
+    kind === 'all' ? true : w.kind === kind
+  );
+  const attacker = {
+    weapons: filteredWeapons.map(w => ({
+      name: w.name,
+      kind: w.kind,
+      range_in: w.range_in,
+      attacks: w.attacks,
+      skill: w.skill,
+      strength: w.strength,
+      ap: w.ap,
+      damage: w.damage,
+    })),
+    model_count,
+  };
+  const defender = {
+    toughness: unit.profile?.T ?? 4,
+    save: unit.profile?.Sv ?? '3+',
+    invulnerable: unit.profile?.InvSv ?? null,
+    wounds_per_model: unit.profile?.W ?? 1,
+    model_count,
+  };
+  return { attacker, defender };
+}
+
 export async function listMissions() {
   return select('SELECT slug, name FROM missions ORDER BY name');
 }

@@ -120,6 +120,19 @@ test('smoke: catalogue.js wired and CONNECT REPO loads via openCatalogue', () =>
     'isTauri not imported from ./lib/runtime.js');
 });
 
+test('smoke: combat sim panel + controls present', () => {
+  for (const id of ['sim-attacker', 'sim-defender', 'sim-models', 'sim-kind', 'sim-run', 'sim-result']) {
+    assert.match(HTML, new RegExp(`id="${id}"`), `missing combat-sim id="${id}"`);
+  }
+  assert.match(HTML, /COMBAT AUSPEX/);
+});
+
+test('smoke: combat sim wired — simulate import + click handler + buildSimInputs', () => {
+  assert.match(HTML, /import\s*\{[^}]*simulate[^}]*\}\s*from\s*'\.\/lib\/sim\/combat\.js'/);
+  assert.match(HTML, /import\s*\{[^}]*buildSimInputs[^}]*\}\s*from\s*'\.\/lib\/catalogue\.js'/);
+  assert.match(HTML, /getElementById\(['"]sim-run['"]\)\.addEventListener/);
+});
+
 test('smoke: native menu listener wired (Tauri-only path present)', () => {
   assert.match(HTML, /listen\(['"]menu-action['"]/,
     'menu-action listener missing');
