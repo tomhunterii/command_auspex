@@ -135,7 +135,11 @@ export const INCH_PX = 1;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export function clearSvg(svg) {
+  // Preserve the icon sprite <defs> so cross-SVG <use href="#icon-..."/>
+  // references survive board re-renders (ENGAGE clears the rest).
+  const sprite = svg.querySelector('#icon-sprite');
   while (svg.firstChild) svg.removeChild(svg.firstChild);
+  if (sprite) svg.appendChild(sprite);
 }
 
 // Padding around the board edge so ruler labels are visible.
