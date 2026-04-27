@@ -572,7 +572,10 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
       totalUnitModels,
       unit: {
         slug: unit.slug ?? unitSlug,
-        keywords: unit.keywords ?? unit.keywordsData ?? [],
+        // Catalogue keywords live on the datasheet (getUnit returns
+        // [{keyword, is_faction}]). The roster's `unit` object carries
+        // a different shape, so prefer the datasheet first.
+        keywords: datasheet?.keywords ?? unit.keywords ?? [],
       },
     });
 
@@ -586,7 +589,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
       text.setAttribute('font-weight', '700');
       // font-size in inches: role symbols get r * 0.7 (triangles/skull need visual room);
       // letter labels (S, weapon codes) use r * 0.55. Clamped 0.35"–0.8".
-      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠]/.test(label);
+      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠▣]/.test(label);
       const fontSize = Math.max(0.35, Math.min(0.8, r * (isRoleSymbol ? 0.7 : 0.55)));
       text.setAttribute('font-size', String(fontSize));
       text.setAttribute('fill', 'var(--phosphor)');
