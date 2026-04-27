@@ -619,6 +619,9 @@ async function loadCatalogueAndPopulate() {
         const leaderBadge = leaderUnit
           ? `<div style="color:var(--amber); font-size:9px; letter-spacing:1.5px; margin-bottom:4px;">+ LEADER &middot; ${leaderUnit.name.toUpperCase()}</div>`
           : '';
+        const grantsBadge = leaderUnit?.grants?.description
+          ? `<div style="color:var(--phosphor); font-size:9px; letter-spacing:1.2px; margin-bottom:4px; padding:3px 6px; border:1px dashed var(--phosphor-dim);">&#9881; GRANTS &middot; ${leaderUnit.grants.description.toUpperCase()}</div>`
+          : '';
 
         const ranged = displayUnit.weapons.filter(w => w.kind === 'ranged');
         const melee = displayUnit.weapons.filter(w => w.kind === 'melee');
@@ -661,9 +664,9 @@ async function loadCatalogueAndPopulate() {
           `).join('');
 
         if (sections === '') {
-          detailEl.innerHTML = filterBadge + leaderBadge + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
         } else {
-          detailEl.innerHTML = filterBadge + leaderBadge + sections;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + sections;
         }
         detailEl.style.display = 'block';
       } catch (err) {
@@ -1458,8 +1461,34 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     const attackerSideForAttachment = 'defender';
     const attackerLeaderSlug = attachedLeaderSlug(attackerSideForAttachment, attackerSlug);
     const attachedLeaderUnit = attackerLeaderSlug ? await getUnit(attackerLeaderSlug) : null;
-    const { attacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels, attachedLeader: attachedLeaderUnit });
+    const { attacker: rawAttacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels, attachedLeader: attachedLeaderUnit });
     const { defender } = buildSimInputs(filteredDefender, { kind: 'all', model_count: modelCount });
+
+    // Merge leader grants into attacker modifiers + every weapon's abilities.
+    function mergeLeaderGrants(attacker, leader) {
+      if (!leader || !leader.grants) return attacker;
+      const grants = leader.grants;
+      // Modifiers go on attacker.modifiers (first-wins; user-specified mods take precedence).
+      const mods = { ...(attacker.modifiers ?? {}) };
+      if (grants.modifiers) {
+        for (const [k, v] of Object.entries(grants.modifiers)) {
+          if (mods[k] == null) mods[k] = v;
+        }
+      }
+      // weapon_abilities OR into every weapon's abilities.
+      const weapons = (attacker.weapons ?? []).map(w => {
+        const merged = { ...(w.abilities ?? {}) };
+        if (grants.weapon_abilities) {
+          for (const [k, v] of Object.entries(grants.weapon_abilities)) {
+            if (merged[k] == null) merged[k] = v;
+          }
+        }
+        return { ...w, abilities: merged };
+      });
+      return { ...attacker, weapons, modifiers: mods };
+    }
+
+    const attacker = mergeLeaderGrants(rawAttacker, attachedLeaderUnit);
 
     if (attacker.weapons.length === 0) {
       resultEl.textContent = `${attackerUnit.name} HAS NO ${kind.toUpperCase()} WEAPONS`;

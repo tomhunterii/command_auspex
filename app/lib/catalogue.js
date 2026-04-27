@@ -108,6 +108,10 @@ export async function getUnit(slug) {
   if (u.per_model_bases_json) {
     try { base.per_model = JSON.parse(u.per_model_bases_json); } catch {}
   }
+  let grants = null;
+  if (u.grants_json) {
+    try { grants = JSON.parse(u.grants_json); } catch {}
+  }
   return {
     slug: u.slug,
     name: u.name,
@@ -126,6 +130,7 @@ export async function getUnit(slug) {
     keywords,
     weapons,
     led_by: ledBy.map(r => r.leader_slug),
+    grants,
   };
 }
 

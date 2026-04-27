@@ -54,6 +54,7 @@ CREATE TABLE units (
   oc                  INTEGER,
   max_range_in        INTEGER,
   ranges_in_json      TEXT,
+  grants_json         TEXT,
   source_path         TEXT NOT NULL,
   enriched            INTEGER NOT NULL DEFAULT 0,
   UNIQUE(faction_id, slug)
@@ -215,12 +216,14 @@ async function processDatasheet(db, factionSlug, factionId, mdPath) {
       (faction_id, slug, name, epic_hero, battleline, is_character,
        base_shape, base_diameter_mm, base_length_mm, base_width_mm, per_model_bases_json,
        movement, toughness, save, invulnerable_save, wounds, leadership, oc,
-       max_range_in, ranges_in_json, source_path, enriched)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       max_range_in, ranges_in_json, grants_json, source_path, enriched)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const base = ds.base ?? {};
   const profile = ds.profile ?? {};
+  const grants = fm?.grants_to_attached_unit ?? null;
+  const grantsJson = grants ? JSON.stringify(grants) : null;
   const result = insUnit.run(
     factionId,
     slug,
@@ -242,6 +245,7 @@ async function processDatasheet(db, factionSlug, factionId, mdPath) {
     profile.OC ?? null,
     ds.max_range_in ?? null,
     ds.ranges_in?.length ? JSON.stringify(ds.ranges_in) : null,
+    grantsJson,
     sourcePath,
     enriched,
   );

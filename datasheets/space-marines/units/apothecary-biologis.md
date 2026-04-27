@@ -1,3 +1,13 @@
+---
+slug: apothecary-biologis
+faction: space-marines
+is_character: true
+grants_to_attached_unit:
+  weapon_abilities:
+    lethal_hits: true
+  description: "While leading a unit, weapons equipped by models in that unit have the Lethal Hits ability (Surgical Precision)."
+---
+
 # Apothecary Biologis
 
 **Faction:** Space Marines (Adeptus Astartes)
