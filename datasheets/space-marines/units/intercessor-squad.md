@@ -1,3 +1,30 @@
+---
+slug: intercessor-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: true
+is_character: false
+loadouts:
+  - models: 5
+    points: 80
+    default: true
+  - models: 10
+    points: 160
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Battleline, Grenades, Tacticus, Intercessor Squad]
+led_by:
+  - ancient
+  - apothecary
+  - captain
+  - captain-demetrian-titus
+  - chaplain
+  - judiciar
+  - librarian
+  - lieutenant
+---
+
 # Intercessor Squad
 
 **Faction:** Space Marines (Adeptus Astartes)

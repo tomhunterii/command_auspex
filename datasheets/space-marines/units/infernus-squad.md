@@ -1,3 +1,30 @@
+---
+slug: infernus-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 5
+    points: 90
+    default: true
+  - models: 10
+    points: 180
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Grenades, Tacticus, Infernus Squad]
+led_by:
+  - ancient
+  - apothecary
+  - captain
+  - captain-demetrian-titus
+  - chaplain
+  - judiciar
+  - librarian
+  - lieutenant
+---
+
 # Infernus Squad
 
 **Faction:** Space Marines (Adeptus Astartes)

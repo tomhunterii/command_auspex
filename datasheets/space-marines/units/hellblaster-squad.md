@@ -1,3 +1,29 @@
+---
+slug: hellblaster-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 5
+    points: 110
+    default: true
+  - models: 10
+    points: 220
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Grenades, Tacticus, Hellblaster Squad]
+led_by:
+  - ancient
+  - apothecary
+  - captain
+  - captain-demetrian-titus
+  - chaplain
+  - librarian
+  - lieutenant
+---
+
 # Hellblaster Squad
 
 **Faction:** Space Marines (Adeptus Astartes)

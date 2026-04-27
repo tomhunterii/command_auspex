@@ -1,3 +1,27 @@
+---
+slug: bladeguard-veteran-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 80
+    default: true
+  - models: 6
+    points: 170
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Grenades, Tacticus, Bladeguard Veteran Squad]
+led_by:
+  - captain
+  - captain-demetrian-titus
+  - chaplain
+  - judiciar
+  - lieutenant
+---
+
 # Bladeguard Veteran Squad
 
 **Faction:** Space Marines (Adeptus Astartes)

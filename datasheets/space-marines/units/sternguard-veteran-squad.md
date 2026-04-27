@@ -1,3 +1,30 @@
+---
+slug: sternguard-veteran-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 5
+    points: 100
+    default: true
+  - models: 10
+    points: 200
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Grenades, Tacticus, Sternguard Veteran Squad]
+led_by:
+  - ancient
+  - apothecary
+  - captain
+  - captain-demetrian-titus
+  - chaplain
+  - judiciar
+  - librarian
+  - lieutenant
+---
+
 # Sternguard Veteran Squad
 
 **Faction:** Space Marines (Adeptus Astartes)
