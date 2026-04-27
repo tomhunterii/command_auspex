@@ -44,9 +44,9 @@ test('parseKeywords: multiple Anti-X entries accumulate', () => {
 });
 
 test('parseKeywords: unrecognized keywords land in unmodelled list', () => {
-  const k = parseKeywords('[BLAST], [HAZARDOUS], [LETHAL HITS]');
+  const k = parseKeywords('[SOME UNKNOWN KEYWORD], [LETHAL HITS]');
   assert.strictEqual(k.lethal_hits, true);
-  assert.deepStrictEqual(k.unmodelled, ['BLAST', 'HAZARDOUS']);
+  assert.deepStrictEqual(k.unmodelled, ['SOME UNKNOWN KEYWORD']);
 });
 
 test('parseKeywords: case and whitespace tolerant', () => {
@@ -281,4 +281,189 @@ test('result.unmodelled_abilities surfaces unparseable keywords', () => {
   assert.ok(Array.isArray(result.unmodelled_abilities));
   assert.ok(result.unmodelled_abilities.includes('BLAST'));
   assert.ok(result.unmodelled_abilities.includes('HAZARDOUS'));
+});
+
+// --- Pass B parser ---
+
+test('parseKeywords: HEAVY flag', () => {
+  assert.strictEqual(parseKeywords('[HEAVY]').heavy, true);
+});
+
+test('parseKeywords: BLAST flag', () => {
+  assert.strictEqual(parseKeywords('[BLAST]').blast, true);
+});
+
+test('parseKeywords: HAZARDOUS flag', () => {
+  assert.strictEqual(parseKeywords('[HAZARDOUS]').hazardous, true);
+});
+
+test('parseKeywords: RAPID FIRE N captures the integer', () => {
+  assert.strictEqual(parseKeywords('[RAPID FIRE 1]').rapid_fire, 1);
+  assert.strictEqual(parseKeywords('[RAPID FIRE 2]').rapid_fire, 2);
+  assert.strictEqual(parseKeywords('[RAPID FIRE]').rapid_fire, 1);
+});
+
+test('parseKeywords: combined Pass A + Pass B keywords', () => {
+  const k = parseKeywords('[HEAVY], [LETHAL HITS], [BLAST]');
+  assert.strictEqual(k.heavy, true);
+  assert.strictEqual(k.lethal_hits, true);
+  assert.strictEqual(k.blast, true);
+});
+
+// --- Pass B simulator effects ---
+
+test('Heavy: +1 to hit when attacker_stationary is true', () => {
+  // Use 5+ base skill so the Heavy bonus is distinguishable.
+  // Moving  (5+ stays 5+): hits on 5,6 = 2/6. 12*(2/6)*(5/6)^2 = 12*50/216 ≈ 2.78
+  // Stationary (5+ → 4+ via Heavy): hits on 4,5,6 = 3/6. 12*(3/6)*(5/6)^2 = 12*75/216 ≈ 4.17
+  const stationary = simulate({
+    attacker: {
+      weapons: [{
+        name: 'h', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: '5+', strength: 10, ap: 0, damage: '1',
+        abilities: { heavy: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { attacker_stationary: true },
+    trials: 50000,
+  });
+  within(stationary.expected_wounds_dealt, 4.17, 0.20);
+
+  const moving = simulate({
+    attacker: {
+      weapons: [{
+        name: 'h', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: '5+', strength: 10, ap: 0, damage: '1',
+        abilities: { heavy: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { attacker_stationary: false },
+    trials: 50000,
+  });
+  within(moving.expected_wounds_dealt, 2.78, 0.20);
+});
+
+test('Heavy: skill cap at 2+ — does not improve to 1+', () => {
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'h2', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: '2+', strength: 10, ap: 0, damage: '1',
+        abilities: { heavy: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { attacker_stationary: true },
+    trials: 50000,
+  });
+  // 12 * (5/6) * (5/6) * (5/6) = 12 * 125/216 = 6.94
+  within(result.expected_wounds_dealt, 6.94, 0.20);
+});
+
+test('Rapid Fire 1: +1 attack at half range', () => {
+  const half = simulate({
+    attacker: {
+      weapons: [{
+        name: 'rf', kind: 'ranged', range_in: 24,
+        attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { rapid_fire: 1 },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { at_half_range: true },
+    trials: 50000,
+  });
+  // 7 attacks * (5/6 wound) * (5/6 no save) = 7 * 25/36 = 4.86
+  within(half.expected_wounds_dealt, 4.86, 0.20);
+
+  const long = simulate({
+    attacker: {
+      weapons: [{
+        name: 'rf', kind: 'ranged', range_in: 24,
+        attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { rapid_fire: 1 },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { at_half_range: false },
+    trials: 50000,
+  });
+  // 6 attacks * 25/36 = 4.17
+  within(long.expected_wounds_dealt, 4.17, 0.20);
+});
+
+test('Blast: +1 attack per 5 enemy models', () => {
+  // 1 base attack, target has 12 models → +floor(12/5) = +2 → 3 attacks.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'blast', kind: 'ranged', range_in: 24,
+        attacks: '1', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { blast: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 12 },
+    trials: 50000,
+  });
+  // 3 attacks * 25/36 = 2.08
+  within(result.expected_wounds_dealt, 2.08, 0.15);
+});
+
+test('Blast: 0 bonus when target unit < 5 models', () => {
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'blast', kind: 'ranged', range_in: 24,
+        attacks: '1', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { blast: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 4 },
+    trials: 50000,
+  });
+  // 1 attack * 25/36 = 0.694
+  within(result.expected_wounds_dealt, 0.694, 0.10);
+});
+
+test('Hazardous: per-weapon end-of-shoot mortal-wound chance to attacker', () => {
+  // 1 hazardous weapon → 1d6 at end, on 1 attacker takes 1 mortal wound. Expected = 1/6 ≈ 0.167.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'haz', kind: 'ranged', range_in: 24,
+        attacks: '1', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { hazardous: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    trials: 50000,
+  });
+  assert.ok(typeof result.expected_attacker_self_damage === 'number');
+  within(result.expected_attacker_self_damage, 1/6, 0.05);
+});
+
+test('Hazardous: two weapons → ~0.33 expected self-damage', () => {
+  // Two distinct hazardous weapons → 2 * 1/6 ≈ 0.333.
+  const result = simulate({
+    attacker: {
+      weapons: [
+        { name: 'h1', kind: 'ranged', range_in: 24, attacks: '1', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: { hazardous: true } },
+        { name: 'h2', kind: 'ranged', range_in: 24, attacks: '1', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: { hazardous: true } },
+      ],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    trials: 50000,
+  });
+  within(result.expected_attacker_self_damage, 2/6, 0.05);
 });

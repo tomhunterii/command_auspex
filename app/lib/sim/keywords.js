@@ -12,9 +12,13 @@ const FLAG_KEYWORDS = new Map([
   ['DEVASTATING WOUNDS',  'devastating_wounds'],
   ['TWIN-LINKED',         'twin_linked'],
   ['TORRENT',             'torrent'],
+  ['HEAVY',               'heavy'],
+  ['BLAST',               'blast'],
+  ['HAZARDOUS',           'hazardous'],
 ]);
 
 const SUSTAINED_HITS_RE = /^SUSTAINED HITS\s*(\d*)$/;
+const RAPID_FIRE_RE = /^RAPID FIRE\s*(\d*)$/;
 const ANTI_RE = /^ANTI-([A-Z][A-Z\s\-]*?)\s+(\d+)\+$/;
 
 export function parseKeywords(input) {
@@ -40,6 +44,12 @@ export function parseKeywords(input) {
     if (sh) {
       const n = sh[1] ? parseInt(sh[1], 10) : 1;
       out.sustained_hits = n;
+      continue;
+    }
+    const rf = RAPID_FIRE_RE.exec(tok);
+    if (rf) {
+      const n = rf[1] ? parseInt(rf[1], 10) : 1;
+      out.rapid_fire = n;
       continue;
     }
     const a = ANTI_RE.exec(tok);

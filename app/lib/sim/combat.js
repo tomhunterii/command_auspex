@@ -97,15 +97,33 @@ function resolvePostHit(weapon, defender, rng, autoWound) {
   return { damage: woundDamage, mortal: 0 };
 }
 
-function rollAttacksCount(attacks, rng) {
-  return parseDice(String(attacks ?? '1'))(rng);
+function rollAttacksCount(weapon, defender, context, rng) {
+  let count = parseDice(String(weapon.attacks ?? '1'))(rng);
+  if (weapon.abilities?.blast) {
+    count += Math.floor((defender.model_count ?? 0) / 5);
+  }
+  if (weapon.abilities?.rapid_fire && context?.at_half_range) {
+    count += weapon.abilities.rapid_fire;
+  }
+  return count;
+}
+
+function effectiveHitThreshold(weapon, context) {
+  const base = parseSkill(weapon.skill);
+  if (base === null) return null;
+  let threshold = base;
+  if (weapon.abilities?.heavy && context?.attacker_stationary) threshold -= 1;
+  // 10th-edition modifier cap: cannot improve to better than 2+ via Heavy.
+  if (threshold < 2) threshold = 2;
+  if (threshold > 6) threshold = 6;
+  return threshold;
 }
 
 // Resolve one attack roll. Returns an array of post-hit result objects
 // (length ≥ 1 because Sustained Hits can generate extra hits from a single
 // attack roll).
-function resolveOneAttack(weapon, defender, rng) {
-  const skill = parseSkill(weapon.skill);
+function resolveOneAttack(weapon, defender, rng, context) {
+  const skill = effectiveHitThreshold(weapon, context);
   const ab = weapon.abilities ?? {};
 
   // Auto-hit case (Torrent / N/A skill): single hit, no nat-6 hit triggers.
@@ -146,17 +164,27 @@ function applyDamageToDefender(state, entry, defender) {
   }
 }
 
-function runOneTrial(attacker, defender, rng) {
+function rollHazardousSelfDamage(attacker, rng) {
+  let mw = 0;
+  for (const w of attacker.weapons) {
+    if (w.abilities?.hazardous) {
+      if (D6(rng) === 1) mw += 1;
+    }
+  }
+  return mw;
+}
+
+function runOneTrial(attacker, defender, context, rng) {
   const state = {
     modelsRemaining: defender.model_count,
     currentModelWounds: defender.wounds_per_model,
     totalWoundsDealt: 0,
   };
   for (const weapon of attacker.weapons) {
-    const attackCount = rollAttacksCount(weapon.attacks, rng);
+    const attackCount = rollAttacksCount(weapon, defender, context, rng);
     for (let i = 0; i < attackCount; i++) {
       if (state.modelsRemaining <= 0) break;
-      const results = resolveOneAttack(weapon, defender, rng);
+      const results = resolveOneAttack(weapon, defender, rng, context);
       for (const r of results) {
         applyDamageToDefender(state, r, defender);
         if (state.modelsRemaining <= 0) break;
@@ -165,10 +193,12 @@ function runOneTrial(attacker, defender, rng) {
     if (state.modelsRemaining <= 0) break;
   }
   const modelsLost = defender.model_count - state.modelsRemaining;
+  const attackerSelfDamage = rollHazardousSelfDamage(attacker, rng);
   return {
     wounds: state.totalWoundsDealt,
     models_lost: modelsLost,
     destroyed: state.modelsRemaining <= 0,
+    attacker_self_damage: attackerSelfDamage,
   };
 }
 
@@ -180,19 +210,21 @@ function collectUnmodelled(attacker) {
   return [...set];
 }
 
-export function simulate({ attacker, defender, trials = 5000, rng = Math.random } = {}) {
+export function simulate({ attacker, defender, context = {}, trials = 5000, rng = Math.random } = {}) {
   if (!attacker || !defender) throw new Error('simulate: attacker and defender are required');
   let totalWounds = 0;
   let totalModelsLost = 0;
   let destroyedCount = 0;
+  let totalAttackerSelfDamage = 0;
   const histogram_models_lost = new Array(defender.model_count + 1).fill(0);
   const histogram_wounds_dealt = new Array(defender.model_count * defender.wounds_per_model + 1).fill(0);
 
   for (let t = 0; t < trials; t++) {
-    const r = runOneTrial(attacker, defender, rng);
+    const r = runOneTrial(attacker, defender, context, rng);
     totalWounds += r.wounds;
     totalModelsLost += r.models_lost;
     if (r.destroyed) destroyedCount += 1;
+    totalAttackerSelfDamage += r.attacker_self_damage;
     if (r.models_lost < histogram_models_lost.length) histogram_models_lost[r.models_lost] += 1;
     if (r.wounds < histogram_wounds_dealt.length) histogram_wounds_dealt[r.wounds] += 1;
   }
@@ -201,6 +233,7 @@ export function simulate({ attacker, defender, trials = 5000, rng = Math.random 
     expected_wounds_dealt: totalWounds / trials,
     expected_models_lost: totalModelsLost / trials,
     p_target_destroyed: destroyedCount / trials,
+    expected_attacker_self_damage: totalAttackerSelfDamage / trials,
     histogram_models_lost,
     histogram_wounds_dealt,
     unmodelled_abilities: collectUnmodelled(attacker),
