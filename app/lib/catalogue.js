@@ -9,6 +9,8 @@
 // `listRosters()`. What was `readTextFile(repo, 'datasheets/.../foo.md')`
 // followed by `parseDatasheet(text)` is now `getUnit('foo')`.
 
+import { parseKeywords } from './sim/keywords.js';
+
 const BASE_DIRECTORY_RESOURCE = 11; // matches @tauri-apps/api/path BaseDirectory.Resource
 
 let dbHandle = null;
@@ -145,15 +147,18 @@ export function buildSimInputs(unit, { kind = 'ranged', model_count = 1 } = {}) 
       strength: w.strength,
       ap: w.ap,
       damage: w.damage,
+      abilities: parseKeywords(w.keywords),
     })),
     model_count,
   };
+  const defenderKeywords = (unit.keywords ?? []).map(k => String(k.keyword).toUpperCase());
   const defender = {
     toughness: unit.profile?.T ?? 4,
     save: unit.profile?.Sv ?? '3+',
     invulnerable: unit.profile?.InvSv ?? null,
     wounds_per_model: unit.profile?.W ?? 1,
     model_count,
+    keywords: defenderKeywords,
   };
   return { attacker, defender };
 }

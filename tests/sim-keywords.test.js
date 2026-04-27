@@ -1,0 +1,284 @@
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { parseKeywords } from '../app/lib/sim/keywords.js';
+import { simulate } from '../app/lib/sim/combat.js';
+
+function within(actual, expected, tol, msg) {
+  assert.ok(Math.abs(actual - expected) <= tol,
+    `${msg ?? ''} expected ${expected} ± ${tol}, got ${actual}`);
+}
+
+// --- parser ---
+
+test('parseKeywords: empty/null returns empty abilities', () => {
+  assert.deepStrictEqual(parseKeywords(''), {});
+  assert.deepStrictEqual(parseKeywords(null), {});
+  assert.deepStrictEqual(parseKeywords('—'), {});
+});
+
+test('parseKeywords: simple flag keywords', () => {
+  const k = parseKeywords('[LETHAL HITS], [TWIN-LINKED], [DEVASTATING WOUNDS]');
+  assert.strictEqual(k.lethal_hits, true);
+  assert.strictEqual(k.twin_linked, true);
+  assert.strictEqual(k.devastating_wounds, true);
+});
+
+test('parseKeywords: SUSTAINED HITS N captures the integer', () => {
+  assert.strictEqual(parseKeywords('[SUSTAINED HITS 1]').sustained_hits, 1);
+  assert.strictEqual(parseKeywords('[SUSTAINED HITS 2]').sustained_hits, 2);
+  // Bare "SUSTAINED HITS" with no number defaults to 1.
+  assert.strictEqual(parseKeywords('[SUSTAINED HITS]').sustained_hits, 1);
+});
+
+test('parseKeywords: ANTI-X N+ captures keyword and threshold', () => {
+  const k = parseKeywords('[ANTI-INFANTRY 4+]');
+  assert.deepStrictEqual(k.anti, [{ target_keyword: 'INFANTRY', threshold: 4 }]);
+});
+
+test('parseKeywords: multiple Anti-X entries accumulate', () => {
+  const k = parseKeywords('[ANTI-INFANTRY 4+], [ANTI-VEHICLE 3+]');
+  assert.deepStrictEqual(k.anti, [
+    { target_keyword: 'INFANTRY', threshold: 4 },
+    { target_keyword: 'VEHICLE', threshold: 3 },
+  ]);
+});
+
+test('parseKeywords: unrecognized keywords land in unmodelled list', () => {
+  const k = parseKeywords('[BLAST], [HAZARDOUS], [LETHAL HITS]');
+  assert.strictEqual(k.lethal_hits, true);
+  assert.deepStrictEqual(k.unmodelled, ['BLAST', 'HAZARDOUS']);
+});
+
+test('parseKeywords: case and whitespace tolerant', () => {
+  const k = parseKeywords(' [lethal hits],[twin-linked] ');
+  assert.strictEqual(k.lethal_hits, true);
+  assert.strictEqual(k.twin_linked, true);
+});
+
+// --- simulator effects ---
+
+test('Lethal Hits: nat-6 hits auto-wound (skip wound roll)', () => {
+  // 18 attacks, 3+ to hit. Wound roll fails always (S=1, T=10 → 6+ wound).
+  // Without LH: P(wound) = (4/6) * (1/6 with nat-6 always succeeding) = roughly (4/6 * 1/6) = 0.111 per attack.
+  // With LH: any nat-6 hit auto-wounds.
+  //   P(nat-6 hit on a 3+ skill) = 1/6.
+  //   P(other hit succeeds AND wounds) = (3/6) * (1/6) = 3/36 = 0.0833 per non-nat-6 attack.
+  //   P(per-attack wound) = 1/6 + (5/6) * P(non-nat-6 hit hits) * (1/6 wound)
+  //   Wait. Let me redo: of 6 hit-roll outcomes:
+  //     1: miss (no contribution)
+  //     2: miss (3+ skill, 2 fails)... wait 3+ is 3,4,5,6 hits; 1,2 miss.
+  //     3,4,5: hit, then wound roll (6+ for S1T10) = 1/6 wound
+  //     6: hit + LH → auto-wound
+  //   Without LH: per-attack wound prob = (3/6)*(1/6) + (1/6)*(1/6) = 4/36
+  //   With LH:    per-attack wound prob = (3/6)*(1/6) + (1/6)*1     = 3/36 + 6/36 = 9/36 = 0.25
+  // 18 attacks → expected wounds dealt with LH = 18 * 0.25 = 4.5
+  // Save 7+ on 1 model: still saves on nat 6 (1/6). So expected wounds applied = 4.5 * (5/6) = 3.75
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'lethal', kind: 'ranged', range_in: 24,
+        attacks: '18', skill: '3+', strength: 1, ap: 0, damage: '1',
+        abilities: { lethal_hits: true },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 10, save: '7+', wounds_per_model: 100, model_count: 1,
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 3.75, 0.15);
+});
+
+test('Sustained Hits 1: nat-6 hit generates 1 extra hit', () => {
+  // Auto-wound (S=10 vs T=1 → 2+ wound). Save 7+. So per attack:
+  //   Hit on 3+: 4/6, of which nat-6: 1/6 → +1 extra hit
+  //   Each hit auto-wounds on 2+ → fails only on nat 1 = 5/6
+  //   Each wound bypasses save (7+ saves only on nat 6 = 1/6, fails 5/6)
+  // Expected wounds per ATTACK = (4/6) * (5/6) * (5/6) = 100/216 ≈ 0.463
+  // Sustained Hits 1 adds: extra hits at rate (1/6) * (5/6 wound) * (5/6 no-save) = 25/216 ≈ 0.116
+  // Total per attack ≈ 0.579
+  // 12 attacks → expected wounds ≈ 6.94
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'sustain', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: '3+', strength: 10, ap: 0, damage: '1',
+        abilities: { sustained_hits: 1 },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1,
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 6.94, 0.20);
+});
+
+test('Devastating Wounds: nat-6 wound bypasses save (mortal)', () => {
+  // 18 auto-hit attacks (Torrent / N/A skill), S=4 vs T=4 (4+ wound).
+  // Of 6 wound outcomes: 1,2,3 fail; 4,5 wound normally (subject to save); 6 = devastating mortal.
+  // Save 2+ vs AP 0: fails only on 1 = 1/6.
+  // Per attack expected wound application:
+  //   wound on 4: needs save 2+, save fails 1/6 → 1/6 of these contribute → (1/6)(1/6) = 1/36
+  //   wound on 5: same → 1/36
+  //   wound on 6: devastating, no save → 1/6
+  // Total per-attack = 2/36 + 6/36 = 8/36 = 2/9 ≈ 0.222
+  // 18 attacks → expected wounds ≈ 4.0
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'dev', kind: 'ranged', range_in: 24,
+        attacks: '18', skill: 'N/A', strength: 4, ap: 0, damage: '1',
+        abilities: { devastating_wounds: true },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 4, save: '2+', wounds_per_model: 100, model_count: 1,
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 4.0, 0.20);
+});
+
+test('Twin-linked: failed wound rolls re-rolled once', () => {
+  // 12 auto-hit attacks, S=3 vs T=4 → wound on 5+. P(wound) = 2/6 = 1/3.
+  // Twin-linked re-rolls failures: P(wound) becomes 1 - (4/6)^2 = 1 - 16/36 = 20/36 = 5/9 ≈ 0.556
+  // Save 7+ (only nat-6 saves) fails 5/6.
+  // Per attack with TL: 0.556 * (5/6) ≈ 0.463
+  // 12 attacks → expected wounds ≈ 5.56
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'tl', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: { twin_linked: true },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 4, save: '7+', wounds_per_model: 100, model_count: 1,
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 5.56, 0.20);
+});
+
+test('Anti-INFANTRY 4+: replaces wound threshold vs INFANTRY targets', () => {
+  // 12 auto-hit attacks. S=3, T=8 → S/T table says 6+ wound. Anti-INFANTRY 4+ replaces with 4+ (since 4+ is better).
+  // Defender has INFANTRY keyword → use 4+. P(wound) = 3/6 = 1/2.
+  // Save 7+ fails 5/6. Per attack = 1/2 * 5/6 = 5/12 ≈ 0.417
+  // 12 attacks → expected wounds ≈ 5.0
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'antiinf', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: { anti: [{ target_keyword: 'INFANTRY', threshold: 4 }] },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 8, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['INFANTRY'],
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 5.0, 0.20);
+});
+
+test('Anti-INFANTRY 4+: ineffective vs non-INFANTRY targets', () => {
+  // Same setup but defender has no INFANTRY keyword.
+  // S=3, T=8 → 6+ wound (only nat-6 wounds).
+  // Save 7+ fails 5/6. Per attack = 1/6 * 5/6 = 5/36 ≈ 0.139
+  // 12 attacks → expected wounds ≈ 1.67
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'antiinf', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: { anti: [{ target_keyword: 'INFANTRY', threshold: 4 }] },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 8, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['VEHICLE'],
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 1.67, 0.20);
+});
+
+test('Anti-X uses min(table, anti_threshold) — anti only helps when better', () => {
+  // S=10 vs T=1 → 2+ wound (already easy). Anti-INFANTRY 4+ should NOT make it worse.
+  // Per attack: 5/6 * 5/6 = 25/36 ≈ 0.694. 12 attacks → 8.33.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'antieasy', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { anti: [{ target_keyword: 'INFANTRY', threshold: 4 }] },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['INFANTRY'],
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 8.33, 0.30);
+});
+
+test('combined: Lethal Hits + Twin-linked + Devastating Wounds', () => {
+  // Sanity check that multiple keywords compose. We don't pin a tight number;
+  // assert this is strictly better than each in isolation.
+  const base = simulate({
+    attacker: {
+      weapons: [{
+        name: 'plain', kind: 'ranged', range_in: 24,
+        attacks: '20', skill: '3+', strength: 4, ap: -1, damage: '1',
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 4, save: '3+', wounds_per_model: 1, model_count: 100 },
+    trials: 30000,
+  });
+  const combo = simulate({
+    attacker: {
+      weapons: [{
+        name: 'combo', kind: 'ranged', range_in: 24,
+        attacks: '20', skill: '3+', strength: 4, ap: -1, damage: '1',
+        abilities: { lethal_hits: true, twin_linked: true, devastating_wounds: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 4, save: '3+', wounds_per_model: 1, model_count: 100 },
+    trials: 30000,
+  });
+  assert.ok(combo.expected_wounds_dealt > base.expected_wounds_dealt * 1.3,
+    `combo (${combo.expected_wounds_dealt}) should be at least 30% better than base (${base.expected_wounds_dealt})`);
+});
+
+test('result.unmodelled_abilities surfaces unparseable keywords', () => {
+  // Pass a weapon whose abilities include unmodelled keywords — they should
+  // appear in the result so the UI can warn the user the math is approximate.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'mixed', kind: 'ranged', range_in: 24,
+        attacks: '5', skill: '3+', strength: 4, ap: 0, damage: '1',
+        abilities: { lethal_hits: true, unmodelled: ['BLAST', 'HAZARDOUS'] },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 4, save: '3+', wounds_per_model: 1, model_count: 5 },
+    trials: 1000,
+  });
+  assert.ok(Array.isArray(result.unmodelled_abilities));
+  assert.ok(result.unmodelled_abilities.includes('BLAST'));
+  assert.ok(result.unmodelled_abilities.includes('HAZARDOUS'));
+});
