@@ -893,14 +893,9 @@ function setupPressHoldThreat(el) {
     showRingsFor(group);
   });
 
-  window.addEventListener('mousemove', (ev) => {
-    if (!holdStart) return;
-    const dx = ev.clientX - holdStart.x;
-    const dy = ev.clientY - holdStart.y;
-    // 6px CSS threshold — matches the drag-detection spec.
-    if (Math.hypot(dx, dy) > 6) clearRings();
-  });
-
+  // Rings are appended inside the unit <g>, so they ride along with any drag
+  // transform automatically. Don't clear on mousemove — Captain wants to see
+  // the threat ring follow the unit during a press-and-drag gesture.
   window.addEventListener('mouseup', clearRings);
   window.addEventListener('mouseleave', clearRings);
 }
