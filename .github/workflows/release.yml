@@ -49,10 +49,6 @@ jobs:
 
             **First launch:** Windows SmartScreen will warn "Windows protected your PC" — click **More info** → **Run anyway**. The app is unsigned (no EV cert yet); this is expected.
 
-            **Install options:**
-            - `.msi` — Windows Installer, recommended.
-            - `.exe` — NSIS-style setup, lighter weight.
-
-            Either installer drops the app under `Program Files` and adds a Start Menu entry.
+            **Install:** Run the `.msi` — Windows Installer, drops the app under `Program Files` and adds a Start Menu entry.
           releaseDraft: false
           prerelease: false
