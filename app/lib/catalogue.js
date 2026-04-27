@@ -132,9 +132,14 @@ export async function getUnit(slug) {
 // Reshape a getUnit() result into the structured input shapes the sim
 // engine (app/lib/sim/combat.js) expects. `kind` filters the weapons
 // list ('ranged' | 'melee' | 'all').
+// `attachedLeader` (optional) is a full getUnit() result for a leader that
+// has been attached to this unit on the map. Their weapons are appended to
+// the attacker's weapon pool (1 copy each, representing the leader's single
+// model). The defender model count is not affected by the leader attachment
+// (the squad's own model count is passed in separately).
 export function buildSimInputs(unit, opts = {}) {
   if (!unit) return null;
-  const { kind = 'ranged', model_count = 1, attacker_model_count = 1 } = opts;
+  const { kind = 'ranged', model_count = 1, attacker_model_count = 1, attachedLeader = null } = opts;
   const filteredWeapons = (unit.weapons ?? []).filter(w =>
     kind === 'all' ? true : w.kind === kind
   );
@@ -160,6 +165,29 @@ export function buildSimInputs(unit, opts = {}) {
         damage: w.damage,
         abilities: parseKeywords(w.keywords),
       });
+    }
+  }
+  // Append leader weapons — 1 copy per leader model (leaders are typically
+  // single-model; use model_count_default from loadouts if available, else 1).
+  if (attachedLeader) {
+    const leaderModelCount = attachedLeader.loadouts?.[0]?.model_count ?? 1;
+    const leaderWeapons = (attachedLeader.weapons ?? []).filter(w =>
+      kind === 'all' ? true : w.kind === kind
+    );
+    for (const w of leaderWeapons) {
+      for (let i = 0; i < leaderModelCount; i++) {
+        weapons.push({
+          name: w.name,
+          kind: w.kind,
+          range_in: w.range_in,
+          attacks: w.attacks,
+          skill: w.skill,
+          strength: w.strength,
+          ap: w.ap,
+          damage: w.damage,
+          abilities: parseKeywords(w.keywords),
+        });
+      }
     }
   }
   const attacker = { weapons, model_count: attacker_model_count };

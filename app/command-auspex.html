@@ -426,6 +426,23 @@ const rosterCache = new Map();
 let friendlyRosterSlug = null;
 let hostileRosterSlug = null;
 
+// Map<targetSquadSlug, leaderSlug> — single-leader attachments per side.
+// Keyed per side because the same squad slug may exist on both sides if
+// rosters are mirrored (Captain testing his own list).
+const attachments = {
+  defender: new Map(),
+  attacker: new Map(),
+};
+
+function attachedLeaderSlug(side, squadSlug) {
+  return attachments[side]?.get(squadSlug) ?? null;
+}
+
+function setAttachedLeader(side, squadSlug, leaderSlug) {
+  if (leaderSlug) attachments[side].set(squadSlug, leaderSlug);
+  else attachments[side].delete(squadSlug);
+}
+
 // In-memory record of destroyed model indices, keyed by unit slug.
 // Resets on app reload — persistence ships with the user.db scenario layer.
 const destroyedModels = new Map(); // Map<unitSlug, Set<modelIdx>>
@@ -726,7 +743,7 @@ async function loadFromScenario(s) {
       });
     }
   }
-  renderUnits(svg, placements, (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
+  renderUnits(svg, applyAttachmentsToPlacements(placements), (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
   restoreDestroyedVisuals();
 
   // Populate the module-scope caches so hover/click/save all work.
@@ -800,7 +817,7 @@ loadBtn.addEventListener('click', async () => {
     for (const p of placements) {
       lastDatasheets.set(p.unit.name, p.datasheet);
     }
-    renderUnits(svg, placements, (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
+    renderUnits(svg, applyAttachmentsToPlacements(placements), (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
     restoreDestroyedVisuals();
     lastPlacements = placements;
     lastMissionPath = missionSel.value;
@@ -1056,6 +1073,59 @@ function restoreDestroyedVisuals() {
   }
 }
 
+// Pre-processing step: fold attached leaders into their target squad's model
+// list before renderUnits. The standalone leader entry is removed so only the
+// merged cluster appears on the board.
+// Operates on a placements array: [{unit, datasheet, centerIn, role}, ...].
+// Returns a new placements array where attached leaders are folded into their
+// target squad's unit.models, and the leader's own placement is removed.
+function applyAttachmentsToPlacements(placements) {
+  // Build a fast lookup: unitSlug → placement, per side.
+  const bySlugAndSide = new Map(); // `${side}:${slug}` → placement
+  for (const p of placements) {
+    const slug = String(p.unit.datasheet ?? '').split('/').pop();
+    bySlugAndSide.set(`${p.role}:${slug}`, p);
+  }
+  const removedKeys = new Set();
+  const merged = [];
+  for (const p of placements) {
+    const slug = String(p.unit.datasheet ?? '').split('/').pop();
+    const leaderSlug = attachments[p.role]?.get(slug);
+    if (leaderSlug) {
+      const leaderKey = `${p.role}:${leaderSlug}`;
+      const leaderPlacement = bySlugAndSide.get(leaderKey);
+      if (leaderPlacement) {
+        // Merge leader models into this squad's unit.
+        const newUnit = {
+          ...p.unit,
+          models: [...(p.unit.models ?? []), ...(leaderPlacement.unit.models ?? [])],
+          attachedLeader: leaderPlacement.unit,
+        };
+        merged.push({ ...p, unit: newUnit });
+        removedKeys.add(leaderKey);
+        continue;
+      }
+    }
+    merged.push(p);
+  }
+  // Remove any standalone leader placements that were folded in.
+  return merged.filter(p => {
+    const slug = String(p.unit.datasheet ?? '').split('/').pop();
+    return !removedKeys.has(`${p.role}:${slug}`);
+  });
+}
+
+// Re-render the board in-place using the last known placements + current
+// attachment state. Called after the leader dropdown changes.
+function rerenderBoard() {
+  if (!lastPlacements || lastPlacements.length === 0) return;
+  const svg = document.getElementById('board');
+  if (!svg) return;
+  renderUnits(svg, applyAttachmentsToPlacements(lastPlacements), (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
+  restoreDestroyedVisuals();
+  refreshSimPairLine();
+}
+
 // Delegated click on the board: intercept model-circle clicks for destroy toggle.
 boardEl.addEventListener('click', (e) => {
   const target = e.target;
@@ -1235,6 +1305,53 @@ function renderDetailPanel(unit, ds) {
     <hr style="border:none;border-top:1px dashed var(--phosphor-dim);margin:10px 0;">
     <div style="font-size:11px;">${wargearList}</div>
   `;
+  // Append ATTACH LEADER dropdown after wargear list (async — awaits roster cache).
+  renderLeaderControl(unit, ds);
+}
+
+// ATTACH LEADER selector. Appended to the detail panel after the wargear list.
+// Filters to roster-units whose slug is in the squad's led_by array AND who
+// are in the same side's roster.
+async function renderLeaderControl(unit, ds) {
+  const detailEl = document.getElementById('detail-panel');
+  if (!detailEl) return;
+  // Determine slug from the unit's datasheet field or fall back to name-based match.
+  const unitDsField = unit.datasheet ?? '';
+  const slug = unitDsField ? unitDsField.split('/').pop() : '';
+  if (!slug) return;
+  // Fetch the full catalogue unit to get the led_by array.
+  let catalogueUnit = null;
+  try { catalogueUnit = await getUnit(slug); } catch { return; }
+  if (!catalogueUnit) return;
+  const ledBy = (catalogueUnit.led_by ?? []).map(s => String(s).toLowerCase().split('/').pop());
+  if (ledBy.length === 0) return;
+  // Determine which side this squad belongs to by finding its placement.
+  const placement = lastPlacements.find(p => String(p.unit.datasheet ?? '').split('/').pop() === slug);
+  const side = placement?.role ?? 'defender';
+  const sideRosterSlug = side === 'defender' ? friendlyRosterSlug : hostileRosterSlug;
+  const cached = await ensureRosterCached(sideRosterSlug);
+  if (!cached) return;
+  // Build candidate list: units in the same-side roster whose slug is in led_by.
+  const candidates = [];
+  for (const [candSlug, info] of cached.unitsBySlug.entries()) {
+    if (ledBy.includes(candSlug)) candidates.push({ slug: candSlug, name: info.name });
+  }
+  if (candidates.length === 0) return;
+  const current = attachedLeaderSlug(side, slug);
+  const html = `
+    <hr style="border:none;border-top:1px dashed var(--phosphor-dim);margin:10px 0;">
+    <div style="font-size:10px;letter-spacing:1.5px;color:var(--dim);">ATTACH LEADER</div>
+    <select id="attach-leader" class="select" style="margin-left:0;margin-top:4px;width:100%;">
+      <option value="">(none)</option>
+      ${candidates.map(c => `<option value="${c.slug}"${c.slug === current ? ' selected' : ''}>${c.name}</option>`).join('')}
+    </select>
+  `;
+  detailEl.insertAdjacentHTML('beforeend', html);
+  const sel = document.getElementById('attach-leader');
+  sel.addEventListener('change', () => {
+    setAttachedLeader(side, slug, sel.value || null);
+    rerenderBoard();
+  });
 }
 
 // ── Combat sim ────────────────────────────────────────────────────────────────
@@ -1287,7 +1404,13 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       : defenderUnit;
 
     const attackerModels = Math.max(1, parseInt(document.getElementById('sim-attacker-models').value, 10) || 1);
-    const { attacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels });
+    // Check whether the sim attacker has an attached leader on the board.
+    // sim attacker is drawn on the defender-deployment side, so look up
+    // attachments['defender'] for the attacker slug.
+    const attackerSideForAttachment = 'defender';
+    const attackerLeaderSlug = attachedLeaderSlug(attackerSideForAttachment, attackerSlug);
+    const attachedLeaderUnit = attackerLeaderSlug ? await getUnit(attackerLeaderSlug) : null;
+    const { attacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels, attachedLeader: attachedLeaderUnit });
     const { defender } = buildSimInputs(filteredDefender, { kind: 'all', model_count: modelCount });
 
     if (attacker.weapons.length === 0) {

@@ -219,3 +219,9 @@ test('smoke: sim-pair line wiring present', () => {
   assert.match(HTML, /refreshSimPairLine/);
   assert.match(HTML, /sim-pair-line/);
 });
+
+test('smoke: leader attachment wiring present', () => {
+  assert.match(HTML, /attachments = \{[\s\S]*defender: new Map/);
+  assert.match(HTML, /attach-leader/);
+  assert.match(HTML, /attachedLeaderSlug/);
+});
