@@ -610,9 +610,14 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
         text.setAttribute('dominant-baseline', 'central');
         text.setAttribute('font-family', "'JetBrains Mono', monospace");
         text.setAttribute('font-weight', '700');
-        // font-size in inches: letter labels stay tighter at r * 0.55 so
-        // multi-character codes still fit. Lower floor prevents invisible glyphs.
-        const fontSize = Math.max(0.25, r * 0.55);
+        // font-size in inches: single-character role glyphs (e.g. ✠) scale
+        // to match FA icons; multi-character weapon codes stay tighter at
+        // r * 0.55 so 2-3 letter codes still fit. Lower floor prevents
+        // invisible glyphs.
+        const isSingleGlyph = [...label].length === 1;
+        const fontSize = isSingleGlyph
+          ? Math.max(0.4, r * 1.6)
+          : Math.max(0.25, r * 0.55);
         text.setAttribute('font-size', String(fontSize));
         text.setAttribute('fill', 'var(--phosphor)');
         text.setAttribute('pointer-events', 'none');
