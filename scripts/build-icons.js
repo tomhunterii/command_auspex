@@ -21,7 +21,8 @@ const ICONS = [
   'xmark',       // Close Support
   'angle-up',    // Fire Support
   'skull',       // Leader
-  'shield',      // Vehicle / Walker
+  'shield',      // Vehicle (non-walker)
+  'robot',       // Walker (Dreadnoughts, etc.)
   'star',        // Sergeant
   // Veterans use unicode ✠ rendered as <text> — no SVG icon needed.
 ];

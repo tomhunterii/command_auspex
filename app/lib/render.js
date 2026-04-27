@@ -28,7 +28,10 @@ function spaceMarineRoleSymbol(unit) {
   // unit.keywords may be an array of {keyword, ...} or strings — normalize.
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
-  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return 'icon:shield';
+  // Walkers (Dreadnoughts, Ballistus, Redemptor, etc.) — robot. Tested before
+  // VEHICLE because most walkers carry both keywords.
+  if (hasKeyword(kws, 'WALKER')) return 'icon:robot';
+  if (hasKeyword(kws, 'VEHICLE')) return 'icon:shield';
   // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as skull.
   // Tested before veteran so a leader who is also tagged as a veteran unit
   // still reads as leader.
