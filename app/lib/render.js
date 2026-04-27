@@ -589,10 +589,14 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
       text.setAttribute('font-weight', '700');
       // font-size in inches: role symbols fill the base at r * 1.1;
       // letter labels (S, weapon codes) stay tighter at r * 0.55.
+      // Font size scales with base radius — bigger bases get proportionally
+      // bigger glyphs. Role symbols fill the base (×1.1); letter labels stay
+      // tighter (×0.55) so multi-character codes still fit. Lower floor only
+      // prevents tiny bases from rendering invisible glyphs.
       const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠▣]/.test(label);
       const fontSize = isRoleSymbol
-        ? Math.max(0.6, Math.min(1.4, r * 1.1))   // role symbols fill the base
-        : Math.max(0.35, Math.min(0.8, r * 0.55));  // letter labels stay tighter
+        ? Math.max(0.3, r * 1.1)
+        : Math.max(0.25, r * 0.55);
       text.setAttribute('font-size', String(fontSize));
       text.setAttribute('fill', 'var(--phosphor)');
       text.setAttribute('pointer-events', 'none');
