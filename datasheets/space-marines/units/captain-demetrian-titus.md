@@ -1,3 +1,20 @@
+---
+slug: captain-demetrian-titus
+faction: space-marines
+sub_factions: [adeptus-astartes, ultramarines]
+epic_hero: true
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 90
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Ultramarines]
+  unit: [Infantry, Character, Epic Hero, Imperium, Tacticus, Grenades, Captain, Titus]
+led_by: []
+---
+
 # Captain Titus (Captain Demetrian Titus)
 
 **Faction:** Space Marines (Ultramarines)

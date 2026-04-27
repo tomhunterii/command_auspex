@@ -1,3 +1,24 @@
+---
+slug: aggressor-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 110
+    default: true
+  - models: 6
+    points: 190
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Gravis, Aggressor Squad]
+led_by:
+  - captain-in-gravis-armour
+  - apothecary-biologis
+---
+
 # Aggressor Squad
 
 **Faction:** Space Marines (Adeptus Astartes)

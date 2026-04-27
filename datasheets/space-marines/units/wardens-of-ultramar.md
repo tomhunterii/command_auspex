@@ -1,3 +1,20 @@
+---
+slug: wardens-of-ultramar
+faction: space-marines
+sub_factions: [adeptus-astartes, ultramarines]
+epic_hero: true
+battleline: false
+is_character: false
+loadouts:
+  - models: 6
+    points: 90
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Ultramarines]
+  unit: [Infantry, Epic Hero, Grenades, Imperium, Tacticus, Wardens of Ultramar]
+led_by: []
+---
+
 # Wardens of Ultramar
 
 **Faction:** Space Marines (Ultramarines)

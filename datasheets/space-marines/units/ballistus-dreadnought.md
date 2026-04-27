@@ -1,3 +1,20 @@
+---
+slug: ballistus-dreadnought
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 150
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Vehicle, Walker, Dreadnought, Ballistus Dreadnought]
+led_by: []
+---
+
 # Ballistus Dreadnought
 
 **Faction:** Space Marines (Adeptus Astartes)
