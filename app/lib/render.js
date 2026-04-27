@@ -166,9 +166,13 @@ export function renderUnits(svg, placements, onDragEnd) {
 
 export function makeUnitDraggable(group, onDragEnd) {
   let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  // Track whether the pointer moved enough to be considered a drag.
+  // The model-circle click handler reads group.__dragged to skip toggle on drag-end.
+  group.__dragged = false;
   group.style.cursor = 'grab';
   group.addEventListener('mousedown', (e) => {
     dragging = true;
+    group.__dragged = false;
     sx = e.clientX; sy = e.clientY;
     const transform = group.transform.baseVal.consolidate();
     [ox, oy] = transform ? [transform.matrix.e, transform.matrix.f] : [0, 0];
@@ -178,6 +182,7 @@ export function makeUnitDraggable(group, onDragEnd) {
   window.addEventListener('mousemove', (e) => {
     if (!dragging) return;
     const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.hypot(dx, dy) > 5) group.__dragged = true;
     group.setAttribute('transform', `translate(${ox + dx}, ${oy + dy})`);
   });
   window.addEventListener('mouseup', (e) => {
@@ -186,6 +191,9 @@ export function makeUnitDraggable(group, onDragEnd) {
     group.style.cursor = 'grab';
     const transform = group.transform.baseVal.consolidate();
     onDragEnd?.(transform ? [transform.matrix.e, transform.matrix.f] : [0, 0]);
+    // Reset the drag flag after a short delay so the click event (which fires
+    // after mouseup) can still read it before we clear it.
+    setTimeout(() => { group.__dragged = false; }, 50);
   });
 }
 
@@ -224,6 +232,12 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
   group.setAttribute('class', `unit unit-${role}`);
   group.dataset.unitName = unit.name;
 
+  // Derive bare slug (e.g. 'aggressor-squad') from the datasheet field
+  // ('space-marines/aggressor-squad') so it matches the unitsBySlug cache key.
+  const rawDs = unit.datasheet ?? '';
+  const unitSlug = rawDs.includes('/') ? rawDs.split('/').pop() : rawDs;
+  group.dataset.unitSlug = unitSlug;
+
   const defaultMm = datasheet?.base?.diameter_mm ?? 32;
   const perModel = datasheet?.base?.per_model ?? null;
 
@@ -254,6 +268,9 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     circle.setAttribute('fill', fill);
     circle.setAttribute('stroke', color);
     circle.setAttribute('stroke-width', isSergeant ? 2 : 1);
+    circle.classList.add('model-circle');
+    circle.dataset.unitSlug = unitSlug;
+    circle.dataset.modelIdx = String(i);
     group.appendChild(circle);
   });
 

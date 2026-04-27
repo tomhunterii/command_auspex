@@ -250,6 +250,14 @@
   .reticle-bl { bottom: 6px; left: 6px; }
   .reticle-br { bottom: 6px; right: 6px; }
 
+  /* Destroyed model visual — applied by click-to-destroy handler. */
+  .model-circle.destroyed {
+    opacity: 0.35;
+    stroke: var(--hostile);
+    stroke-width: 2;
+    stroke-dasharray: 3 2;
+  }
+
   .boot-overlay {
     position: fixed;
     inset: 0;
@@ -410,6 +418,24 @@ let autoSaveTimer = null;
 const rosterCache = new Map();
 let friendlyRosterSlug = null;
 let hostileRosterSlug = null;
+
+// In-memory record of destroyed model indices, keyed by unit slug.
+// Resets on app reload — persistence ships with the user.db scenario layer.
+const destroyedModels = new Map(); // Map<unitSlug, Set<modelIdx>>
+
+function isDestroyed(unitSlug, modelIdx) {
+  return !!destroyedModels.get(unitSlug)?.has(modelIdx);
+}
+
+function toggleDestroyed(unitSlug, modelIdx) {
+  let set = destroyedModels.get(unitSlug);
+  if (!set) { set = new Set(); destroyedModels.set(unitSlug, set); }
+  if (set.has(modelIdx)) set.delete(modelIdx); else set.add(modelIdx);
+}
+
+function destroyedCountFor(unitSlug) {
+  return destroyedModels.get(unitSlug)?.size ?? 0;
+}
 
 
 async function ensureRosterCached(rosterSlug) {
@@ -629,13 +655,15 @@ attackerSel.addEventListener('change', async () => {
 });
 
 // Auto-populate model count inputs from the roster when a sim unit is selected.
+// Subtracts any destroyed models from the live count.
 async function defaultModelCountFor(selectEl, rosterSlug, modelInputId) {
   const slug = selectEl.value;
   if (!slug || !rosterSlug) return;
   const cached = await ensureRosterCached(rosterSlug);
   const u = cached?.unitsBySlug?.get(slug);
   if (!u || !u.totalModels) return;
-  document.getElementById(modelInputId).value = u.totalModels;
+  const live = Math.max(1, u.totalModels - destroyedCountFor(slug));
+  document.getElementById(modelInputId).value = live;
 }
 
 document.getElementById('sim-attacker').addEventListener('change', () =>
@@ -688,6 +716,7 @@ async function loadFromScenario(s) {
     }
   }
   renderUnits(svg, placements, scheduleAutoSave);
+  restoreDestroyedVisuals();
   renderThreatRanges(svg, placements);
 
   // Populate the module-scope caches so hover/click/save all work.
@@ -762,6 +791,7 @@ loadBtn.addEventListener('click', async () => {
       lastDatasheets.set(p.unit.name, p.datasheet);
     }
     renderUnits(svg, placements, scheduleAutoSave);
+    restoreDestroyedVisuals();
     renderThreatRanges(svg, placements);
     lastPlacements = placements;
     lastMissionPath = missionSel.value;
@@ -818,6 +848,85 @@ boardEl.addEventListener('mouseout', (e) => {
   const group = e.target.closest('.unit');
   if (!group) return;
   tooltipEl.classList.remove('show');
+});
+
+// --- Click-to-destroy: model circles ---
+
+function applyDestroyedVisual(circle, destroyed) {
+  circle.classList.toggle('destroyed', destroyed);
+  const parent = circle.parentNode;
+  if (!parent) return;
+  const idx = circle.dataset.modelIdx;
+  const existingX = parent.querySelector(`[data-x-for="${idx}"]`);
+  if (destroyed) {
+    if (existingX) return;
+    const cx = parseFloat(circle.getAttribute('cx'));
+    const cy = parseFloat(circle.getAttribute('cy'));
+    const r  = parseFloat(circle.getAttribute('r'));
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('data-x-for', idx);
+    g.setAttribute('pointer-events', 'none');
+    const mkLine = (x1, y1, x2, y2) => {
+      const ln = document.createElementNS(SVG_NS, 'line');
+      ln.setAttribute('x1', String(x1)); ln.setAttribute('y1', String(y1));
+      ln.setAttribute('x2', String(x2)); ln.setAttribute('y2', String(y2));
+      ln.setAttribute('stroke', 'var(--hostile)');
+      ln.setAttribute('stroke-width', '2');
+      ln.setAttribute('stroke-linecap', 'round');
+      return ln;
+    };
+    const off = r * 0.7;
+    g.appendChild(mkLine(cx - off, cy - off, cx + off, cy + off));
+    g.appendChild(mkLine(cx + off, cy - off, cx - off, cy + off));
+    parent.appendChild(g);
+  } else if (existingX) {
+    parent.removeChild(existingX);
+  }
+}
+
+async function refreshSimModelCountsFor(unitSlug) {
+  const simAttacker = document.getElementById('sim-attacker');
+  const simDefender = document.getElementById('sim-defender');
+  if (simAttacker?.value === unitSlug) {
+    const cached = await ensureRosterCached(friendlyRosterSlug);
+    const total = cached?.unitsBySlug?.get(unitSlug)?.totalModels ?? 1;
+    const live = Math.max(1, total - destroyedCountFor(unitSlug));
+    document.getElementById('sim-attacker-models').value = live;
+  }
+  if (simDefender?.value === unitSlug) {
+    const cached = await ensureRosterCached(hostileRosterSlug);
+    const total = cached?.unitsBySlug?.get(unitSlug)?.totalModels ?? 1;
+    const live = Math.max(1, total - destroyedCountFor(unitSlug));
+    document.getElementById('sim-models').value = live;
+  }
+}
+
+function restoreDestroyedVisuals() {
+  const el = document.getElementById('board');
+  if (!el) return;
+  for (const [unitSlug, set] of destroyedModels.entries()) {
+    for (const idx of set) {
+      const circle = el.querySelector(`circle.model-circle[data-unit-slug="${CSS.escape(unitSlug)}"][data-model-idx="${idx}"]`);
+      if (circle) applyDestroyedVisual(circle, true);
+    }
+  }
+}
+
+// Delegated click on the board: intercept model-circle clicks for destroy toggle.
+boardEl.addEventListener('click', (e) => {
+  const target = e.target;
+  if (!(target instanceof SVGElement) || !target.classList.contains('model-circle')) return;
+  const unitSlug = target.dataset.unitSlug;
+  const modelIdx = parseInt(target.dataset.modelIdx, 10);
+  if (!unitSlug || Number.isNaN(modelIdx)) return;
+  // If the parent group was dragged, skip the toggle — pointer moved, not a tap.
+  const group = target.closest('.unit');
+  if (group?.__dragged) return;
+  e.stopPropagation();
+  toggleDestroyed(unitSlug, modelIdx);
+  applyDestroyedVisual(target, isDestroyed(unitSlug, modelIdx));
+  refreshSimModelCountsFor(unitSlug);
 });
 
 boardEl.addEventListener('click', (e) => {

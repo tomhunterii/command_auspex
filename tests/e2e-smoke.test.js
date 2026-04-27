@@ -144,6 +144,16 @@ test('smoke: combat sim wired — simulate import + click handler + buildSimInpu
   assert.match(HTML, /getElementById\(['"]sim-run['"]\)\.addEventListener/);
 });
 
+test('smoke: model click-to-destroy + sim model-count refresh wired', () => {
+  assert.match(HTML, /destroyedModels = new Map/);
+  assert.match(HTML, /toggleDestroyed/);
+  assert.match(HTML, /destroyedCountFor/);
+  assert.match(HTML, /applyDestroyedVisual/);
+  assert.match(HTML, /classList\.contains\(['"]model-circle['"]\)/);
+  assert.match(HTML, /refreshSimModelCountsFor/);
+  assert.match(HTML, /restoreDestroyedVisuals/);
+});
+
 test('smoke: native menu listener wired (Tauri-only path present)', () => {
   assert.match(HTML, /listen\(['"]menu-action['"]/,
     'menu-action listener missing');
