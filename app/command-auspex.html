@@ -405,7 +405,10 @@ document.getElementById('pick-repo').addEventListener('click', async () => {
     statusEl.textContent = `COGITATOR LINK ESTABLISHED · REPOSITORY ${repoHandle.name} · ${kept} ROSTER${kept === 1 ? '' : 'S'} RECOGNIZED${tail}`;
     window.__repoHandle = () => repoHandle;
   } catch (err) {
-    if (err.name !== 'AbortError') statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
+    if (err && err.name === 'AbortError') return;
+    console.error('CONNECT REPO failed:', err);
+    const msg = (err && err.message) || (typeof err === 'string' ? err : JSON.stringify(err));
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${msg}`;
   }
 });
 

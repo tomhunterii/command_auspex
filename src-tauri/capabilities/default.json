@@ -7,15 +7,42 @@
     "core:default",
     "core:window:default",
     "fs:default",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file",
-    "fs:allow-read-dir",
-    "fs:allow-mkdir",
-    "fs:allow-exists",
     {
-      "identifier": "fs:scope",
+      "identifier": "fs:allow-read-text-file",
       "allow": [
         { "path": "$RESOURCE/**" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [
+        { "path": "$RESOURCE" },
+        { "path": "$RESOURCE/**" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        { "path": "$RESOURCE/**" },
+        { "path": "$APPDATA" },
         { "path": "$APPDATA/**" }
       ]
     },
