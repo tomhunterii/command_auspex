@@ -1,6 +1,6 @@
 {
   "name": "warhammer-40k",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Command Auspex — list-building battle simulator",
   "main": "index.js",
   "directories": {
@@ -11,6 +11,7 @@
     "test": "node --test",
     "build:catalogue": "node scripts/build-catalogue.js",
     "build:icons": "node scripts/build-icons.js",
+    "tauri": "tauri",
     "tauri:dev": "npm run build:icons && tauri dev",
     "tauri:build": "npm run build:catalogue && npm run build:icons && tauri build"
   },
