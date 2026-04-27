@@ -28,12 +28,12 @@ function spaceMarineRoleSymbol(unit) {
   // unit.keywords may be an array of {keyword, ...} or strings — normalize.
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
-  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return null;
-  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) {
-    // Characters that aren't the named veteran units are command.
-    // (Wardens of Ultramar are EPIC HERO + Veteran — fall through to veteran below.)
-    return '✠';
-  }
+  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return '▣'; // tank/armor turret-view glyph
+  // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders all read as
+  // skull. Same glyph as veteran units (Sternguard, Wardens) — both classes
+  // are venerable / named-elite and share the visual language. Bracket+name
+  // disambiguates which is which.
+  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO')) return '☠';
   if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '☠';
   if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '✕';
   if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '◀';
@@ -107,18 +107,19 @@ function abbreviateWeapon(name) {
  */
 export function modelLabel(submodel, unitMeta) {
   // unitMeta: { totalUnitModels, unit? }
-  if (unitMeta.totalUnitModels <= 1) return '';
-  // Sergeant detection by submodel name first.
+  // Sergeant detection by submodel name first — overrides role symbol.
   const subName = (submodel.submodel ?? '').toLowerCase();
   if (subName.includes('sergeant') || subName.includes('sgt')) return 'S';
-  // Try Space Marine role symbol next.
+  // Space Marine role symbol — applies to single-model units (vehicles,
+  // characters) too, so a lone Ballistus Dreadnought reads as ▣ and a
+  // standalone Captain reads as ✠.
   const roleSymbol = spaceMarineRoleSymbol(unitMeta.unit);
   if (roleSymbol) return roleSymbol;
-  // Fall back to weapon-system letter (existing logic).
-  // The submodel's wargear list is the source.
-  // The roster's frontmatter shape: wargear: [{ count, item }].
+  // Single-model units without a role symbol stay clean (no clutter on a
+  // lone vehicle / character / monster from a faction we don't classify).
+  if (unitMeta.totalUnitModels <= 1) return '';
+  // Fall back to weapon-system letter for multi-model non-SM squads.
   const wargear = submodel.wargear ?? submodel.weapons ?? [];
-  // Find the first non-sidearm wargear item.
   const primary = wargear.find(w => {
     const item = typeof w === 'string' ? w : (w.item ?? w.name ?? '');
     return !isSidearm(item);
