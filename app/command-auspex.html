@@ -1028,19 +1028,32 @@ function applyDestroyedVisual(circle, destroyed) {
   }
 }
 
+// Compute live model count = roster.totalModels − destroyed + (attached
+// leader's totalModels − leader's destroyed). Mirrors defaultModelCountFor.
+async function liveModelCountFor(unitSlug, side, rosterSlug) {
+  const cached = await ensureRosterCached(rosterSlug);
+  const u = cached?.unitsBySlug?.get(unitSlug);
+  if (!u) return 1;
+  let live = Math.max(0, (u.totalModels ?? 1) - destroyedCountFor(unitSlug));
+  const leaderSlug = attachedLeaderSlug(side, unitSlug);
+  if (leaderSlug) {
+    const leaderInfo = cached?.unitsBySlug?.get(leaderSlug);
+    if (leaderInfo?.totalModels) {
+      live += Math.max(0, leaderInfo.totalModels - destroyedCountFor(leaderSlug));
+    }
+  }
+  return Math.max(1, live);
+}
+
 async function refreshSimModelCountsFor(unitSlug) {
   const simAttacker = document.getElementById('sim-attacker');
   const simDefender = document.getElementById('sim-defender');
   if (simAttacker?.value === unitSlug) {
-    const cached = await ensureRosterCached(friendlyRosterSlug);
-    const total = cached?.unitsBySlug?.get(unitSlug)?.totalModels ?? 1;
-    const live = Math.max(1, total - destroyedCountFor(unitSlug));
+    const live = await liveModelCountFor(unitSlug, 'defender', friendlyRosterSlug);
     document.getElementById('sim-attacker-models').value = live;
   }
   if (simDefender?.value === unitSlug) {
-    const cached = await ensureRosterCached(hostileRosterSlug);
-    const total = cached?.unitsBySlug?.get(unitSlug)?.totalModels ?? 1;
-    const live = Math.max(1, total - destroyedCountFor(unitSlug));
+    const live = await liveModelCountFor(unitSlug, 'attacker', hostileRosterSlug);
     document.getElementById('sim-models').value = live;
   }
 }
