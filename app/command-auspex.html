@@ -587,22 +587,50 @@ async function loadCatalogueAndPopulate() {
           ? (await ensureRosterCached(friendlyRosterSlug))?.unitsBySlug?.get(slug)
           : null;
         const equipped = attackerInRoster?.equippedWeapons;
+        const filterByEquipped = (weapons, eq) => weapons.filter(w =>
+          eq.has(String(w.name).toLowerCase().trim()) ||
+          [...eq].some(e => String(w.name).toLowerCase().includes(e) || e.includes(String(w.name).toLowerCase()))
+        );
         const displayUnit = equipped && equipped.size > 0
-          ? { ...unit, weapons: unit.weapons.filter(w =>
-              equipped.has(String(w.name).toLowerCase().trim()) ||
-              [...equipped].some(e => String(w.name).toLowerCase().includes(e) || e.includes(String(w.name).toLowerCase()))
-            ) }
+          ? { ...unit, weapons: filterByEquipped(unit.weapons, equipped) }
           : unit;
+
+        // Leader merge: if the squad has an attached leader, show the leader's
+        // weapons in their own section so the Captain sees what's hitting.
+        const leaderSlug = attachedLeaderSlug('defender', slug);
+        let leaderUnit = null;
+        let leaderWeapons = [];
+        if (leaderSlug) {
+          leaderUnit = await getUnit(leaderSlug);
+          if (leaderUnit) {
+            const leaderInRoster = friendlyRosterSlug
+              ? (await ensureRosterCached(friendlyRosterSlug))?.unitsBySlug?.get(leaderSlug)
+              : null;
+            const leaderEquipped = leaderInRoster?.equippedWeapons;
+            leaderWeapons = leaderEquipped && leaderEquipped.size > 0
+              ? filterByEquipped(leaderUnit.weapons, leaderEquipped)
+              : leaderUnit.weapons;
+          }
+        }
 
         const filterBadge = equipped && equipped.size > 0
           ? `<div style="color:var(--amber); font-size:9px; letter-spacing:1.5px; margin-bottom:4px;">&#9881; FROM ROSTER &middot; ${equipped.size} EQUIPPED</div>`
           : '';
+        const leaderBadge = leaderUnit
+          ? `<div style="color:var(--amber); font-size:9px; letter-spacing:1.5px; margin-bottom:4px;">+ LEADER &middot; ${leaderUnit.name.toUpperCase()}</div>`
+          : '';
 
         const ranged = displayUnit.weapons.filter(w => w.kind === 'ranged');
         const melee = displayUnit.weapons.filter(w => w.kind === 'melee');
+        const leaderRanged = leaderWeapons.filter(w => w.kind === 'ranged');
+        const leaderMelee  = leaderWeapons.filter(w => w.kind === 'melee');
         const groups = [];
         if (kind === 'ranged' || kind === 'all') groups.push(['RANGED', ranged]);
         if (kind === 'melee'  || kind === 'all') groups.push(['MELEE',  melee]);
+        if (leaderUnit) {
+          if (kind === 'ranged' || kind === 'all') groups.push([`LEADER RANGED (${leaderUnit.name.toUpperCase()})`, leaderRanged]);
+          if (kind === 'melee'  || kind === 'all') groups.push([`LEADER MELEE (${leaderUnit.name.toUpperCase()})`, leaderMelee]);
+        }
 
         const fmtRow = (w) => {
           const range = w.kind === 'melee' ? 'Melee' : `${w.range_in}"`;
@@ -633,9 +661,9 @@ async function loadCatalogueAndPopulate() {
           `).join('');
 
         if (sections === '') {
-          detailEl.innerHTML = filterBadge + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
+          detailEl.innerHTML = filterBadge + leaderBadge + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
         } else {
-          detailEl.innerHTML = filterBadge + sections;
+          detailEl.innerHTML = filterBadge + leaderBadge + sections;
         }
         detailEl.style.display = 'block';
       } catch (err) {
@@ -680,13 +708,22 @@ attackerSel.addEventListener('change', async () => {
 
 // Auto-populate model count inputs from the roster when a sim unit is selected.
 // Subtracts any destroyed models from the live count.
-async function defaultModelCountFor(selectEl, rosterSlug, modelInputId) {
+async function defaultModelCountFor(selectEl, rosterSlug, modelInputId, side = 'defender') {
   const slug = selectEl.value;
   if (!slug || !rosterSlug) return;
   const cached = await ensureRosterCached(rosterSlug);
   const u = cached?.unitsBySlug?.get(slug);
   if (!u || !u.totalModels) return;
-  const live = Math.max(1, u.totalModels - destroyedCountFor(slug));
+  let live = Math.max(1, u.totalModels - destroyedCountFor(slug));
+  // Add attached leader's model count (if any).
+  const leaderSlug = attachedLeaderSlug(side, slug);
+  if (leaderSlug) {
+    const leaderInfo = cached?.unitsBySlug?.get(leaderSlug);
+    if (leaderInfo?.totalModels) {
+      const leaderLive = Math.max(0, leaderInfo.totalModels - destroyedCountFor(leaderSlug));
+      live += leaderLive;
+    }
+  }
   document.getElementById(modelInputId).value = live;
 }
 
@@ -1348,9 +1385,20 @@ async function renderLeaderControl(unit, ds) {
   `;
   detailEl.insertAdjacentHTML('beforeend', html);
   const sel = document.getElementById('attach-leader');
-  sel.addEventListener('change', () => {
+  sel.addEventListener('change', async () => {
     setAttachedLeader(side, slug, sel.value || null);
     rerenderBoard();
+    // If this squad is the active sim attacker, refresh the COMBAT AUSPEX
+    // panel so the leader's weapons + model count appear immediately.
+    const simAttackerEl = document.getElementById('sim-attacker');
+    const simDefenderEl = document.getElementById('sim-defender');
+    if (simAttackerEl?.value === slug) {
+      await defaultModelCountFor(simAttackerEl, friendlyRosterSlug, 'sim-attacker-models', 'defender');
+      await refreshWeaponDetail();
+    }
+    if (simDefenderEl?.value === slug) {
+      await defaultModelCountFor(simDefenderEl, hostileRosterSlug, 'sim-models', 'attacker');
+    }
   });
 }
 
