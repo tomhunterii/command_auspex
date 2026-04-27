@@ -30,9 +30,9 @@ function spaceMarineRoleSymbol(unit) {
   if (!isSpaceMarine(kws)) return null;
   if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return '▣'; // tank/armor turret-view glyph
   // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as
-  // skull (commander's marker). Tested before veteran so a leader who is
-  // also tagged as a veteran unit (rare) still reads as leader.
-  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '☠';
+  // fleur-de-lis (heraldic command marker). Tested before veteran so a
+  // leader who is also tagged as a veteran unit still reads as leader.
+  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '⚜';
   // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans)
   // — venerable ceremonial cross.
   if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '✠';
@@ -593,7 +593,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
       // bigger glyphs. Role symbols fill the base (×1.1); letter labels stay
       // tighter (×0.55) so multi-character codes still fit. Lower floor only
       // prevents tiny bases from rendering invisible glyphs.
-      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠▣★]/.test(label);
+      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠▣★⚜]/.test(label);
       const fontSize = isRoleSymbol
         ? Math.max(0.3, r * 1.1)
         : Math.max(0.25, r * 0.55);
