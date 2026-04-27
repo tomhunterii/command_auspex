@@ -4,6 +4,9 @@
 // Implements the core resolution chain plus first-pass keyword effects:
 // Lethal Hits, Sustained Hits N, Devastating Wounds, Twin-linked, Anti-X N+.
 //
+// Pass C-1: unit-level modifier surface via attacker.modifiers / defender.modifiers.
+// When absent, behaviour is unchanged (full backwards compatibility).
+//
 // Pure-functional: takes structured input, returns a distribution. No
 // side effects, no DB access, no DOM.
 
@@ -33,25 +36,57 @@ function woundThresholdFromTable(strength, toughness) {
   return 5;
 }
 
-function effectiveSave(armorPlus, ap, invulnPlus) {
-  // ap is a non-positive integer; AP -2 means modifiedArmor = armor + 2.
-  const modifiedArmor = armorPlus - ap;
+// Roll once; re-roll if policy demands it. Returns { roll, passed }.
+// Used for both hit and wound re-rolls.
+function rollAndMaybeReroll(threshold, rng, rerollPolicy) {
+  let roll = D6(rng);
+  if (passesRoll(roll, threshold)) return { roll, passed: true };
+  if (rerollPolicy === 'all' || (rerollPolicy === 'ones' && roll === 1)) {
+    roll = D6(rng);
+  }
+  return { roll, passed: passesRoll(roll, threshold) };
+}
+
+function effectiveSave(armorPlus, ap, invulnPlus, defenderMods) {
+  let modifiedArmor = armorPlus - ap;
+  if (defenderMods?.cover) {
+    modifiedArmor -= 1;
+    // Cover cap: cannot improve armor beyond 3+.
+    if (modifiedArmor < 3) modifiedArmor = 3;
+  }
   const candidates = [modifiedArmor];
   if (invulnPlus !== null && invulnPlus !== undefined) candidates.push(invulnPlus);
   return Math.min(...candidates);
 }
 
-function chooseWoundThreshold(weapon, defender) {
+function chooseWoundThreshold(weapon, defender, attackerMods) {
   const tableThresh = woundThresholdFromTable(weapon.strength, defender.toughness);
   const anti = weapon.abilities?.anti;
-  if (!Array.isArray(anti) || anti.length === 0) return tableThresh;
-  const defKw = (defender.keywords ?? []).map(k => String(k).toUpperCase());
-  const matchingAnti = anti.filter(a => defKw.includes(String(a.target_keyword).toUpperCase()));
-  if (matchingAnti.length === 0) return tableThresh;
-  // Take the best Anti-X threshold the defender qualifies for.
-  const bestAnti = Math.min(...matchingAnti.map(a => a.threshold));
-  // Anti-X is a replacement threshold — only use it when it is better (lower number).
-  return Math.min(tableThresh, bestAnti);
+  let baseThresh;
+  if (Array.isArray(anti) && anti.length > 0) {
+    const defKw = (defender.keywords ?? []).map(k => String(k).toUpperCase());
+    const matchingAnti = anti.filter(a => defKw.includes(String(a.target_keyword).toUpperCase()));
+    if (matchingAnti.length > 0) {
+      const bestAnti = Math.min(...matchingAnti.map(a => a.threshold));
+      baseThresh = Math.min(tableThresh, bestAnti);
+    } else baseThresh = tableThresh;
+  } else baseThresh = tableThresh;
+
+  if (attackerMods?.plus_one_to_wound) baseThresh -= 1;
+  if (baseThresh < 2) baseThresh = 2;
+  if (baseThresh > 6) baseThresh = 6;
+  return baseThresh;
+}
+
+// Apply Feel No Pain per damage point. Returns surviving damage count.
+function applyFnp(damage, fnpThreshold, rng) {
+  if (!fnpThreshold || damage <= 0) return damage;
+  let surviving = 0;
+  for (let i = 0; i < damage; i++) {
+    const r = D6(rng);
+    if (!passesRoll(r, fnpThreshold)) surviving += 1;
+  }
+  return surviving;
 }
 
 // Resolves a single attack that has already been determined to be a hit.
@@ -60,27 +95,40 @@ function chooseWoundThreshold(weapon, defender) {
 // autoWound: true when Lethal Hits triggered — skip the wound roll entirely.
 // Devastating Wounds CANNOT trigger from auto-wounds (no wound roll → no nat-6
 // wound roll to detect).
-function resolvePostHit(weapon, defender, rng, autoWound) {
+function resolvePostHit(weapon, defender, rng, autoWound, attackerMods, defenderMods) {
   const ab = weapon.abilities ?? {};
 
   if (!autoWound) {
     const tl = !!ab.twin_linked;
     const dev = !!ab.devastating_wounds;
-    const woundT = chooseWoundThreshold(weapon, defender);
+    const woundT = chooseWoundThreshold(weapon, defender, attackerMods);
 
-    let woundRoll = D6(rng);
-    let succeeded = passesRoll(woundRoll, woundT);
-    if (!succeeded && tl) {
-      // Twin-linked: re-roll a failed wound once. Re-rolled die becomes the wound roll.
+    let woundRoll;
+    let succeeded;
+
+    if (tl) {
+      // Twin-linked: re-roll a failed wound once. TL takes precedence — skip
+      // the modifier re-roll so we don't double-dip.
       woundRoll = D6(rng);
       succeeded = passesRoll(woundRoll, woundT);
+      if (!succeeded) {
+        woundRoll = D6(rng);
+        succeeded = passesRoll(woundRoll, woundT);
+      }
+    } else {
+      // Standard wound roll, with optional modifier re-roll.
+      const result = rollAndMaybeReroll(woundT, rng, attackerMods?.reroll_wounds ?? null);
+      woundRoll = result.roll;
+      succeeded = result.passed;
     }
+
     if (!succeeded) return { damage: 0, mortal: 0 };
 
     // Devastating Wounds — only on UNMODIFIED nat-6 wound roll.
     if (dev && woundRoll === 6) {
-      const dmg = parseDice(String(weapon.damage ?? '1'))(rng);
-      return { damage: 0, mortal: dmg };
+      const rawDmg = parseDice(String(weapon.damage ?? '1'))(rng);
+      const mortal = applyFnp(rawDmg, defenderMods?.fnp ?? null, rng);
+      return { damage: 0, mortal };
     }
   }
 
@@ -89,11 +137,12 @@ function resolvePostHit(weapon, defender, rng, autoWound) {
   const invuln = (defender.invulnerable !== undefined && defender.invulnerable !== null)
     ? parseSkill(defender.invulnerable)
     : null;
-  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln);
+  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln, defenderMods);
   const saveRoll = D6(rng);
   if (passesRoll(saveRoll, save)) return { damage: 0, mortal: 0 };
 
-  const woundDamage = parseDice(String(weapon.damage ?? '1'))(rng);
+  const rawDmg = parseDice(String(weapon.damage ?? '1'))(rng);
+  const woundDamage = applyFnp(rawDmg, defenderMods?.fnp ?? null, rng);
   return { damage: woundDamage, mortal: 0 };
 }
 
@@ -108,31 +157,32 @@ function rollAttacksCount(weapon, defender, context, rng) {
   return count;
 }
 
-function effectiveHitThreshold(weapon, context) {
+function effectiveHitThreshold(weapon, context, attackerMods) {
   const base = parseSkill(weapon.skill);
   if (base === null) return null;
-  let threshold = base;
-  if (weapon.abilities?.heavy && context?.attacker_stationary) threshold -= 1;
-  // 10th-edition modifier cap: cannot improve to better than 2+ via Heavy.
-  if (threshold < 2) threshold = 2;
-  if (threshold > 6) threshold = 6;
-  return threshold;
+  let t = base;
+  if (weapon.abilities?.heavy && context?.attacker_stationary) t -= 1;
+  if (attackerMods?.plus_one_to_hit) t -= 1;
+  // 10th-edition modifier cap: cannot improve to better than 2+.
+  if (t < 2) t = 2;
+  if (t > 6) t = 6;
+  return t;
 }
 
 // Resolve one attack roll. Returns an array of post-hit result objects
 // (length ≥ 1 because Sustained Hits can generate extra hits from a single
 // attack roll).
-function resolveOneAttack(weapon, defender, rng, context) {
-  const skill = effectiveHitThreshold(weapon, context);
+function resolveOneAttack(weapon, defender, rng, context, attackerMods, defenderMods) {
+  const skill = effectiveHitThreshold(weapon, context, attackerMods);
   const ab = weapon.abilities ?? {};
 
   // Auto-hit case (Torrent / N/A skill): single hit, no nat-6 hit triggers.
   if (skill === null) {
-    return [resolvePostHit(weapon, defender, rng, false)];
+    return [resolvePostHit(weapon, defender, rng, false, attackerMods, defenderMods)];
   }
 
-  const hitRoll = D6(rng);
-  if (!passesRoll(hitRoll, skill)) return [{ damage: 0, mortal: 0 }];
+  const { roll: hitRoll, passed: hit } = rollAndMaybeReroll(skill, rng, attackerMods?.reroll_hits ?? null);
+  if (!hit) return [{ damage: 0, mortal: 0 }];
 
   const isCrit = (hitRoll === 6);
   const lethalAuto = isCrit && !!ab.lethal_hits;
@@ -140,12 +190,12 @@ function resolveOneAttack(weapon, defender, rng, context) {
 
   const out = [];
   // The primary hit (potentially auto-wounded by Lethal Hits).
-  out.push(resolvePostHit(weapon, defender, rng, lethalAuto));
+  out.push(resolvePostHit(weapon, defender, rng, lethalAuto, attackerMods, defenderMods));
   // Sustained Hits extras — these are additional hits that proceed to the
   // wound roll normally. They do NOT carry nat-6 hit properties (to prevent
   // infinite recursion and per 10th ed rules).
   for (let i = 0; i < sustainedExtras; i++) {
-    out.push(resolvePostHit(weapon, defender, rng, false));
+    out.push(resolvePostHit(weapon, defender, rng, false, attackerMods, defenderMods));
   }
   return out;
 }
@@ -175,6 +225,8 @@ function rollHazardousSelfDamage(attacker, rng) {
 }
 
 function runOneTrial(attacker, defender, context, rng) {
+  const attackerMods = attacker.modifiers ?? null;
+  const defenderMods = defender.modifiers ?? null;
   const state = {
     modelsRemaining: defender.model_count,
     currentModelWounds: defender.wounds_per_model,
@@ -184,7 +236,7 @@ function runOneTrial(attacker, defender, context, rng) {
     const attackCount = rollAttacksCount(weapon, defender, context, rng);
     for (let i = 0; i < attackCount; i++) {
       if (state.modelsRemaining <= 0) break;
-      const results = resolveOneAttack(weapon, defender, rng, context);
+      const results = resolveOneAttack(weapon, defender, rng, context, attackerMods, defenderMods);
       for (const r of results) {
         applyDamageToDefender(state, r, defender);
         if (state.modelsRemaining <= 0) break;
