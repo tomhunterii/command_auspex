@@ -1126,7 +1126,9 @@ function applyDestroyedVisual(circle, destroyed) {
   // Retint the label text if present.
   // Query both <text> and <use> model-label elements (icon sprites use <use>).
   const lbl = parent.querySelector(`.model-label[data-model-idx="${idx}"]`);
-  if (lbl) lbl.setAttribute('fill', destroyed ? 'var(--hostile)' : 'var(--phosphor)');
+  const isAttacker = parent.dataset.side === 'attacker';
+  const aliveColor = isAttacker ? 'var(--hostile)' : 'var(--phosphor)';
+  if (lbl) lbl.setAttribute('fill', destroyed ? 'var(--hostile)' : aliveColor);
   const existingX = parent.querySelector(`[data-x-for="${idx}"]`);
   if (destroyed) {
     if (existingX) return;

@@ -511,6 +511,7 @@ export function renderThreatRanges(svg, placements) {
 function renderUnit({ unit, datasheet, centerIn, role }) {
   const color = role === 'attacker' ? '#ff5d6c' : '#6fff8e';
   const fill  = role === 'attacker' ? 'rgba(255,93,108,0.6)' : 'rgba(111,255,142,0.55)';
+  const labelColor = role === 'attacker' ? 'var(--hostile)' : 'var(--phosphor)';
 
   const group = document.createElementNS(SVG_NS, 'g');
   group.setAttribute('class', `unit unit-${role}`);
@@ -598,7 +599,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
         useEl.setAttribute('y', String(circleCy - size / 2));
         useEl.setAttribute('width', String(size));
         useEl.setAttribute('height', String(size));
-        useEl.setAttribute('fill', 'var(--phosphor)');
+        useEl.setAttribute('fill', labelColor);
         useEl.setAttribute('pointer-events', 'none');
         useEl.classList.add('model-label');
         useEl.dataset.unitSlug = unitSlug;
@@ -622,7 +623,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
           ? Math.max(0.4, r * 1.6)
           : Math.max(0.25, r * 0.55);
         text.setAttribute('font-size', String(fontSize));
-        text.setAttribute('fill', 'var(--phosphor)');
+        text.setAttribute('fill', labelColor);
         text.setAttribute('pointer-events', 'none');
         text.classList.add('model-label');
         text.dataset.unitSlug = unitSlug;
