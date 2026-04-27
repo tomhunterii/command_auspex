@@ -165,3 +165,10 @@ test('smoke: native menu listener wired (Tauri-only path present)', () => {
   assert.match(HTML, /e\.payload === 'recall_scenario'[\s\S]*?getElementById\(['"]open-scenario['"]\)/,
     'recall_scenario must click #open-scenario (the RECALL SCENARIO button); load-scenario is ENGAGE');
 });
+
+test('smoke: model labels rendered on battlefield (renderer)', () => {
+  const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
+  assert.match(RENDER, /modelLabel/);
+  assert.match(RENDER, /text-anchor/);
+  assert.match(RENDER, /classList\.add\(['"]model-label['"]\)/);
+});

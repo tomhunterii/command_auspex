@@ -4,6 +4,34 @@
 
 import { baseDiameterPx, clusterOffsets } from './base-geometry.js';
 
+// Filler words skipped when computing character initials.
+const LABEL_FILLERS = new Set(['the', 'of', 'and', 'a', 'an']);
+
+/**
+ * Derive a short label string for a single model circle.
+ *
+ * Rules:
+ *  - Single-model units → '' (no label; don't clutter vehicles / solo heroes).
+ *  - submodelCount > 1 → numbered within submodel scope (1, 2, 3…).
+ *    Prefix with first letter of submodel name when the unit has >1 distinct
+ *    submodels so e.g. Sergeant + Tactical Marines read "S1" vs "1,2,3…".
+ *  - submodelCount == 1, multi-word name → initials of non-filler words, max 3.
+ *  - submodelCount == 1, single-word name → first letter only.
+ */
+export function modelLabel({ submodelName, indexInSubmodel, submodelCount, totalUnitModels, distinctSubmodelNames }) {
+  if (totalUnitModels <= 1) return '';
+  if (submodelCount > 1) {
+    const prefix = distinctSubmodelNames > 1
+      ? (submodelName?.[0]?.toUpperCase() ?? '') : '';
+    return `${prefix}${indexInSubmodel + 1}`;
+  }
+  if (!submodelName) return '';
+  const words = submodelName.split(/\s+/).filter(w => w && !LABEL_FILLERS.has(w.toLowerCase()));
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0][0].toUpperCase();
+  return words.slice(0, 3).map(w => w[0].toUpperCase()).join('');
+}
+
 export const INCH_PX = 10;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -259,12 +287,22 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
   const maxMm = models.reduce((m, x) => Math.max(m, x.mm), defaultMm);
   const offsets = clusterOffsets(models.length, baseDiameterPx(maxMm));
 
+  // Pre-compute label context values once for this unit.
+  const totalUnitModels = models.length;
+  const distinctSubmodelNames = new Set(unit.models.map(m => m.submodel)).size;
+  // Track per-submodel iteration index for numbering.
+  const submodelCounters = new Map();
+
   models.forEach((m, i) => {
     const isSergeant = (i === 0);
+    const circleCx = cx + offsets[i][0];
+    const circleCy = cy + offsets[i][1];
+    const r = baseDiameterPx(m.mm) / 2;
+
     const circle = document.createElementNS(SVG_NS, 'circle');
-    circle.setAttribute('cx', cx + offsets[i][0]);
-    circle.setAttribute('cy', cy + offsets[i][1]);
-    circle.setAttribute('r', baseDiameterPx(m.mm) / 2);
+    circle.setAttribute('cx', circleCx);
+    circle.setAttribute('cy', circleCy);
+    circle.setAttribute('r', r);
     circle.setAttribute('fill', fill);
     circle.setAttribute('stroke', color);
     circle.setAttribute('stroke-width', isSergeant ? 2 : 1);
@@ -272,6 +310,45 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     circle.dataset.unitSlug = unitSlug;
     circle.dataset.modelIdx = String(i);
     group.appendChild(circle);
+
+    // --- Model label ---
+    const subName = m.sub.submodel;
+    const subCount = m.sub.count;
+    // Determine within-submodel index for this circle.
+    const subIdx = submodelCounters.get(subName) ?? 0;
+    submodelCounters.set(subName, subIdx + 1);
+
+    const label = modelLabel({
+      submodelName: subName,
+      indexInSubmodel: subIdx,
+      submodelCount: subCount,
+      totalUnitModels,
+      distinctSubmodelNames,
+    });
+
+    if (label) {
+      const text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('x', String(circleCx));
+      text.setAttribute('y', String(circleCy));
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'central');
+      text.setAttribute('font-family', "'JetBrains Mono', monospace");
+      text.setAttribute('font-weight', '700');
+      const fontSize = Math.max(8, Math.min(16, r * 0.55));
+      text.setAttribute('font-size', String(fontSize));
+      text.setAttribute('fill', 'var(--phosphor)');
+      text.setAttribute('pointer-events', 'none');
+      text.classList.add('model-label');
+      text.dataset.unitSlug = unitSlug;
+      text.dataset.modelIdx = String(i);
+      text.textContent = label;
+      group.appendChild(text);
+
+      // Hover tooltip — full submodel name.
+      const titleEl = document.createElementNS(SVG_NS, 'title');
+      titleEl.textContent = subName;
+      circle.appendChild(titleEl);
+    }
   });
 
   return group;

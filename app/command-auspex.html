@@ -859,6 +859,9 @@ function applyDestroyedVisual(circle, destroyed) {
   const parent = circle.parentNode;
   if (!parent) return;
   const idx = circle.dataset.modelIdx;
+  // Retint the label text if present.
+  const lbl = parent.querySelector(`text.model-label[data-model-idx="${idx}"]`);
+  if (lbl) lbl.setAttribute('fill', destroyed ? 'var(--hostile)' : 'var(--phosphor)');
   const existingX = parent.querySelector(`[data-x-for="${idx}"]`);
   if (destroyed) {
     if (existingX) return;
