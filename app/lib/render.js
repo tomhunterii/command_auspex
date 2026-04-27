@@ -203,26 +203,30 @@ export function renderBoard(svg, mission) {
   }
   svg.appendChild(rulerGroup);
 
-  // deployment zones
+  // deployment zones — fill, stroke, and centroid identity label
   const zonesLayer = document.createElementNS(SVG_NS, 'g');
   zonesLayer.setAttribute('id', 'layer-deployment');
-  (mission.deployment?.attacker?.polygons ?? []).forEach(p =>
-    drawPolygon(zonesLayer, p.vertices, 'rgba(255,93,108,0.25)', '#ff5d6c')
-  );
-  (mission.deployment?.defender?.polygons ?? []).forEach(p =>
-    drawPolygon(zonesLayer, p.vertices, 'rgba(111,255,142,0.22)', '#6fff8e')
-  );
+  (mission.deployment?.attacker?.polygons ?? []).forEach(p => {
+    drawPolygon(zonesLayer, p.vertices, 'rgba(255,93,108,0.25)', '#ff5d6c');
+    drawZoneLabel(zonesLayer, p.vertices, 'HOSTILE', 'var(--hostile, #ff5d6c)');
+  });
+  (mission.deployment?.defender?.polygons ?? []).forEach(p => {
+    drawPolygon(zonesLayer, p.vertices, 'rgba(111,255,142,0.22)', '#6fff8e');
+    drawZoneLabel(zonesLayer, p.vertices, 'FRIENDLY', 'var(--friendly, #6fff8e)');
+  });
   svg.appendChild(zonesLayer);
 
-  // battlefield edges
+  // battlefield edges — segments plus directional edge labels
   const edgesLayer = document.createElementNS(SVG_NS, 'g');
   edgesLayer.setAttribute('id', 'layer-edges');
-  (mission.battlefield_edges?.attacker ?? []).forEach(e =>
-    drawSegment(edgesLayer, e.segment, '#ff5d6c', 6)
-  );
-  (mission.battlefield_edges?.defender ?? []).forEach(e =>
-    drawSegment(edgesLayer, e.segment, '#6fff8e', 6)
-  );
+  (mission.battlefield_edges?.attacker ?? []).forEach(e => {
+    drawSegment(edgesLayer, e.segment, '#ff5d6c', 6);
+    drawEdgeLabelFromSegment(edgesLayer, e.segment, 'ATTACKER EDGE', 'var(--hostile, #ff5d6c)', width_in, height_in);
+  });
+  (mission.battlefield_edges?.defender ?? []).forEach(e => {
+    drawSegment(edgesLayer, e.segment, '#6fff8e', 6);
+    drawEdgeLabelFromSegment(edgesLayer, e.segment, 'DEFENDER EDGE', 'var(--friendly, #6fff8e)', width_in, height_in);
+  });
   svg.appendChild(edgesLayer);
 
   // scoring zones
@@ -235,7 +239,8 @@ export function renderBoard(svg, mission) {
   });
   svg.appendChild(scoringLayer);
 
-  // threat ranges layer (hidden by default; populated by renderThreatRanges in Task 16)
+  // threat ranges layer — kept for legacy renderThreatRanges; press-hold rings
+  // are appended directly to the unit <g> at interaction time instead.
   const threatLayer = document.createElementNS(SVG_NS, 'g');
   threatLayer.setAttribute('id', 'layer-threat');
   threatLayer.style.display = 'none';
@@ -256,6 +261,90 @@ function drawPolygon(parent, vertices, fill, stroke, { dashed = false } = {}) {
   poly.setAttribute('stroke-width', '0.12');
   if (dashed) poly.setAttribute('stroke-dasharray', '0.4 0.3');
   parent.appendChild(poly);
+}
+
+/** Centroid of a simple polygon (average of vertices). */
+function polygonCentroid(vertices) {
+  let sx = 0, sy = 0;
+  for (const [x, y] of vertices) { sx += x; sy += y; }
+  return [sx / vertices.length, sy / vertices.length];
+}
+
+/**
+ * Draw a centered identity label over a deployment polygon.
+ * Uses Bank Gothic for the display-face call per project typography directive.
+ */
+function drawZoneLabel(parent, vertices, text, fill) {
+  const [cx, cy] = polygonCentroid(vertices);
+  const label = document.createElementNS(SVG_NS, 'text');
+  label.setAttribute('x', cx);
+  label.setAttribute('y', cy);
+  label.setAttribute('text-anchor', 'middle');
+  label.setAttribute('dominant-baseline', 'central');
+  label.setAttribute('font-family', "'Bank Gothic', 'JetBrains Mono', monospace");
+  label.setAttribute('font-weight', '700');
+  label.setAttribute('font-size', '1.4');
+  label.setAttribute('letter-spacing', '0.1');
+  label.setAttribute('fill', fill);
+  label.setAttribute('opacity', '0.55');
+  label.setAttribute('pointer-events', 'none');
+  label.textContent = text;
+  parent.appendChild(label);
+}
+
+/**
+ * Derive which board edge a segment lies on and place a label along it.
+ * Works by detecting whether both segment endpoints share x=0, x=W, y=0, or y=H.
+ * For non-axis-aligned segments (partial side gates, etc.) labels are placed
+ * at the segment midpoint instead.
+ */
+function drawEdgeLabelFromSegment(parent, segment, text, fill, W, H) {
+  const [[x1, y1], [x2, y2]] = segment;
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const EPS = 0.5; // tolerance for "on the board edge"
+
+  const onNorth = Math.abs(y1) < EPS && Math.abs(y2) < EPS;
+  const onSouth = Math.abs(y1 - H) < EPS && Math.abs(y2 - H) < EPS;
+  const onWest  = Math.abs(x1) < EPS && Math.abs(x2) < EPS;
+  const onEast  = Math.abs(x1 - W) < EPS && Math.abs(x2 - W) < EPS;
+
+  const t = document.createElementNS(SVG_NS, 'text');
+  t.setAttribute('text-anchor', 'middle');
+  t.setAttribute('dominant-baseline', 'central');
+  t.setAttribute('font-family', "'Bank Gothic', 'JetBrains Mono', monospace");
+  t.setAttribute('font-weight', '700');
+  t.setAttribute('font-size', '0.7');
+  t.setAttribute('letter-spacing', '0.15');
+  t.setAttribute('fill', fill);
+  t.setAttribute('opacity', '0.7');
+  t.setAttribute('pointer-events', 'none');
+  t.textContent = text;
+
+  const OFFSET = 1.0; // inches outside the board edge
+  if (onNorth) {
+    t.setAttribute('x', mx);
+    t.setAttribute('y', -OFFSET);
+  } else if (onSouth) {
+    t.setAttribute('x', mx);
+    t.setAttribute('y', H + OFFSET);
+  } else if (onWest) {
+    const lx = -OFFSET - 0.2;
+    t.setAttribute('x', lx);
+    t.setAttribute('y', my);
+    t.setAttribute('transform', `rotate(-90 ${lx} ${my})`);
+  } else if (onEast) {
+    const lx = W + OFFSET + 0.2;
+    t.setAttribute('x', lx);
+    t.setAttribute('y', my);
+    t.setAttribute('transform', `rotate(90 ${lx} ${my})`);
+  } else {
+    // Partial or diagonal segment: label floats at midpoint inside the board
+    t.setAttribute('x', mx);
+    t.setAttribute('y', my - 0.8);
+  }
+
+  parent.appendChild(t);
 }
 
 function drawSegment(parent, [[x1, y1], [x2, y2]], stroke, widthIn) {
@@ -462,7 +551,8 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
   });
 
   // --- Squad-level identity: name label + bracket corners ---
-  if (totalUnitModels >= 2) {
+  // Drawn for ALL units — single-model vehicles and characters included.
+  {
     const xs = circles.map(c => c.cx);
     const ys = circles.map(c => c.cy);
     const rs = circles.map(c => c.r);

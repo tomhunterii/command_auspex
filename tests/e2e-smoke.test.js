@@ -68,7 +68,7 @@ test('smoke: liturgical UI strings applied', () => {
 });
 
 test('smoke: layer toggle buttons present', () => {
-  for (const layer of ['deployment', 'edges', 'scoring', 'threat', 'coherency', 'auspex-sweep']) {
+  for (const layer of ['deployment', 'edges', 'scoring', 'coherency', 'auspex-sweep']) {
     assert.match(HTML, new RegExp(`data-layer="${layer}"`), `missing layer button ${layer}`);
   }
 });
@@ -179,4 +179,18 @@ test('smoke: squad bracket + squad-name labels rendered', () => {
   assert.match(RENDER, /squad-bracket/);
   assert.match(RENDER, /WEAPON_ABBREV/);
   assert.match(RENDER, /isSidearm/);
+});
+
+test('smoke: press-hold threat rings + zone labels wired', () => {
+  assert.match(HTML, /setupPressHoldThreat/);
+  assert.match(HTML, /threat-rings-active/);
+  // Threat layer toolbar button must be absent.
+  assert.doesNotMatch(HTML, /data-layer="threat"/);
+});
+
+test('smoke: deployment zone labels rendered', () => {
+  const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
+  assert.match(RENDER, /HOSTILE/);
+  assert.match(RENDER, /FRIENDLY/);
+  assert.match(RENDER, /polygonCentroid/);
 });

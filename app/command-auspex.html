@@ -334,7 +334,6 @@
         <button class="layer-btn active" data-layer="deployment">DEPLOYMENT</button>
         <button class="layer-btn active" data-layer="edges">EDGES</button>
         <button class="layer-btn active" data-layer="scoring">SCORING</button>
-        <button class="layer-btn" data-layer="threat">THREAT RANGES</button>
         <button class="layer-btn" data-layer="coherency">COHERENCY (DBG)</button>
         <button class="layer-btn active" data-layer="auspex-sweep">SWEEP</button>
       </div>
@@ -400,7 +399,7 @@ import { isTauri } from './lib/runtime.js';
 import { openCatalogue, listMissions, getMission, listRosters, getRoster, getUnit, listUnits, catalogueMeta, buildSimInputs } from './lib/catalogue.js';
 import { simulate } from './lib/sim/combat.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
-import { renderBoard, renderUnits, renderThreatRanges } from './lib/render.js';
+import { renderBoard, renderUnits } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
 
@@ -725,7 +724,6 @@ async function loadFromScenario(s) {
   }
   renderUnits(svg, placements, scheduleAutoSave);
   restoreDestroyedVisuals();
-  renderThreatRanges(svg, placements);
 
   // Populate the module-scope caches so hover/click/save all work.
   lastDefender = defender;
@@ -800,7 +798,6 @@ loadBtn.addEventListener('click', async () => {
     }
     renderUnits(svg, placements, scheduleAutoSave);
     restoreDestroyedVisuals();
-    renderThreatRanges(svg, placements);
     lastPlacements = placements;
     lastMissionPath = missionSel.value;
     lastDefenderPath = defenderSel.value;
@@ -827,6 +824,85 @@ function findUnitByName(name) {
 }
 
 const boardEl = document.getElementById('board');
+
+// ─── Press-hold threat ring rendering ───────────────────────────────────────
+// While the user holds the mouse button down on a unit (no drag), render ONLY
+// that unit's threat rings as concentric dashed circles. On mouseup or once a
+// drag is detected (>6px CSS-pixel movement), the rings are cleared.
+function setupPressHoldThreat(el) {
+  let activeRings = null;
+  let holdStart   = null;
+
+  function showRingsFor(group) {
+    if (activeRings) { activeRings.remove(); activeRings = null; }
+    const unitName = group.dataset.unitName;
+    if (!unitName) return;
+    const ds = lastDatasheets.get(unitName);
+    const ranges = (ds?.ranges_in?.length ?? 0) > 0
+      ? ds.ranges_in
+      : (ds?.max_range_in ? [ds.max_range_in] : []);
+    if (!ranges.length) return;
+
+    const modelCircles = group.querySelectorAll('circle.model-circle');
+    if (modelCircles.length === 0) return;
+    let sumX = 0, sumY = 0;
+    for (const c of modelCircles) {
+      sumX += parseFloat(c.getAttribute('cx'));
+      sumY += parseFloat(c.getAttribute('cy'));
+    }
+    const cx = sumX / modelCircles.length;
+    const cy = sumY / modelCircles.length;
+
+    // Determine ring color by role.
+    const stroke = group.classList.contains('unit-attacker') ? '#ff5d6c' : '#6fff8e';
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const ringGroup = document.createElementNS(SVG_NS, 'g');
+    ringGroup.classList.add('threat-rings-active');
+    ringGroup.setAttribute('pointer-events', 'none');
+    for (const r of ranges) {
+      const ring = document.createElementNS(SVG_NS, 'circle');
+      ring.setAttribute('cx', cx);
+      ring.setAttribute('cy', cy);
+      ring.setAttribute('r', r);
+      ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', stroke);
+      ring.setAttribute('stroke-width', '0.06');
+      ring.setAttribute('stroke-dasharray', '0.3 0.2');
+      ring.setAttribute('opacity', '0.6');
+      ringGroup.appendChild(ring);
+    }
+    // Append to the unit group so it translates with any subsequent drag.
+    group.appendChild(ringGroup);
+    activeRings = ringGroup;
+  }
+
+  function clearRings() {
+    if (activeRings) { activeRings.remove(); activeRings = null; }
+    holdStart = null;
+  }
+
+  el.addEventListener('mousedown', (ev) => {
+    const group = ev.target.closest('g[data-unit-name]');
+    if (!group) return;
+    holdStart = { x: ev.clientX, y: ev.clientY };
+    showRingsFor(group);
+  });
+
+  window.addEventListener('mousemove', (ev) => {
+    if (!holdStart) return;
+    const dx = ev.clientX - holdStart.x;
+    const dy = ev.clientY - holdStart.y;
+    // 6px CSS threshold — matches the drag-detection spec.
+    if (Math.hypot(dx, dy) > 6) clearRings();
+  });
+
+  window.addEventListener('mouseup', clearRings);
+  window.addEventListener('mouseleave', clearRings);
+}
+
+setupPressHoldThreat(boardEl);
+// ────────────────────────────────────────────────────────────────────────────
 
 boardEl.addEventListener('mouseover', (e) => {
   const group = e.target.closest('.unit');
