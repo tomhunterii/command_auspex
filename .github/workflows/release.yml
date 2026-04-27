@@ -5,10 +5,9 @@ on:
     tags:
       - 'v*'
 
-# Windows-only release workflow — produces .msi + .exe artifacts for the
-# Captain's teammates to install. macOS builds are produced locally on the
-# Captain's workstation (npm run tauri:build) so we don't need a CI runner
-# for that. Linux is omitted entirely.
+# Windows-only release workflow — produces a single NSIS .exe installer
+# for the Captain's teammates. macOS builds are produced locally on the
+# Captain's workstation (npm run tauri:build). Linux is omitted entirely.
 jobs:
   windows:
     runs-on: windows-latest
@@ -37,6 +36,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Install NSIS
+        run: choco install nsis -y
+
       - name: Build (Tauri)
         uses: tauri-apps/tauri-action@v0.5.21
         env:
@@ -44,11 +46,12 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Command Auspex ${{ github.ref_name }}'
+          args: --bundles nsis
           releaseBody: |
             Command Auspex — Windows desktop build.
 
             **First launch:** Windows SmartScreen will warn "Windows protected your PC" — click **More info** → **Run anyway**. The app is unsigned (no EV cert yet); this is expected.
 
-            **Install:** Run the `.msi` — Windows Installer, drops the app under `Program Files` and adds a Start Menu entry.
+            **Install:** Run the `.exe` — NSIS-style setup, drops the app under `Program Files` and adds a Start Menu entry.
           releaseDraft: false
           prerelease: false
