@@ -240,3 +240,15 @@ test('smoke: zoom/pan + FIT button wired', () => {
   assert.match(HTML, /resetView/);
   assert.match(HTML, /addEventListener\(['"]wheel['"]/);
 });
+
+test('smoke: SVG icon sprite system wired', () => {
+  assert.match(HTML, /loadIconSprite/);
+  assert.match(HTML, /icon-sprite/);
+});
+
+test('smoke: render emits use elements for icon-prefixed labels', () => {
+  const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
+  assert.match(RENDER, /icon:skull/);
+  assert.match(RENDER, /icon:truck-monster/);
+  assert.match(RENDER, /createElementNS\(SVG_NS,\s*['"]use['"]\)/);
+});

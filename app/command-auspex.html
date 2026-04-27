@@ -960,6 +960,41 @@ function setupPressHoldThreat(el) {
 
 setupPressHoldThreat(boardEl);
 
+// ── SVG icon sprite loader ────────────────────────────────────────────────────
+// Fetches each FA Free SVG from app/vendor/icons/, extracts viewBox + inner
+// path content, and injects a <defs id="icon-sprite"> block of <symbol>
+// elements into the board SVG. Renderer emits <use href="#icon-NAME"/> which
+// references these symbols. Falls back silently if an icon file is missing.
+//
+// Pro upgrade: swap vendor/icons/*.svg files via npm run build:icons after
+// pointing scripts/build-icons.js at @fortawesome/fontawesome-pro. No code
+// changes here.
+async function loadIconSprite(svgEl) {
+  const ICON_NAMES = ['chevron-up', 'chess-knight', 'crosshairs', 'shield-halved', 'skull', 'truck-monster', 'star'];
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  defs.id = 'icon-sprite';
+  for (const name of ICON_NAMES) {
+    try {
+      const resp = await fetch(`./vendor/icons/${name}.svg`);
+      if (!resp.ok) { console.warn(`[icon-sprite] ${name}.svg not found (${resp.status})`); continue; }
+      const text = await resp.text();
+      // Extract viewBox attribute and inner SVG content (strips the <svg> wrapper).
+      const vbMatch = /viewBox="([^"]+)"/.exec(text);
+      const inner = text.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+      const symbol = document.createElementNS(SVG_NS, 'symbol');
+      symbol.setAttribute('id', `icon-${name}`);
+      if (vbMatch) symbol.setAttribute('viewBox', vbMatch[1]);
+      symbol.innerHTML = inner;
+      defs.appendChild(symbol);
+    } catch (e) {
+      console.warn(`[icon-sprite] failed to load ${name}:`, e);
+    }
+  }
+  svgEl.appendChild(defs);
+}
+loadIconSprite(boardEl);
+
 // ── View transform: zoom + pan via SVG viewBox ───────────────────────────────
 const VIEW_DEFAULT = { x: -1.5, y: -1.5, w: 63, h: 47 };
 let viewBox = { ...VIEW_DEFAULT };
@@ -1089,7 +1124,8 @@ function applyDestroyedVisual(circle, destroyed) {
   if (!parent) return;
   const idx = circle.dataset.modelIdx;
   // Retint the label text if present.
-  const lbl = parent.querySelector(`text.model-label[data-model-idx="${idx}"]`);
+  // Query both <text> and <use> model-label elements (icon sprites use <use>).
+  const lbl = parent.querySelector(`.model-label[data-model-idx="${idx}"]`);
   if (lbl) lbl.setAttribute('fill', destroyed ? 'var(--hostile)' : 'var(--phosphor)');
   const existingX = parent.querySelector(`[data-x-for="${idx}"]`);
   if (destroyed) {

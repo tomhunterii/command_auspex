@@ -28,17 +28,17 @@ function spaceMarineRoleSymbol(unit) {
   // unit.keywords may be an array of {keyword, ...} or strings — normalize.
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
-  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return '▣'; // tank/armor turret-view glyph
-  // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as
-  // fleur-de-lis (heraldic command marker). Tested before veteran so a
-  // leader who is also tagged as a veteran unit still reads as leader.
-  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '★';
-  // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans)
-  // — venerable ceremonial cross.
-  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '✠';
-  if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '✕';
-  if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '◀';
-  if (hasKeyword(kws, 'BATTLELINE')) return '▲';
+  // Vehicle / Walker — truck-monster (tank-rectangle is FA Pro-only)
+  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return 'icon:truck-monster';
+  // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as skull.
+  // Tested before veteran so a leader who is also tagged as a veteran unit
+  // still reads as leader.
+  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:skull';
+  // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans).
+  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:shield-halved';
+  if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:crosshairs';
+  if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:chess-knight';
+  if (hasKeyword(kws, 'BATTLELINE')) return 'icon:chevron-up';
   return null;
 }
 
@@ -110,7 +110,7 @@ export function modelLabel(submodel, unitMeta) {
   // unitMeta: { totalUnitModels, unit? }
   // Sergeant detection by submodel name first — overrides role symbol.
   const subName = (submodel.submodel ?? '').toLowerCase();
-  if (subName.includes('sergeant') || subName.includes('sgt')) return '◆';
+  if (subName.includes('sergeant') || subName.includes('sgt')) return 'icon:star';
   // Space Marine role symbol — applies to single-model units (vehicles,
   // characters) too, so a lone Ballistus Dreadnought reads as ▣ and a
   // standalone Captain reads as ✠.
@@ -580,31 +580,43 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     });
 
     if (label) {
-      const text = document.createElementNS(SVG_NS, 'text');
-      text.setAttribute('x', String(circleCx));
-      text.setAttribute('y', String(circleCy));
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('dominant-baseline', 'central');
-      text.setAttribute('font-family', "'JetBrains Mono', monospace");
-      text.setAttribute('font-weight', '700');
-      // font-size in inches: role symbols fill the base at r * 1.1;
-      // letter labels (S, weapon codes) stay tighter at r * 0.55.
-      // Font size scales with base radius — bigger bases get proportionally
-      // bigger glyphs. Role symbols fill the base (×1.1); letter labels stay
-      // tighter (×0.55) so multi-character codes still fit. Lower floor only
-      // prevents tiny bases from rendering invisible glyphs.
-      const isRoleSymbol = label.length === 1 && /[▲◀✕☠✠▣★⚜◆]/.test(label);
-      const fontSize = isRoleSymbol
-        ? Math.max(0.3, r * 1.1)
-        : Math.max(0.25, r * 0.55);
-      text.setAttribute('font-size', String(fontSize));
-      text.setAttribute('fill', 'var(--phosphor)');
-      text.setAttribute('pointer-events', 'none');
-      text.classList.add('model-label');
-      text.dataset.unitSlug = unitSlug;
-      text.dataset.modelIdx = String(i);
-      text.textContent = label;
-      group.appendChild(text);
+      if (label.startsWith('icon:')) {
+        // SVG sprite icon — emits <use href="#icon-NAME"/> centered on circle.
+        const iconName = label.slice('icon:'.length);
+        const useEl = document.createElementNS(SVG_NS, 'use');
+        useEl.setAttribute('href', `#icon-${iconName}`);
+        const size = Math.max(0.4, r * 1.4);
+        useEl.setAttribute('x', String(circleCx - size / 2));
+        useEl.setAttribute('y', String(circleCy - size / 2));
+        useEl.setAttribute('width', String(size));
+        useEl.setAttribute('height', String(size));
+        useEl.setAttribute('fill', 'var(--phosphor)');
+        useEl.setAttribute('pointer-events', 'none');
+        useEl.classList.add('model-label');
+        useEl.dataset.unitSlug = unitSlug;
+        useEl.dataset.modelIdx = String(i);
+        group.appendChild(useEl);
+      } else {
+        // Existing <text> path for letter labels (weapon codes, fallback).
+        const text = document.createElementNS(SVG_NS, 'text');
+        text.setAttribute('x', String(circleCx));
+        text.setAttribute('y', String(circleCy));
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('font-family', "'JetBrains Mono', monospace");
+        text.setAttribute('font-weight', '700');
+        // font-size in inches: letter labels stay tighter at r * 0.55 so
+        // multi-character codes still fit. Lower floor prevents invisible glyphs.
+        const fontSize = Math.max(0.25, r * 0.55);
+        text.setAttribute('font-size', String(fontSize));
+        text.setAttribute('fill', 'var(--phosphor)');
+        text.setAttribute('pointer-events', 'none');
+        text.classList.add('model-label');
+        text.dataset.unitSlug = unitSlug;
+        text.dataset.modelIdx = String(i);
+        text.textContent = label;
+        group.appendChild(text);
+      }
 
       // Hover tooltip — full submodel name.
       const titleEl = document.createElementNS(SVG_NS, 'title');
