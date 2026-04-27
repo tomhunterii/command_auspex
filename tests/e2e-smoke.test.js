@@ -233,3 +233,10 @@ test('smoke: Space Marine role symbols wired in renderer', () => {
   assert.match(RENDER, /SM_ROLE_FIRE_SUPPORT_SLUGS/);
   assert.match(RENDER, /SM_ROLE_VETERAN_SLUGS/);
 });
+
+test('smoke: zoom/pan + FIT button wired', () => {
+  assert.match(HTML, /id="fit-view"/);
+  assert.match(HTML, /wireZoomPan/);
+  assert.match(HTML, /resetView/);
+  assert.match(HTML, /addEventListener\(['"]wheel['"]/);
+});

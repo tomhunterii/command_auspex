@@ -336,6 +336,7 @@
         <button class="layer-btn active" data-layer="scoring">SCORING</button>
         <button class="layer-btn" data-layer="coherency">COHERENCY (DBG)</button>
         <button class="layer-btn active" data-layer="auspex-sweep">SWEEP</button>
+        <button id="fit-view" class="layer-btn" title="Reset view">FIT</button>
       </div>
       <div class="canvas-wrap" style="position:relative;">
         <svg id="board"></svg>
@@ -958,6 +959,96 @@ function setupPressHoldThreat(el) {
 }
 
 setupPressHoldThreat(boardEl);
+
+// ── View transform: zoom + pan via SVG viewBox ───────────────────────────────
+const VIEW_DEFAULT = { x: -1.5, y: -1.5, w: 63, h: 47 };
+let viewBox = { ...VIEW_DEFAULT };
+
+function applyViewBox() {
+  const boardEl = document.getElementById('board');
+  if (!boardEl) return;
+  boardEl.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+}
+
+function resetView() {
+  viewBox = { ...VIEW_DEFAULT };
+  applyViewBox();
+}
+
+function clampZoom(w) {
+  // 0.5x = viewBox 126 wide; 8x = viewBox ~7.88 wide. Reference width 63.
+  const min = VIEW_DEFAULT.w / 8;
+  const max = VIEW_DEFAULT.w * 2;
+  return Math.max(min, Math.min(max, w));
+}
+
+function svgPointFromClient(boardEl, clientX, clientY) {
+  if (!boardEl?.getScreenCTM) return [0, 0];
+  const ctm = boardEl.getScreenCTM();
+  if (!ctm) return [0, 0];
+  const inv = ctm.inverse();
+  const pt = boardEl.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const p = pt.matrixTransform(inv);
+  return [p.x, p.y];
+}
+
+function wireZoomPan() {
+  const boardEl = document.getElementById('board');
+  if (!boardEl) return;
+
+  // Wheel zoom anchored on cursor.
+  boardEl.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const [cx, cy] = svgPointFromClient(boardEl, ev.clientX, ev.clientY);
+    const factor = ev.deltaY > 0 ? 1.15 : 1 / 1.15;
+    const newW = clampZoom(viewBox.w * factor);
+    if (newW === viewBox.w) return;
+    const ratio = newW / viewBox.w;
+    const newH = viewBox.h * ratio;
+    // Anchor: the SVG point under the cursor stays put.
+    viewBox.x = cx - (cx - viewBox.x) * ratio;
+    viewBox.y = cy - (cy - viewBox.y) * ratio;
+    viewBox.w = newW;
+    viewBox.h = newH;
+    applyViewBox();
+  }, { passive: false });
+
+  // Pan on drag of empty board (not on a unit group, not on a model circle).
+  let panning = false;
+  let panStart = null;
+  let panViewStart = null;
+  boardEl.addEventListener('mousedown', (ev) => {
+    // Skip if click landed on a unit/model — those have their own handlers.
+    if (ev.target.closest('g[data-unit-name]')) return;
+    if (ev.target.classList?.contains('model-circle')) return;
+    panning = true;
+    panStart = [ev.clientX, ev.clientY];
+    panViewStart = { ...viewBox };
+    boardEl.style.cursor = 'grabbing';
+    ev.preventDefault();
+  });
+  window.addEventListener('mousemove', (ev) => {
+    if (!panning) return;
+    const dxPx = ev.clientX - panStart[0];
+    const dyPx = ev.clientY - panStart[1];
+    // Convert pixel delta to SVG-unit delta using current viewBox scale.
+    const rect = boardEl.getBoundingClientRect();
+    const scaleX = viewBox.w / rect.width;
+    const scaleY = viewBox.h / rect.height;
+    viewBox.x = panViewStart.x - dxPx * scaleX;
+    viewBox.y = panViewStart.y - dyPx * scaleY;
+    applyViewBox();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!panning) return;
+    panning = false;
+    boardEl.style.cursor = '';
+  });
+}
+
+wireZoomPan();
+document.getElementById('fit-view')?.addEventListener('click', () => resetView());
 // ────────────────────────────────────────────────────────────────────────────
 
 boardEl.addEventListener('mouseover', (e) => {
