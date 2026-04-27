@@ -15,11 +15,17 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Grenades, Tacticus, Bladeguard Veteran Squad]
 led_by:
+  - adrax-agatone
   - captain
   - captain-demetrian-titus
   - chaplain
+  - chief-librarian-tigurius
   - judiciar
+  - kor-sarro-khan
   - lieutenant
+  - marneus-calgar
+  - pedro-kantor
+  - uriel-ventris
 ---
 
 # Bladeguard Veteran Squad

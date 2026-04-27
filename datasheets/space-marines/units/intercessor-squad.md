@@ -15,14 +15,19 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Battleline, Grenades, Tacticus, Intercessor Squad]
 led_by:
+  - adrax-agatone
   - ancient
   - apothecary
   - captain
   - captain-demetrian-titus
   - chaplain
+  - chief-librarian-tigurius
   - judiciar
+  - kor-sarro-khan
   - librarian
   - lieutenant
+  - marneus-calgar
+  - uriel-ventris
 ---
 
 # Intercessor Squad

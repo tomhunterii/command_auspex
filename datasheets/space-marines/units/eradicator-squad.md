@@ -1,3 +1,25 @@
+---
+slug: eradicator-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 90
+    default: true
+  - models: 6
+    points: 180
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Grenades, Gravis, Eradicator Squad]
+led_by:
+  - apothecary-biologis
+  - captain-in-gravis-armour
+  - marneus-calgar
+---
+
 # Eradicator Squad
 
 **Faction:** Space Marines (Adeptus Astartes)

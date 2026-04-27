@@ -15,14 +15,20 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Grenades, Tacticus, Sternguard Veteran Squad]
 led_by:
+  - adrax-agatone
   - ancient
   - apothecary
   - captain
   - captain-demetrian-titus
   - chaplain
+  - chief-librarian-tigurius
   - judiciar
+  - kor-sarro-khan
   - librarian
   - lieutenant
+  - marneus-calgar
+  - pedro-kantor
+  - uriel-ventris
 ---
 
 # Sternguard Veteran Squad

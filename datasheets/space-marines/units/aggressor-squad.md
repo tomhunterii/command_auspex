@@ -7,7 +7,7 @@ battleline: false
 is_character: false
 loadouts:
   - models: 3
-    points: 110
+    points: 95
     default: true
   - models: 6
     points: 190
@@ -15,8 +15,9 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Gravis, Aggressor Squad]
 led_by:
-  - captain-in-gravis-armour
   - apothecary-biologis
+  - captain-in-gravis-armour
+  - marneus-calgar
 ---
 
 # Aggressor Squad

@@ -1,3 +1,24 @@
+---
+slug: terminator-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 5
+    points: 170
+    default: true
+  - models: 10
+    points: 340
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Terminator, Terminator Squad]
+led_by:
+  - captain-in-terminator-armour
+  - marneus-calgar
+---
+
 # Terminator Squad
 
 **Faction:** Space Marines (Adeptus Astartes)

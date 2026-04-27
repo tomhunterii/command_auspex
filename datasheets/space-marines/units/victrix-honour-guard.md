@@ -1,3 +1,28 @@
+---
+slug: victrix-honour-guard
+faction: space-marines
+sub_factions: [adeptus-astartes, ultramarines]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 110
+    default: true
+  - models: 6
+    points: 220
+keywords:
+  faction: [Adeptus Astartes, Imperium, Ultramarines]
+  unit: [Infantry, Tacticus, Victrix Honour Guard]
+led_by:
+  - adrax-agatone
+  - captain
+  - captain-demetrian-titus
+  - kor-sarro-khan
+  - marneus-calgar
+  - uriel-ventris
+---
+
 # Victrix Honour Guard
 
 **Faction:** Space Marines (Ultramarines)

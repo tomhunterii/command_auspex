@@ -15,6 +15,7 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Grenades, Tacticus, Infernus Squad]
 led_by:
+  - adrax-agatone
   - ancient
   - apothecary
   - captain
@@ -23,6 +24,7 @@ led_by:
   - judiciar
   - librarian
   - lieutenant
+  - marneus-calgar
 ---
 
 # Infernus Squad
