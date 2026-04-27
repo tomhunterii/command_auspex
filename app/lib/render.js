@@ -28,16 +28,15 @@ function spaceMarineRoleSymbol(unit) {
   // unit.keywords may be an array of {keyword, ...} or strings — normalize.
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
-  // Vehicle / Walker — truck-monster (tank-rectangle is FA Pro-only)
-  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return 'icon:truck-monster';
+  if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return 'icon:shield';
   // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as skull.
   // Tested before veteran so a leader who is also tagged as a veteran unit
   // still reads as leader.
   if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:skull';
   // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans).
-  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:shield-halved';
-  if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:crosshairs';
-  if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:chess-knight';
+  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:cross';
+  if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:angle-up';
+  if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:xmark';
   if (hasKeyword(kws, 'BATTLELINE')) return 'icon:chevron-up';
   return null;
 }

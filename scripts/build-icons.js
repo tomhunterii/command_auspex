@@ -7,7 +7,7 @@
 // Pro upgrade path: swap FA_DIR to point at the Pro package and update
 // ICONS (e.g. 'helmet-battle', 'sword', 'crown') — no other changes needed.
 
-import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,20 +16,21 @@ const REPO = dirname(HERE);
 const FA_DIR = join(REPO, 'node_modules', '@fortawesome', 'fontawesome-free', 'svgs', 'solid');
 const OUT = join(REPO, 'app', 'vendor', 'icons');
 
-// tank-rectangle is Pro-only; using truck-monster (FA Free) as fallback.
-// The sprite loader and renderer key off the filename, so the HTML and
-// render.js use 'truck-monster' to match. See commit message for Pro swap.
 const ICONS = [
-  'chevron-up',    // Battleline
-  'chess-knight',  // Close Support
-  'crosshairs',    // Fire Support
-  'shield-halved', // Veteran
-  'skull',         // Leader (solid skull, no crossbones — FA Free)
-  'truck-monster', // Vehicle / Walker (tank-rectangle is Pro-only)
-  'star',          // Sergeant
+  'chevron-up',  // Battleline
+  'xmark',       // Close Support
+  'angle-up',    // Fire Support
+  'cross',       // Veteran
+  'skull',       // Leader
+  'shield',      // Vehicle / Walker
+  'star',        // Sergeant
 ];
 
 mkdirSync(OUT, { recursive: true });
+// Clear stale SVGs so renames don't leave dead files behind.
+for (const f of readdirSync(OUT)) {
+  if (f.endsWith('.svg')) unlinkSync(join(OUT, f));
+}
 let copied = 0;
 for (const name of ICONS) {
   const src = join(FA_DIR, `${name}.svg`);
