@@ -1,6 +1,6 @@
 {
   "name": "warhammer-40k",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Command Auspex — list-building battle simulator",
   "main": "index.js",
   "directories": {

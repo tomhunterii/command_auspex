@@ -5,25 +5,15 @@ on:
     tags:
       - 'v*'
 
+# Windows-only release workflow — produces .msi + .exe artifacts for the
+# Captain's teammates to install. macOS builds are produced locally on the
+# Captain's workstation (npm run tauri:build) so we don't need a CI runner
+# for that. Linux is omitted entirely.
 jobs:
-  build:
+  windows:
+    runs-on: windows-latest
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-latest
-            target: universal-apple-darwin
-            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
-          - platform: ubuntu-24.04
-            target: ''
-            rust_targets: ''
-          - platform: windows-latest
-            target: ''
-            rust_targets: ''
-
-    runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,23 +25,11 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust_targets }}
 
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      - name: Install Linux deps
-        if: matrix.platform == 'ubuntu-24.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
 
       - name: Install Node deps
         run: npm ci
@@ -64,16 +42,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
           tagName: ${{ github.ref_name }}
           releaseName: 'Command Auspex ${{ github.ref_name }}'
           releaseBody: |
-            Command Auspex desktop build.
+            Command Auspex — Windows desktop build.
 
-            **First launch (macOS):** right-click the app → Open → confirm "Open Anyway".
-            **First launch (Windows):** SmartScreen warning → "More info" → "Run anyway".
-            **First launch (Linux):** `chmod +x` the AppImage, then run.
+            **First launch:** Windows SmartScreen will warn "Windows protected your PC" — click **More info** → **Run anyway**. The app is unsigned (no EV cert yet); this is expected.
 
-            Unsigned binaries; Gatekeeper / SmartScreen warnings are expected.
+            **Install options:**
+            - `.msi` — Windows Installer, recommended.
+            - `.exe` — NSIS-style setup, lighter weight.
+
+            Either installer drops the app under `Program Files` and adds a Start Menu entry.
           releaseDraft: false
           prerelease: false
