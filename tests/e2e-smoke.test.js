@@ -194,3 +194,13 @@ test('smoke: deployment zone labels rendered', () => {
   assert.match(RENDER, /FRIENDLY/);
   assert.match(RENDER, /polygonCentroid/);
 });
+
+test('smoke: sim model-count inputs are read-only', () => {
+  assert.match(HTML, /id="sim-attacker-models"[^>]*readonly/);
+  assert.match(HTML, /id="sim-models"[^>]*readonly/);
+});
+
+test('smoke: sim-pair line wiring present', () => {
+  assert.match(HTML, /refreshSimPairLine/);
+  assert.match(HTML, /sim-pair-line/);
+});

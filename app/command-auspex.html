@@ -359,7 +359,7 @@
             </div>
             <div style="flex:1;">
               <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">MODELS</label>
-              <input id="sim-attacker-models" type="number" min="1" value="1" class="select" style="margin-left:0; margin-top:3px; width:100%;"/>
+              <input id="sim-attacker-models" type="number" min="1" value="1" class="select" readonly tabindex="-1" style="margin-left:0; margin-top:3px; width:100%; cursor:not-allowed; opacity:0.7;"/>
             </div>
           </div>
           <div id="sim-weapon-detail" style="font-size:10px; color:var(--dim); border-top:1px dashed var(--phosphor-dim); padding-top:6px; margin-bottom:8px; display:none;"></div>
@@ -370,7 +370,7 @@
             </div>
             <div style="flex:1;">
               <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">MODELS</label>
-              <input id="sim-models" type="number" min="1" value="5" class="select" style="margin-left:0; margin-top:3px; width:100%;"/>
+              <input id="sim-models" type="number" min="1" value="5" class="select" readonly tabindex="-1" style="margin-left:0; margin-top:3px; width:100%; cursor:not-allowed; opacity:0.7;"/>
             </div>
           </div>
           <div style="margin-bottom:6px;">
@@ -678,6 +678,10 @@ document.getElementById('sim-attacker').addEventListener('change', () =>
 document.getElementById('sim-defender').addEventListener('change', () =>
   defaultModelCountFor(document.getElementById('sim-defender'), hostileRosterSlug, 'sim-models'));
 
+// Sim-pair line: redraw whenever either selector changes.
+document.getElementById('sim-attacker').addEventListener('change', refreshSimPairLine);
+document.getElementById('sim-defender').addEventListener('change', refreshSimPairLine);
+
 async function loadDatasheet(slug) {
   // slug is `<faction>/<unit-slug>` from roster references; we only need the unit-slug part.
   const unitSlug = slug.includes('/') ? slug.split('/')[1] : slug;
@@ -722,7 +726,7 @@ async function loadFromScenario(s) {
       });
     }
   }
-  renderUnits(svg, placements, scheduleAutoSave);
+  renderUnits(svg, placements, (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
   restoreDestroyedVisuals();
 
   // Populate the module-scope caches so hover/click/save all work.
@@ -796,7 +800,7 @@ loadBtn.addEventListener('click', async () => {
     for (const p of placements) {
       lastDatasheets.set(p.unit.name, p.datasheet);
     }
-    renderUnits(svg, placements, scheduleAutoSave);
+    renderUnits(svg, placements, (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
     restoreDestroyedVisuals();
     lastPlacements = placements;
     lastMissionPath = missionSel.value;
@@ -959,7 +963,7 @@ function applyDestroyedVisual(circle, destroyed) {
       ln.setAttribute('x1', String(x1)); ln.setAttribute('y1', String(y1));
       ln.setAttribute('x2', String(x2)); ln.setAttribute('y2', String(y2));
       ln.setAttribute('stroke', 'var(--hostile)');
-      ln.setAttribute('stroke-width', '2');
+      ln.setAttribute('stroke-width', '0.06');
       ln.setAttribute('stroke-linecap', 'round');
       return ln;
     };
@@ -987,6 +991,54 @@ async function refreshSimModelCountsFor(unitSlug) {
     const live = Math.max(1, total - destroyedCountFor(unitSlug));
     document.getElementById('sim-models').value = live;
   }
+}
+
+let simPairLine = null; // SVG <line> drawn between current attacker + defender cluster centroids
+
+function refreshSimPairLine() {
+  const boardEl = document.getElementById('board');
+  if (!boardEl) return;
+  const attackerSlug = document.getElementById('sim-attacker')?.value;
+  const defenderSlug = document.getElementById('sim-defender')?.value;
+  // Clear existing line.
+  if (simPairLine) { simPairLine.remove(); simPairLine = null; }
+  if (!attackerSlug || !defenderSlug || attackerSlug === defenderSlug) return;
+  // Compute centroid of a unit's model circles accounting for group translate.
+  function clusterCenter(slug) {
+    const circle = boardEl.querySelector(`circle.model-circle[data-unit-slug="${CSS.escape(slug)}"]`);
+    if (!circle) return null;
+    const g = circle.closest('g[data-unit-name], g[data-unit-slug]') ?? circle.parentNode;
+    if (!g) return null;
+    const circles = g.querySelectorAll('circle.model-circle');
+    if (circles.length === 0) return null;
+    let sumX = 0, sumY = 0;
+    for (const c of circles) {
+      sumX += parseFloat(c.getAttribute('cx'));
+      sumY += parseFloat(c.getAttribute('cy'));
+    }
+    const localX = sumX / circles.length;
+    const localY = sumY / circles.length;
+    const transform = g.transform.baseVal.consolidate();
+    const mat = transform ? transform.matrix : null;
+    return mat ? { x: localX + mat.e, y: localY + mat.f } : { x: localX, y: localY };
+  }
+  const a = clusterCenter(attackerSlug);
+  const d = clusterCenter(defenderSlug);
+  if (!a || !d) return;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const line = document.createElementNS(SVG_NS, 'line');
+  line.setAttribute('x1', a.x);
+  line.setAttribute('y1', a.y);
+  line.setAttribute('x2', d.x);
+  line.setAttribute('y2', d.y);
+  line.setAttribute('stroke', 'var(--amber)');
+  line.setAttribute('stroke-width', '0.08');
+  line.setAttribute('stroke-dasharray', '0.6 0.3');
+  line.setAttribute('opacity', '0.85');
+  line.setAttribute('pointer-events', 'none');
+  line.classList.add('sim-pair-line');
+  boardEl.appendChild(line);
+  simPairLine = line;
 }
 
 function restoreDestroyedVisuals() {
