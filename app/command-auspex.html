@@ -339,10 +339,10 @@
 </div>
 
 <script type="module">
-import { listDir, readTextFile, writeTextFile, fileExists } from './lib/fs.js';
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
 import { parseRoster, resolveSlug } from './lib/roster-parser.js';
-import { connectRepoHandle } from './lib/runtime.js';
+import { isTauri } from './lib/runtime.js';
+import { openCatalogue, listMissions, getMission, listRosters, getRoster, getUnit, catalogueMeta } from './lib/catalogue.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
 import { renderBoard, renderUnits, renderThreatRanges } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
@@ -354,7 +354,7 @@ const defenderSel = document.getElementById('defender-select');
 const attackerSel = document.getElementById('attacker-select');
 const loadBtn = document.getElementById('load-scenario');
 
-let repoHandle = null;
+let catalogue = null;  // populated by openCatalogue() — { handle, name, meta }
 let lastDefender = null;
 let lastAttacker = null;
 let lastPlacements = [];
@@ -365,47 +365,26 @@ let currentScenarioPath = null;
 let currentScenarioName = null;
 let autoSaveTimer = null;
 
-async function populateDropdown(select, dir, ext = '.md') {
-  const items = await listDir(repoHandle, dir);
-  const mds = items.filter(i => i.kind === 'file' && i.name.endsWith(ext));
-  select.innerHTML = '<option value="">— SELECT —</option>' +
-    mds.map(i => `<option value="${dir}/${i.name}">${i.name.replace(ext, '')}</option>`).join('');
-}
-
-// Roster-specific dropdown population: parse each .md and keep only files with
-// structured frontmatter (YAML with `units:` array). Hand-written markdown
-// tables are filtered out. Returns { kept, skipped } counts for status reporting.
-async function populateRosterDropdowns(dir, selects) {
-  const items = await listDir(repoHandle, dir);
-  const mds = items.filter(i => i.kind === 'file' && i.name.endsWith('.md'));
-  const kept = [];
-  let skipped = 0;
-  for (const item of mds) {
-    try {
-      const text = await readTextFile(repoHandle, `${dir}/${item.name}`);
-      const fm = await parseFrontmatter(text);
-      if (fm && Array.isArray(fm.units)) kept.push(item);
-      else skipped++;
-    } catch {
-      skipped++;
-    }
-  }
-  const html = '<option value="">— SELECT —</option>' +
-    kept.map(i => `<option value="${dir}/${i.name}">${i.name.replace('.md', '')}</option>`).join('');
-  for (const sel of selects) sel.innerHTML = html;
-  return { kept: kept.length, skipped };
-}
 
 document.getElementById('pick-repo').addEventListener('click', async () => {
   try {
-    repoHandle = await connectRepoHandle();
-    await populateDropdown(missionSel, '500 Worlds Campaign/missions');
-    const { kept, skipped } = await populateRosterDropdowns('ultramarines/rosters', [defenderSel, attackerSel]);
-    const tail = skipped > 0 ? ` · ${skipped} UNSTRUCTURED SKIPPED` : '';
-    statusEl.textContent = `COGITATOR LINK ESTABLISHED · REPOSITORY ${repoHandle.name} · ${kept} ROSTER${kept === 1 ? '' : 'S'} RECOGNIZED${tail}`;
-    window.__repoHandle = () => repoHandle;
+    if (!isTauri()) {
+      statusEl.textContent = 'COGITATOR LINK SEVERED · DESKTOP BUILD REQUIRED';
+      return;
+    }
+    catalogue = await openCatalogue();
+    const missions = await listMissions();
+    const rosters = await listRosters();
+    const optHtml = (items) => '<option value="">— SELECT —</option>' +
+      items.map(i => `<option value="${i.slug}">${i.name}</option>`).join('');
+    missionSel.innerHTML = optHtml(missions);
+    defenderSel.innerHTML = optHtml(rosters);
+    attackerSel.innerHTML = optHtml(rosters);
+    const meta = catalogue.meta;
+    const tail = meta.enriched_count ? ` · ${meta.enriched_count}/${meta.unit_count} ENRICHED` : '';
+    statusEl.textContent = `COGITATOR LINK ESTABLISHED · CATALOGUE v${meta.catalogue_version || '1'} · ${meta.unit_count} UNITS · ${rosters.length} ROSTER${rosters.length === 1 ? '' : 'S'}${tail}`;
+    window.__catalogue = () => catalogue;
   } catch (err) {
-    if (err && err.name === 'AbortError') return;
     console.error('CONNECT REPO failed:', err);
     const msg = (err && err.message) || (typeof err === 'string' ? err : JSON.stringify(err));
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${msg}`;
@@ -418,24 +397,28 @@ function updateLoadBtn() {
 [missionSel, defenderSel, attackerSel].forEach(s => s.addEventListener('change', updateLoadBtn));
 
 async function loadDatasheet(slug) {
-  // slug is "<faction>/<unit-slug>" — actual path is datasheets/<faction>/units/<unit-slug>.md
-  const [faction, unitSlug] = slug.split('/');
-  const text = await readTextFile(repoHandle, `datasheets/${faction}/units/${unitSlug}.md`);
-  return parseDatasheet(text);
+  // slug is `<faction>/<unit-slug>` from roster references; we only need the unit-slug part.
+  const unitSlug = slug.includes('/') ? slug.split('/')[1] : slug;
+  const unit = await getUnit(unitSlug);
+  if (!unit) throw new Error(`unit not found in catalogue: ${unitSlug}`);
+  return unit;
 }
 
-async function loadRosterFile(path) {
-  const text = await readTextFile(repoHandle, path);
-  const fm = await parseFrontmatter(text);
+async function loadRosterFile(slug) {
+  const rosterRecord = await getRoster(slug);
+  if (!rosterRecord) throw new Error(`roster not in catalogue: ${slug}`);
+  const fm = await parseFrontmatter(rosterRecord.body_md);
   if (!fm || !Array.isArray(fm.units)) {
-    const name = path.split('/').pop();
+    const name = slug.split('/').pop();
     throw new Error(`${name} has no structured roster frontmatter — paste the GW Companion App export via VOX-SCRIBE to convert it.`);
   }
   return fm;
 }
 
 async function loadFromScenario(s) {
-  const missionText = await readTextFile(repoHandle, s.mission);
+  const missionRecord = await getMission(s.mission);
+  if (!missionRecord) throw new Error(`mission not in catalogue: ${s.mission}`);
+  const missionText = missionRecord.body_md;
   const mission = await parseFrontmatter(missionText);
   const defender = await loadRosterFile(s.defender.roster);
   const attacker = await loadRosterFile(s.attacker.roster);
@@ -480,7 +463,9 @@ async function loadFromScenario(s) {
 
 loadBtn.addEventListener('click', async () => {
   try {
-    const missionText = await readTextFile(repoHandle, missionSel.value);
+    const missionRecord = await getMission(missionSel.value);
+    if (!missionRecord) throw new Error(`mission not in catalogue: ${missionSel.value}`);
+    const missionText = missionRecord.body_md;
     const mission = await parseFrontmatter(missionText);
     const defender = await loadRosterFile(defenderSel.value);
     const attacker = await loadRosterFile(attackerSel.value);
@@ -641,77 +626,22 @@ function buildCurrentScenarioMarkdown(id, name) {
 }
 
 function scheduleAutoSave() {
-  if (!currentScenarioPath) return;
-  clearTimeout(autoSaveTimer);
-  autoSaveTimer = setTimeout(async () => {
-    try {
-      const id = currentScenarioPath.split('/').pop().replace(/\.md$/, '');
-      const { md } = buildCurrentScenarioMarkdown(id, currentScenarioName ?? id);
-      await writeTextFile(repoHandle, currentScenarioPath, md);
-      const prev = statusEl.textContent;
-      statusEl.textContent = `AUTO-SCRIBED: ${currentScenarioPath}`;
-      setTimeout(() => { if (statusEl.textContent.startsWith('AUTO-SCRIBED')) statusEl.textContent = prev; }, 1500);
-    } catch (err) {
-      statusEl.textContent = `AUTO-SCRIBE FAILED — ${err.message}`;
-    }
-  }, 500);
+  // Auto-save disabled while migrating to user.db (next milestone).
 }
 
 document.getElementById('save-scenario').addEventListener('click', async () => {
-  const name = prompt('Scenario name?', `${new Date().toISOString().slice(0,10)}-${lastMissionPath.split('/').pop().replace('.md','')}`);
-  if (!name) return;
   try {
-    const id = name.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
-    const { scenario, md } = buildCurrentScenarioMarkdown(id, name);
-    const path = `500 Worlds Campaign/scenarios/${scenario.id}.md`;
-    if (await fileExists(repoHandle, path)) {
-      if (!confirm(`SCENARIO "${scenario.id}" ALREADY INTERRED.\n\nOVERWRITE THE ARCHIVE?`)) {
-        statusEl.textContent = 'SCRIBE ABORTED — ARCHIVE UNTOUCHED';
-        return;
-      }
-    }
-    await writeTextFile(repoHandle, path, md);
-    currentScenarioPath = path;
-    currentScenarioName = name;
-    statusEl.textContent = `SCENARIO INTERRED AT: ${path}`;
+    statusEl.textContent = 'SCENARIO ARCHIVE OFFLINE · MIGRATING TO USER.DB · NEXT MILESTONE';
+    return;
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
 });
 
 document.getElementById('open-scenario').addEventListener('click', async () => {
-  if (!repoHandle) {
-    statusEl.textContent = 'COGITATOR LINK REQUIRED';
-    return;
-  }
   try {
-    const items = await listDir(repoHandle, '500 Worlds Campaign/scenarios');
-    const scenarios = items.filter(i => i.kind === 'file' && i.name.endsWith('.md'));
-    if (scenarios.length === 0) {
-      statusEl.textContent = 'ARCHIVES EMPTY';
-      return;
-    }
-    const pick = prompt(
-      'Scenario to open (enter number or full filename):\n' +
-      scenarios.map((s, i) => `${i+1}. ${s.name}`).join('\n')
-    );
-    if (!pick) return;
-    const byIndex = scenarios[parseInt(pick, 10) - 1];
-    const byName = scenarios.find(s => s.name === pick);
-    const file = byIndex ?? byName;
-    if (!file) {
-      statusEl.textContent = 'DESIGNATION UNKNOWN';
-      return;
-    }
-    const text = await readTextFile(repoHandle, `500 Worlds Campaign/scenarios/${file.name}`);
-    const s = await parseScenario(text);
-    if (!s) throw new Error('Scenario has no frontmatter');
-    // Populate dropdowns from the scenario file
-    missionSel.value = s.mission;
-    defenderSel.value = s.defender.roster;
-    attackerSel.value = s.attacker.roster;
-    loadBtn.disabled = false;
-    await loadFromScenario(s);
+    statusEl.textContent = 'SCENARIO ARCHIVE OFFLINE · MIGRATING TO USER.DB · NEXT MILESTONE';
+    return;
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
@@ -728,10 +658,6 @@ document.getElementById('paste-cancel').addEventListener('click', closePasteModa
 document.getElementById('paste-confirm').addEventListener('click', handlePasteConfirm);
 
 function openPasteModal(target) {
-  if (!repoHandle) {
-    statusEl.textContent = 'COGITATOR LINK REQUIRED';
-    return;
-  }
   pasteTarget = target;
   pasteTextarea.value = '';
   pasteModal.classList.add('show');
@@ -742,69 +668,13 @@ function closePasteModal() {
   pasteModal.classList.remove('show');
 }
 
-// Walk datasheets/<faction>/units/<slug>.md via the FSA and return a flat
-// candidates array. Factions without a units/ subdirectory are skipped silently.
-async function listDatasheetCandidates() {
-  const candidates = [];
-  let factionEntries;
-  try {
-    factionEntries = await listDir(repoHandle, 'datasheets');
-  } catch {
-    return candidates;
-  }
-  for (const entry of factionEntries) {
-    if (entry.kind !== 'directory') continue;
-    const faction = entry.name;
-    let unitEntries;
-    try {
-      unitEntries = await listDir(repoHandle, `datasheets/${faction}/units`);
-    } catch {
-      continue; // no units/ subdirectory — skip silently
-    }
-    for (const f of unitEntries) {
-      if (f.kind === 'file' && f.name.endsWith('.md')) {
-        candidates.push({ faction, slug: f.name.replace(/\.md$/, '') });
-      }
-    }
-  }
-  return candidates;
-}
-
 async function handlePasteConfirm() {
-  const raw = pasteTextarea.value;
-  if (!raw.trim()) {
-    statusEl.textContent = 'VOID TRANSMISSION — AWAITING DATA';
-    return;
-  }
-  let roster;
   try {
-    roster = parseRoster(raw);
-  } catch (err) {
-    statusEl.textContent = `SCRIBE FAILED — ${err.message}`;
-    return;
-  }
-  const candidates = await listDatasheetCandidates();
-  for (const u of roster.units) {
-    u.datasheet = resolveSlug(u.name, candidates);
-  }
-  const defaultSlug = roster.list_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const slug = prompt('Save as slug (no extension):', defaultSlug);
-  if (!slug) return;
-  const txtPath = `ultramarines/rosters/${slug}.txt`;
-  const mdPath = `ultramarines/rosters/${slug}.md`;
-  try {
-    await writeTextFile(repoHandle, txtPath, raw);
-    const mdContent = buildRosterMarkdown(roster, `${slug}.txt`);
-    await writeTextFile(repoHandle, mdPath, mdContent);
-    // Refresh both roster dropdowns
-    await populateRosterDropdowns('ultramarines/rosters', [defenderSel, attackerSel]);
-    const sel = pasteTarget === 'defender' ? defenderSel : attackerSel;
-    sel.value = mdPath;
-    updateLoadBtn();
+    statusEl.textContent = 'SCENARIO ARCHIVE OFFLINE · MIGRATING TO USER.DB · NEXT MILESTONE';
     closePasteModal();
-    statusEl.textContent = `ROSTER SCRIBED TO: ${mdPath}`;
+    return;
   } catch (err) {
-    statusEl.textContent = `SCRIBE FAILED TO INTER — ${err.message}`;
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
 }
 

@@ -75,13 +75,14 @@ test('smoke: layer toggle buttons present', () => {
 
 test('smoke: all lib/ modules imported', () => {
   for (const mod of [
-    './lib/fs.js',
     './lib/yaml-frontmatter.js',
     './lib/roster-parser.js',
     './lib/datasheet-parser.js',
     './lib/render.js',
     './lib/auto-placement.js',
     './lib/scenario.js',
+    './lib/runtime.js',
+    './lib/catalogue.js',
   ]) {
     assert.match(HTML, new RegExp(`from '${mod.replace(/\./g, '\\.')}'`), `missing import from ${mod}`);
   }
@@ -110,11 +111,13 @@ test('smoke: auto-save wired', () => {
   assert.match(HTML, /currentScenarioPath/, 'currentScenarioPath state missing');
 });
 
-test('smoke: runtime.js imported and connectRepoHandle wired', () => {
-  assert.match(HTML, /import\s*\{[^}]*connectRepoHandle[^}]*\}\s*from\s*'\.\/lib\/runtime\.js'/,
-    'connectRepoHandle not imported from ./lib/runtime.js');
-  assert.match(HTML, /repoHandle = await connectRepoHandle\(\)/,
-    'CONNECT REPO handler must call connectRepoHandle()');
+test('smoke: catalogue.js wired and CONNECT REPO loads via openCatalogue', () => {
+  assert.match(HTML, /import\s*\{[^}]*openCatalogue[^}]*\}\s*from\s*'\.\/lib\/catalogue\.js'/,
+    'openCatalogue not imported from ./lib/catalogue.js');
+  assert.match(HTML, /catalogue = await openCatalogue\(\)/,
+    'CONNECT REPO handler must call openCatalogue()');
+  assert.match(HTML, /import\s*\{[^}]*isTauri[^}]*\}\s*from\s*'\.\/lib\/runtime\.js'/,
+    'isTauri not imported from ./lib/runtime.js');
 });
 
 test('smoke: native menu listener wired (Tauri-only path present)', () => {
