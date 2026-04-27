@@ -34,7 +34,7 @@ function spaceMarineRoleSymbol(unit) {
   // still reads as leader.
   if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:skull';
   // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans).
-  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:cross';
+  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return 'icon:plus';
   if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:angle-up';
   if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:xmark';
   if (hasKeyword(kws, 'BATTLELINE')) return 'icon:chevron-up';

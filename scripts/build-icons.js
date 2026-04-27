@@ -20,7 +20,7 @@ const ICONS = [
   'chevron-up',  // Battleline
   'xmark',       // Close Support
   'angle-up',    // Fire Support
-  'cross',       // Veteran
+  'plus',        // Veteran
   'skull',       // Leader
   'shield',      // Vehicle / Walker
   'star',        // Sergeant
