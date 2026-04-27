@@ -29,12 +29,13 @@ function spaceMarineRoleSymbol(unit) {
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
   if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return '▣'; // tank/armor turret-view glyph
-  // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders all read as
-  // skull. Same glyph as veteran units (Sternguard, Wardens) — both classes
-  // are venerable / named-elite and share the visual language. Bracket+name
-  // disambiguates which is which.
-  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO')) return '☠';
+  // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans) own
+  // the skull — keep it exclusive to veterans for visual distinction.
   if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '☠';
+  // Captains, Lieutenants, Apothecaries, other Epic Heroes → command cross.
+  // (Wardens of Ultramar are EPIC HERO + Veteran — the veteran path above
+  // wins by slug match.)
+  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO')) return '✠';
   if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '✕';
   if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '◀';
   if (hasKeyword(kws, 'BATTLELINE')) return '▲';
