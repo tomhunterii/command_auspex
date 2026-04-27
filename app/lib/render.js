@@ -29,13 +29,13 @@ function spaceMarineRoleSymbol(unit) {
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
   if (hasKeyword(kws, 'VEHICLE', 'WALKER')) return '▣'; // tank/armor turret-view glyph
-  // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans) own
-  // the skull — keep it exclusive to veterans for visual distinction.
-  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '☠';
-  // Captains, Lieutenants, Apothecaries, other Epic Heroes → command cross.
-  // (Wardens of Ultramar are EPIC HERO + Veteran — the veteran path above
-  // wins by slug match.)
-  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO')) return '✠';
+  // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as
+  // skull (commander's marker). Tested before veteran so a leader who is
+  // also tagged as a veteran unit (rare) still reads as leader.
+  if (hasKeyword(kws, 'CHARACTER', 'EPIC HERO') && !SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '☠';
+  // Veteran units (Sternguard, Wardens, Bladeguard, Vanguard veterans)
+  // — venerable ceremonial cross.
+  if (hasKeyword(kws, 'VETERAN') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '✠';
   if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '✕';
   if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return '◀';
   if (hasKeyword(kws, 'BATTLELINE')) return '▲';
