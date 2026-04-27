@@ -4,32 +4,87 @@
 
 import { baseDiameterPx, clusterOffsets } from './base-geometry.js';
 
-// Filler words skipped when computing character initials.
-const LABEL_FILLERS = new Set(['the', 'of', 'and', 'a', 'an']);
+// Curated short codes for common weapon systems. The lookup is by lowercase
+// substring match — order matters when multiple substrings could hit (the
+// FIRST match wins). Keep specific entries before generic ones.
+const WEAPON_ABBREV = [
+  // Aggressor / Gravis
+  { match: 'auto boltstorm gauntlets', code: 'AB' },
+  { match: 'flamestorm gauntlets',     code: 'FS' },
+  { match: 'fragstorm grenade launcher', code: 'FG' },
+  { match: 'twin power fists',         code: 'TPF' },
+  { match: 'power fist',               code: 'PF' },
+  // Plasma / energy
+  { match: 'plasma incinerator',       code: 'Pl' },
+  { match: 'plasma pistol',            code: 'pp' },
+  { match: 'plasma',                   code: 'Pl' },
+  // Bolt-line
+  { match: 'heavy bolter',             code: 'HB' },
+  { match: 'storm bolter',             code: 'SB' },
+  { match: 'bolt rifle',               code: 'BR' },
+  { match: 'boltgun',                  code: 'B' },
+  { match: 'bolter',                   code: 'B' },
+  // Special / heavy
+  { match: 'lascannon',                code: 'LC' },
+  { match: 'multi-melta',              code: 'MM' },
+  { match: 'meltagun',                 code: 'MG' },
+  { match: 'flamer',                   code: 'F' },
+  { match: 'thunder hammer',           code: 'TH' },
+  { match: 'power weapon',             code: 'PW' },
+  { match: 'power sword',              code: 'PS' },
+  { match: 'chainsword',               code: 'CS' },
+  // Default fallthrough handled by initials.
+];
+
+const SIDEARMS = [
+  'bolt pistol', 'plasma pistol', 'absolvor bolt pistol', 'master-crafted bolter',
+  'close combat weapon', 'combat knife', 'astartes chainsword',
+];
+
+function isSidearm(name) {
+  if (!name) return true;
+  const lower = name.toLowerCase();
+  return SIDEARMS.some(s => lower === s || lower.includes(s));
+}
+
+function abbreviateWeapon(name) {
+  if (!name) return '';
+  const lower = name.toLowerCase();
+  for (const entry of WEAPON_ABBREV) {
+    if (lower.includes(entry.match)) return entry.code;
+  }
+  // Fallback: first letter of each significant word, max 2.
+  const words = lower.split(/\s+/).filter(w => !['the', 'of', 'and', 'a', 'an'].includes(w));
+  if (words.length === 0) return '?';
+  return words.slice(0, 2).map(w => w[0].toUpperCase()).join('');
+}
 
 /**
  * Derive a short label string for a single model circle.
  *
  * Rules:
  *  - Single-model units → '' (no label; don't clutter vehicles / solo heroes).
- *  - submodelCount > 1 → numbered within submodel scope (1, 2, 3…).
- *    Prefix with first letter of submodel name when the unit has >1 distinct
- *    submodels so e.g. Sergeant + Tactical Marines read "S1" vs "1,2,3…".
- *  - submodelCount == 1, multi-word name → initials of non-filler words, max 3.
- *  - submodelCount == 1, single-word name → first letter only.
+ *  - Sergeant detection: submodel name contains "Sergeant" or "Sgt" → 'S'.
+ *  - Otherwise → abbreviation of the model's primary weapon (first non-sidearm
+ *    in wargear list).
  */
-export function modelLabel({ submodelName, indexInSubmodel, submodelCount, totalUnitModels, distinctSubmodelNames }) {
-  if (totalUnitModels <= 1) return '';
-  if (submodelCount > 1) {
-    const prefix = distinctSubmodelNames > 1
-      ? (submodelName?.[0]?.toUpperCase() ?? '') : '';
-    return `${prefix}${indexInSubmodel + 1}`;
-  }
-  if (!submodelName) return '';
-  const words = submodelName.split(/\s+/).filter(w => w && !LABEL_FILLERS.has(w.toLowerCase()));
-  if (words.length === 0) return '';
-  if (words.length === 1) return words[0][0].toUpperCase();
-  return words.slice(0, 3).map(w => w[0].toUpperCase()).join('');
+export function modelLabel(submodel, unitMeta) {
+  // unitMeta: { totalUnitModels }
+  if (unitMeta.totalUnitModels <= 1) return '';
+  // Sergeant detection by submodel name first.
+  const subName = (submodel.submodel ?? '').toLowerCase();
+  if (subName.includes('sergeant') || subName.includes('sgt')) return 'S';
+  // Otherwise pick the primary weapon. The submodel's wargear list is the
+  // source. The roster's frontmatter shape: wargear: [{ count, item }].
+  const wargear = submodel.wargear ?? submodel.weapons ?? [];
+  // Find the first non-sidearm wargear item.
+  const primary = wargear.find(w => {
+    const item = typeof w === 'string' ? w : (w.item ?? w.name ?? '');
+    return !isSidearm(item);
+  });
+  if (!primary) return '';
+  const itemName = typeof primary === 'string' ? primary : (primary.item ?? primary.name ?? '');
+  return abbreviateWeapon(itemName);
 }
 
 // INCH_PX is kept as 1 so all "pixel" math reduces to inches directly.
@@ -350,15 +405,20 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
 
   // Pre-compute label context values once for this unit.
   const totalUnitModels = models.length;
-  const distinctSubmodelNames = new Set(unit.models.map(m => m.submodel)).size;
-  // Track per-submodel iteration index for numbering.
-  const submodelCounters = new Map();
+
+  // Collect circle geometry for bounding-box computation (squad bracket).
+  const circles = [];
 
   models.forEach((m, i) => {
-    const isSergeant = (i === 0);
     const circleCx = cx + offsets[i][0];
     const circleCy = cy + offsets[i][1];
     const r = baseDiameterPx(m.mm) / 2;
+
+    circles.push({ cx: circleCx, cy: circleCy, r });
+
+    // Sergeant detection: thicker stroke for the sergeant circle.
+    const subNameLower = (m.sub.submodel ?? '').toLowerCase();
+    const isSergeant = subNameLower.includes('sergeant') || subNameLower.includes('sgt');
 
     const circle = document.createElementNS(SVG_NS, 'circle');
     circle.setAttribute('cx', circleCx);
@@ -372,20 +432,8 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     circle.dataset.modelIdx = String(i);
     group.appendChild(circle);
 
-    // --- Model label ---
-    const subName = m.sub.submodel;
-    const subCount = m.sub.count;
-    // Determine within-submodel index for this circle.
-    const subIdx = submodelCounters.get(subName) ?? 0;
-    submodelCounters.set(subName, subIdx + 1);
-
-    const label = modelLabel({
-      submodelName: subName,
-      indexInSubmodel: subIdx,
-      submodelCount: subCount,
-      totalUnitModels,
-      distinctSubmodelNames,
-    });
+    // --- Per-model label (weapon abbreviation / sergeant marker) ---
+    const label = modelLabel(m.sub, { totalUnitModels });
 
     if (label) {
       const text = document.createElementNS(SVG_NS, 'text');
@@ -408,10 +456,63 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
 
       // Hover tooltip — full submodel name.
       const titleEl = document.createElementNS(SVG_NS, 'title');
-      titleEl.textContent = subName;
+      titleEl.textContent = m.sub.submodel;
       circle.appendChild(titleEl);
     }
   });
+
+  // --- Squad-level identity: name label + bracket corners ---
+  if (totalUnitModels >= 2) {
+    const xs = circles.map(c => c.cx);
+    const ys = circles.map(c => c.cy);
+    const rs = circles.map(c => c.r);
+    const minX = Math.min(...xs.map((x, i) => x - rs[i]));
+    const maxX = Math.max(...xs.map((x, i) => x + rs[i]));
+    const minY = Math.min(...ys.map((y, i) => y - rs[i]));
+    const maxY = Math.max(...ys.map((y, i) => y + rs[i]));
+    const padding = 0.3; // inches around the cluster
+
+    // Squad name floats above the cluster.
+    const squadLabel = document.createElementNS(SVG_NS, 'text');
+    squadLabel.setAttribute('x', (minX + maxX) / 2);
+    squadLabel.setAttribute('y', minY - padding - 0.5);
+    squadLabel.setAttribute('text-anchor', 'middle');
+    squadLabel.setAttribute('dominant-baseline', 'central');
+    squadLabel.setAttribute('font-family', "'JetBrains Mono', monospace");
+    squadLabel.setAttribute('font-weight', '700');
+    squadLabel.setAttribute('font-size', '0.6');
+    squadLabel.setAttribute('fill', 'var(--phosphor)');
+    squadLabel.setAttribute('pointer-events', 'none');
+    squadLabel.setAttribute('letter-spacing', '0.04');
+    squadLabel.classList.add('squad-name');
+    squadLabel.textContent = (unit.name ?? '').toUpperCase();
+    group.appendChild(squadLabel);
+
+    // Bracket frame: four L-shaped corners around the bounding box.
+    const bracketGroup = document.createElementNS(SVG_NS, 'g');
+    bracketGroup.classList.add('squad-bracket');
+    bracketGroup.setAttribute('pointer-events', 'none');
+    const armLen = 0.4;
+    const stroke = '0.04';
+    const bracketColor = 'var(--phosphor-dim)';
+    const corners = [
+      // [x, y, dx1, dy1, dx2, dy2] — corner origin and two arm directions
+      [minX - padding, minY - padding,  armLen, 0,  0,  armLen], // TL
+      [maxX + padding, minY - padding, -armLen, 0,  0,  armLen], // TR
+      [minX - padding, maxY + padding,  armLen, 0,  0, -armLen], // BL
+      [maxX + padding, maxY + padding, -armLen, 0,  0, -armLen], // BR
+    ];
+    for (const [x, y, dx1, dy1, dx2, dy2] of corners) {
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', `M ${x + dx1} ${y + dy1} L ${x} ${y} L ${x + dx2} ${y + dy2}`);
+      path.setAttribute('stroke', bracketColor);
+      path.setAttribute('stroke-width', stroke);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-linecap', 'round');
+      bracketGroup.appendChild(path);
+    }
+    group.appendChild(bracketGroup);
+  }
 
   return group;
 }

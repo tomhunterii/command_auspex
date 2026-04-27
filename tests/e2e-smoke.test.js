@@ -172,3 +172,11 @@ test('smoke: model labels rendered on battlefield (renderer)', () => {
   assert.match(RENDER, /text-anchor/);
   assert.match(RENDER, /classList\.add\(['"]model-label['"]\)/);
 });
+
+test('smoke: squad bracket + squad-name labels rendered', () => {
+  const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
+  assert.match(RENDER, /squad-name/);
+  assert.match(RENDER, /squad-bracket/);
+  assert.match(RENDER, /WEAPON_ABBREV/);
+  assert.match(RENDER, /isSidearm/);
+});
