@@ -1,3 +1,23 @@
+---
+slug: logan-grimnar
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: true
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 110
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Infantry, Character, Epic Hero, Terminator, Chapter Master, Logan Grimnar]
+led_by: []
+grants_to_attached_unit:
+  description: "While leading a unit, that unit benefits from Logan's Guile of the Wolf aura: each time the opponent targets a unit from their army with a Stratagem, if that unit is within 12\" of Logan, increase the cost of that usage of that Stratagem by 1CP (not cumulative). Logan also has High King of Fenris (once per battle round, in your Movement phase, treat the battle round as one higher for one friendly Space Wolves unit in Reserves when setting up)."
+  unmodelled: "Aura is an opponent-Stratagem CP tax (Guile of the Wolf) and a Reserves-deployment manipulator (High King of Fenris); neither is expressible in the engine's modifier/weapon_abilities vocabulary."
+---
+
 # Logan Grimnar
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter

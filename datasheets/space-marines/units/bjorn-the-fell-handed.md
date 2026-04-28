@@ -1,3 +1,23 @@
+---
+slug: bjorn-the-fell-handed
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: true
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 160
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Vehicle, Walker, Character, Epic Hero, Smoke, Dreadnought, Bjorn The Fell-Handed]
+led_by: []
+# Bjorn is a VEHICLE/WALKER/DREADNOUGHT and does not attach to or lead any unit.
+# His unique abilities (Legendary Tenacity, Ancient Tactician) are self-only / army-wide
+# and are NOT grants to an attached unit, so no grants_to_attached_unit block is set.
+---
+
 # Bjorn the Fell-Handed
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter

@@ -1,3 +1,23 @@
+---
+slug: iron-priest
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 55
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Infantry, Character, Techmarine, Iron Priest]
+led_by: []
+grants_to_attached_unit:
+  description: "While leading a unit, the Iron Priest's unique abilities benefit nearby ADEPTUS ASTARTES VEHICLE models, not the unit he leads: Iron Priest (Lone Operative while within 3\" of a friendly Adeptus Astartes Vehicle), Gift of the Iron Wolf (in your Command phase, restore D3 wounds to one friendly Adeptus Astartes Vehicle within 3\" and grant one of its ranged weapons [RAPID FIRE 1] until the start of your next Command phase), and Judgement of the Omnissiah (re-roll the Wound roll on his attacks targeting enemies within Engagement Range of a friendly Adeptus Astartes Vehicle). The led unit gains no datasheet-driven combat modifiers from the Iron Priest."
+  unmodelled: "All three Iron Priest abilities key off proximity to friendly Adeptus Astartes Vehicles (Lone Operative, vehicle heal + Rapid Fire 1 grant, self Wound re-roll near a vehicle). None apply weapon abilities or hit/wound modifiers to the led unit, so no engine-vocabulary grants are encoded."
+---
+
 # Iron Priest
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter
