@@ -6,14 +6,14 @@ test('buildScenario assembles a scenario from inputs', () => {
   const s = buildScenario({
     id: 'test',
     name: 'Test',
-    missionPath: 'missions/purge-and-burn.md',
-    defender: { rosterPath: 'ultramarines/rosters/x.md', owner: 'Tom' },
+    missionPath: 'scenarios/purge-and-burn.md',
+    defender: { rosterPath: 'rosters/x.md', owner: 'Tom' },
     attacker: { rosterPath: null, owner: null },
     placements: [],
   });
   assert.strictEqual(s.id, 'test');
-  assert.strictEqual(s.mission, 'missions/purge-and-burn.md');
-  assert.strictEqual(s.defender.roster, 'ultramarines/rosters/x.md');
+  assert.strictEqual(s.mission, 'scenarios/purge-and-burn.md');
+  assert.strictEqual(s.defender.roster, 'rosters/x.md');
 });
 
 test('serializeScenario produces valid YAML + markdown', async () => {

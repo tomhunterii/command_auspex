@@ -5,7 +5,7 @@
 // any @tauri-apps/* JS packages from a no-bundler frontend.
 //
 // Conceptually this replaces the FSA-walking patterns in command-auspex.html.
-// What was `listDir(repo, 'ultramarines/rosters').filter(*.md)` is now
+// What was `listDir(repo, 'rosters').filter(*.md)` is now
 // `listRosters()`. What was `readTextFile(repo, 'datasheets/.../foo.md')`
 // followed by `parseDatasheet(text)` is now `getUnit('foo')`.
 

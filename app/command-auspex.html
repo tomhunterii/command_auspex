@@ -799,7 +799,7 @@ async function loadFromScenario(s) {
   document.getElementById('save-scenario').disabled = false;
 
   const filename = (s.id || s.name.toLowerCase().replace(/[^a-z0-9-]/gi, '-')) + '.md';
-  currentScenarioPath = `500 Worlds Campaign/scenarios/${filename}`;
+  currentScenarioPath = `scenarios/${filename}`;
   currentScenarioName = s.name;
 
   statusEl.textContent = `SCENARIO RECALLED: ${s.name}`;

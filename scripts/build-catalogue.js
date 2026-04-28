@@ -367,16 +367,16 @@ async function build() {
     }
   }
 
-  // Missions
-  const missionsDir = join(REPO, '500 Worlds Campaign', 'missions');
+  // Scenarios (formerly "missions" — renamed to faction-agnostic terminology)
+  const scenariosDir = join(REPO, 'scenarios');
   let missionCount = 0;
-  for (const file of listMarkdownFiles(missionsDir)) {
+  for (const file of listMarkdownFiles(scenariosDir)) {
     await processMission(db, file);
     missionCount++;
   }
 
   // Rosters (only structured ones — hand-written tables are skipped)
-  const rostersDir = join(REPO, 'ultramarines', 'rosters');
+  const rostersDir = join(REPO, 'rosters');
   let rosterCount = 0;
   for (const file of listMarkdownFiles(rostersDir)) {
     const ok = await processRoster(db, file);

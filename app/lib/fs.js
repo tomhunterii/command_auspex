@@ -16,7 +16,7 @@ export function filterByExtension(items, ext) {
 /**
  * Resolve a path relative to a root directory handle.
  * @param {FileSystemDirectoryHandle} root
- * @param {string} path  e.g., '500 Worlds Campaign/missions/purge-and-burn.md'
+ * @param {string} path  e.g., 'scenarios/purge-and-burn.md'
  * @returns {Promise<FileSystemFileHandle>}
  */
 export async function resolveFile(root, path) {
