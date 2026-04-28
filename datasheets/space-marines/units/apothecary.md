@@ -1,3 +1,22 @@
+---
+slug: apothecary
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 50
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Character, Grenades, Tacticus, Apothecary]
+led_by: []
+grants_to_attached_unit:
+  description: "While leading a unit, in your Command phase, you can return 1 destroyed model (excluding CHARACTER models) to that unit (Narthecium). When this model's Bodyguard unit is destroyed, roll one D6: on a 2+, you gain 1CP (Gene-seed Recovery)."
+---
+
 # Apothecary
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -9,7 +28,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Character, Grenades, Imperium, Tacticus, Apothecary
 
 ---

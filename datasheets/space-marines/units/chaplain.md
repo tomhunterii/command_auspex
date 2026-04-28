@@ -1,3 +1,24 @@
+---
+slug: chaplain
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 60
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Character, Grenades, Tacticus, Chaplain]
+led_by: []
+grants_to_attached_unit:
+  modifiers:
+    melee_wound_bonus: 1
+  description: "While leading a unit, each time a model in that unit makes a melee attack, add 1 to the Wound roll (Litany of Hate)."
+---
+
 # Chaplain
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +28,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Character, Grenades, Imperium, Tacticus, Chaplain
 
 ---

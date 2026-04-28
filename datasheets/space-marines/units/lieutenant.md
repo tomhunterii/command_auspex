@@ -1,3 +1,24 @@
+---
+slug: lieutenant
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 55
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Character, Grenades, Tacticus, Lieutenant]
+led_by: []
+grants_to_attached_unit:
+  weapon_abilities:
+    lethal_hits: true
+  description: "While leading a unit, weapons equipped by models in that unit have the [LETHAL HITS] ability (Tactical Precision). This unit is also eligible to shoot and declare a charge in a turn in which it Fell Back (Target Priority)."
+---
+
 # Lieutenant
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +28,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Character, Grenades, Imperium, Tacticus, Lieutenant
 
 ---

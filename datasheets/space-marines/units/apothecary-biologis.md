@@ -1,7 +1,18 @@
 ---
 slug: apothecary-biologis
 faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
 is_character: true
+loadouts:
+  - models: 1
+    points: 70
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Character, Gravis, Apothecary, Biologis]
+led_by: []
 grants_to_attached_unit:
   weapon_abilities:
     lethal_hits: true
