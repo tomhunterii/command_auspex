@@ -1,3 +1,23 @@
+---
+slug: judiciar
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 70
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Character, Tacticus, Judiciar]
+led_by: []
+grants_to_attached_unit:
+  description: "While leading a unit, that unit has the Fights First ability (Tempormortis). Silent Fury (self): each time this model destroys an enemy CHARACTER model, until the end of the battle, add 1 to the Attacks characteristic of its executioner relic blade."
+  unmodelled: "Fights First is a turn-order ability the engine does not model; Silent Fury is a self-only conditional Attacks-stack the engine does not track across activations."
+---
+
 # Judiciar
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +27,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Character, Imperium, Tacticus, Judiciar
 
 ---

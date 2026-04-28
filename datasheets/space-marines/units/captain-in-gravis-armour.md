@@ -1,3 +1,23 @@
+---
+slug: captain-in-gravis-armour
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 80
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Character, Grenades, Gravis, Captain]
+led_by: []
+grants_to_attached_unit:
+  description: "While leading a unit, this model's Rites of Battle ability lets one unit from your army with this ability use it once per battle round when targeted with a Stratagem, reducing the CP cost of that Stratagem by 1CP (to a minimum of 0CP). Refuse to Yield: each time an attack is allocated to this model, halve the Damage characteristic of that attack (rounding up)."
+  unmodelled: "Rites of Battle is an army-wide CP discount, not a per-attached-unit combat modifier; Refuse to Yield is a self-only damage-halving defensive buff. Engine has no CP/Stratagem economy nor allocated-attack damage modifiers."
+---
+
 # Captain in Gravis Armour
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +27,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Character, Grenades, Imperium, Gravis, Captain
 
 ---

@@ -1,3 +1,23 @@
+---
+slug: captain
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 80
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Character, Grenades, Tacticus, Captain]
+led_by: []
+grants_to_attached_unit:
+  description: "While leading a unit, this model's Rites of Battle ability lets one unit from your army with this ability use it once per battle round when targeted with a Stratagem, reducing the CP cost of that Stratagem by 1CP (to a minimum of 0CP). Finest Hour: once per battle, at the start of the Fight phase, add 3 to the Attacks characteristic of melee weapons equipped by this model and those weapons have [DEVASTATING WOUNDS]."
+  unmodelled: "Rites of Battle is an army-wide CP discount, not a per-attached-unit combat modifier; Finest Hour is a self-only melee buff. Engine has no CP/Stratagem economy nor once-per-battle melee buffs."
+---
+
 # Captain
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +27,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Character, Grenades, Imperium, Tacticus, Captain
 
 ---
