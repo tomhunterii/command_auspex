@@ -82,11 +82,6 @@ While this model has 1–4 wounds remaining, each time this model makes an attac
 
 **Hover.**
 
-### Faction
-**Synapse.** While a Tyranids unit from your army is within Synapse Range of your army: each time that unit takes a Battle-shock test, take that test on 3D6 instead of 2D6; and each time a model in that unit makes a melee attack, add 1 to the Strength characteristic of that attack.
-
-**Shadow in the Warp.** Once per battle, in either player's Command phase, if one or more units from your army with this ability are on the battlefield, you can unleash the Shadow in the Warp. When you do, each enemy unit on the battlefield must take a Battle-shock test. Each time an enemy unit takes such a test, if it is within 6" of one or more Synapse units from your army, subtract 1 from that test.
-
 ### Spore Mine Cysts
 Each time this model ends a Normal move, you can select one of the following:
 - Select one enemy unit it moved over during that move and roll six D6: for each 3+, that unit suffers 1 mortal wound.

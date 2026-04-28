@@ -70,11 +70,6 @@ None. Hormagaunts have no ranged weapons.
 ### Core
 **Bounding Leap.** This unit is eligible to declare a charge in a turn in which it Advanced.
 
-### Faction
-**Synapse.** While a Tyranids unit from your army is within Synapse Range of your army: each time that unit takes a Battle-shock test, take that test on 3D6 instead of 2D6; and each time a model in that unit makes a melee attack, add 1 to the Strength characteristic of that attack.
-
-**Shadow in the Warp.** Once per battle, in either player's Command phase, if one or more units from your army with this ability are on the battlefield, you can unleash the Shadow in the Warp. When you do, each enemy unit on the battlefield must take a Battle-shock test. Each time an enemy unit takes such a test, if it is within 6" of one or more Synapse units from your army, subtract 1 from that test.
-
 ### Endless Multitude
 While this unit is within Synapse range of your army, each time one or more models in this unit are destroyed, roll one D6: on a 4+, one destroyed model is returned to this unit with its full wounds remaining. (Wording per Wahapedia datasheet; verify exact text in the codex before a tournament.)
 

@@ -72,13 +72,6 @@ led_by: []
 ### Core
 **Deadly Demise 1.** When this model is destroyed, roll one D6 before removing it from play. On a 6, each unit within 6" of that model suffers 1 mortal wound.
 
-### Faction
-**Synapse.** While a Tyranids unit from your army is within Synapse Range of your army: each time that unit takes a Battle-shock test, take that test on 3D6 instead of 2D6; and each time a model in that unit makes a melee attack, add 1 to the Strength characteristic of that attack.
-
-> Note: per Wahapedia the Screamer-Killer carries the **Synapse** keyword (it projects Synapse to nearby Tyranids units). Confirm against codex print.
-
-**Shadow in the Warp.** Once per battle, in either player's Command phase, if one or more units from your army with this ability are on the battlefield, you can unleash the Shadow in the Warp. When you do, each enemy unit on the battlefield must take a Battle-shock test. Each time an enemy unit takes such a test, if it is within 6" of one or more Synapse units from your army, subtract 1 from that test.
-
 ### Death Scream
 In your Shooting phase, after this model has shot, select one unit hit by one or more of those attacks. That unit must take a Battle-shock test, subtracting 1 from that test.
 
