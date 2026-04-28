@@ -11,7 +11,7 @@ loadouts:
     default: true
 keywords:
   faction: [Adeptus Astartes, Ultramarines]
-  unit: [Infantry, Character, Epic Hero, Imperium, Tacticus, Grenades, Captain, Titus]
+  unit: [Infantry, Character, Epic Hero, Tacticus, Grenades, Captain, Titus]
 led_by: []
 grants_to_attached_unit:
   modifiers:
