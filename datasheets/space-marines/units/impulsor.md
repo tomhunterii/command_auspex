@@ -1,3 +1,20 @@
+---
+slug: impulsor
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 80
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Vehicle, Transport, Dedicated Transport, Impulsor]
+led_by: []
+---
+
 # Impulsor
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +24,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Vehicle, Transport, Dedicated Transport, Imperium, Impulsor
 
 ---

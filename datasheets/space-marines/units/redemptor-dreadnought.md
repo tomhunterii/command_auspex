@@ -1,3 +1,20 @@
+---
+slug: redemptor-dreadnought
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 205
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Vehicle, Walker, Dreadnought, Redemptor Dreadnought]
+led_by: []
+---
+
 # Redemptor Dreadnought
 
 **Faction:** Space Marines (Adeptus Astartes)

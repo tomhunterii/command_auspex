@@ -1,3 +1,20 @@
+---
+slug: repulsor-executioner
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 230
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Vehicle, Smoke, Transport, Repulsor Executioner]
+led_by: []
+---
+
 # Repulsor Executioner
 
 **Faction:** Space Marines (Adeptus Astartes)
