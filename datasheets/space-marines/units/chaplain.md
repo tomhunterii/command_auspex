@@ -14,9 +14,8 @@ keywords:
   unit: [Infantry, Character, Grenades, Tacticus, Chaplain]
 led_by: []
 grants_to_attached_unit:
-  modifiers:
-    melee_wound_bonus: 1
   description: "While leading a unit, each time a model in that unit makes a melee attack, add 1 to the Wound roll (Litany of Hate)."
+  unmodelled: melee-only +1 to Wound — engine has no melee-restricted wound modifier yet (see follow-up task).
 ---
 
 # Chaplain
