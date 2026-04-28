@@ -352,29 +352,25 @@
           SELECT BOTH FORCES TO ENGAGE
         </div>
         <div id="sim-body" style="display:none;">
-          <div style="margin-bottom:6px; display:flex; gap:6px;">
-            <div style="flex:2;">
+          <div style="margin-bottom:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
               <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">ATTACKER</label>
-              <select id="sim-attacker" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+              <span style="font-size:10px; letter-spacing:1.5px; color:var(--dim);"><span id="sim-attacker-models-readout" style="color:var(--phosphor); font-weight:700;">1</span> MODELS</span>
             </div>
-            <div style="flex:1;">
-              <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">MODELS</label>
-              <input id="sim-attacker-models" type="number" min="1" value="1" class="select" readonly tabindex="-1" style="margin-left:0; margin-top:3px; width:100%; cursor:not-allowed; opacity:0.7;"/>
-            </div>
+            <select id="sim-attacker" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+            <input id="sim-attacker-models" type="hidden" readonly value="1"/>
           </div>
           <div id="sim-weapon-detail" style="font-size:10px; color:var(--dim); border-top:1px dashed var(--phosphor-dim); padding-top:6px; margin-bottom:8px; display:none;"></div>
           <div style="text-align:center; margin:2px 0 4px;">
             <button id="sim-swap-roles" class="btn" type="button" title="Swap which force is the attacker / defender" style="padding:2px 10px; font-size:10px; letter-spacing:2px;">⇅ SWAP ROLES</button>
           </div>
-          <div style="margin-bottom:6px; display:flex; gap:6px;">
-            <div style="flex:2;">
+          <div style="margin-bottom:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
               <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEFENDER</label>
-              <select id="sim-defender" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+              <span style="font-size:10px; letter-spacing:1.5px; color:var(--dim);"><span id="sim-models-readout" style="color:var(--phosphor); font-weight:700;">5</span> MODELS</span>
             </div>
-            <div style="flex:1;">
-              <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">MODELS</label>
-              <input id="sim-models" type="number" min="1" value="5" class="select" readonly tabindex="-1" style="margin-left:0; margin-top:3px; width:100%; cursor:not-allowed; opacity:0.7;"/>
-            </div>
+            <select id="sim-defender" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
+            <input id="sim-models" type="hidden" readonly value="5"/>
           </div>
           <div style="margin-bottom:6px;">
             <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">WEAPONS</label>
@@ -748,6 +744,14 @@ async function defaultModelCountFor(selectEl, rosterSlug, modelInputId, side = '
     }
   }
   document.getElementById(modelInputId).value = live;
+  syncModelReadout(modelInputId, live);
+}
+
+// Mirror the hidden numeric input into its visible readout span (e.g.
+// 'sim-attacker-models' → 'sim-attacker-models-readout').
+function syncModelReadout(inputId, value) {
+  const readout = document.getElementById(`${inputId}-readout`);
+  if (readout) readout.textContent = String(value);
 }
 
 document.getElementById('sim-attacker').addEventListener('change', () =>
@@ -1216,11 +1220,13 @@ async function refreshSimModelCountsFor(unitSlug) {
   if (simAttacker?.value === unitSlug) {
     const live = await liveModelCountFor(unitSlug, simAttackerSide(), simAttackerRosterSlug());
     document.getElementById('sim-attacker-models').value = live;
+    syncModelReadout('sim-attacker-models', live);
   }
   if (simDefender?.value === unitSlug) {
     const defenderSide = simRolesSwapped ? 'defender' : 'attacker';
     const live = await liveModelCountFor(unitSlug, defenderSide, simDefenderRosterSlug());
     document.getElementById('sim-models').value = live;
+    syncModelReadout('sim-models', live);
   }
 }
 
