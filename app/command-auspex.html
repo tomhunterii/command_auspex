@@ -142,7 +142,6 @@
     display: block;
     width: 100%;
     height: auto;
-    max-height: calc(100vh - 120px);
   }
   .sidebar {
     border-left: 1px solid var(--phosphor-dim);
@@ -364,6 +363,9 @@
             </div>
           </div>
           <div id="sim-weapon-detail" style="font-size:10px; color:var(--dim); border-top:1px dashed var(--phosphor-dim); padding-top:6px; margin-bottom:8px; display:none;"></div>
+          <div style="text-align:center; margin:2px 0 4px;">
+            <button id="sim-swap-roles" class="btn" type="button" title="Swap which force is the attacker / defender" style="padding:2px 10px; font-size:10px; letter-spacing:2px;">⇅ SWAP ROLES</button>
+          </div>
           <div style="margin-bottom:6px; display:flex; gap:6px;">
             <div style="flex:2;">
               <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">DEFENDER</label>
@@ -426,6 +428,23 @@ let autoSaveTimer = null;
 const rosterCache = new Map();
 let friendlyRosterSlug = null;
 let hostileRosterSlug = null;
+
+// Sim role swap: when false, the COMBAT AUSPEX "ATTACKER" dropdown is filled
+// from the defender FORCE's roster (the player's own list, by convention).
+// When true, the mapping inverts so the attacker FORCE plays the attacker
+// role in combat — useful for asking "what happens when the enemy shoots me?"
+let simRolesSwapped = false;
+function simAttackerRosterSlug() {
+  return simRolesSwapped ? hostileRosterSlug : friendlyRosterSlug;
+}
+function simDefenderRosterSlug() {
+  return simRolesSwapped ? friendlyRosterSlug : hostileRosterSlug;
+}
+function simAttackerSide() {
+  // Which battlefield side ('defender' or 'attacker') the sim's attacker is
+  // drawn from — determines which `attachments` map to consult for leaders.
+  return simRolesSwapped ? 'attacker' : 'defender';
+}
 
 // Map<targetSquadSlug, leaderSlug> — single-leader attachments per side.
 // Keyed per side because the same squad slug may exist on both sides if
@@ -539,8 +558,8 @@ async function refreshSimGate() {
   if (!ready) return;
   // Both rosters chosen — populate the sim dropdowns from them.
   await Promise.all([
-    populateSimDropdownFromRoster(document.getElementById('sim-attacker'), friendlyRosterSlug),
-    populateSimDropdownFromRoster(document.getElementById('sim-defender'), hostileRosterSlug),
+    populateSimDropdownFromRoster(document.getElementById('sim-attacker'), simAttackerRosterSlug()),
+    populateSimDropdownFromRoster(document.getElementById('sim-defender'), simDefenderRosterSlug()),
   ]);
   // Clear weapon-detail panel until user picks an attacker.
   const detailEl = document.getElementById('sim-weapon-detail');
@@ -584,8 +603,8 @@ async function loadCatalogueAndPopulate() {
         }
 
         // Roster-aware filter: restrict to equipped weapons when applicable.
-        const attackerInRoster = friendlyRosterSlug
-          ? (await ensureRosterCached(friendlyRosterSlug))?.unitsBySlug?.get(slug)
+        const attackerInRoster = simAttackerRosterSlug()
+          ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsBySlug?.get(slug)
           : null;
         const equipped = attackerInRoster?.equippedWeapons;
         const filterByEquipped = (weapons, eq) => weapons.filter(w =>
@@ -598,14 +617,14 @@ async function loadCatalogueAndPopulate() {
 
         // Leader merge: if the squad has an attached leader, show the leader's
         // weapons in their own section so the Captain sees what's hitting.
-        const leaderSlug = attachedLeaderSlug('defender', slug);
+        const leaderSlug = attachedLeaderSlug(simAttackerSide(), slug);
         let leaderUnit = null;
         let leaderWeapons = [];
         if (leaderSlug) {
           leaderUnit = await getUnit(leaderSlug);
           if (leaderUnit) {
-            const leaderInRoster = friendlyRosterSlug
-              ? (await ensureRosterCached(friendlyRosterSlug))?.unitsBySlug?.get(leaderSlug)
+            const leaderInRoster = simAttackerRosterSlug()
+              ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsBySlug?.get(leaderSlug)
               : null;
             const leaderEquipped = leaderInRoster?.equippedWeapons;
             leaderWeapons = leaderEquipped && leaderEquipped.size > 0
@@ -732,9 +751,26 @@ async function defaultModelCountFor(selectEl, rosterSlug, modelInputId, side = '
 }
 
 document.getElementById('sim-attacker').addEventListener('change', () =>
-  defaultModelCountFor(document.getElementById('sim-attacker'), friendlyRosterSlug, 'sim-attacker-models'));
+  defaultModelCountFor(document.getElementById('sim-attacker'), simAttackerRosterSlug(), 'sim-attacker-models'));
 document.getElementById('sim-defender').addEventListener('change', () =>
-  defaultModelCountFor(document.getElementById('sim-defender'), hostileRosterSlug, 'sim-models'));
+  defaultModelCountFor(document.getElementById('sim-defender'), simDefenderRosterSlug(), 'sim-models'));
+
+// SWAP ROLES button: invert which battlefield FORCE feeds which sim role.
+// Map visuals (deployment colors, deployment zones) are unchanged — only the
+// Combat Auspex internal roster lookups flip.
+document.getElementById('sim-swap-roles').addEventListener('click', async () => {
+  simRolesSwapped = !simRolesSwapped;
+  const btn = document.getElementById('sim-swap-roles');
+  btn.textContent = simRolesSwapped ? '⇅ SWAP ROLES (DEFENDER ATTACKING)' : '⇅ SWAP ROLES';
+  // Re-populate dropdowns from the now-swapped rosters; refresh dependent UI.
+  await Promise.all([
+    populateSimDropdownFromRoster(document.getElementById('sim-attacker'), simAttackerRosterSlug()),
+    populateSimDropdownFromRoster(document.getElementById('sim-defender'), simDefenderRosterSlug()),
+  ]);
+  const detailEl = document.getElementById('sim-weapon-detail');
+  if (detailEl) { detailEl.style.display = 'none'; detailEl.innerHTML = ''; }
+  refreshSimPairLine();
+});
 
 // Sim-pair line: redraw whenever either selector changes.
 document.getElementById('sim-attacker').addEventListener('change', refreshSimPairLine);
@@ -1178,11 +1214,12 @@ async function refreshSimModelCountsFor(unitSlug) {
   const simAttacker = document.getElementById('sim-attacker');
   const simDefender = document.getElementById('sim-defender');
   if (simAttacker?.value === unitSlug) {
-    const live = await liveModelCountFor(unitSlug, 'defender', friendlyRosterSlug);
+    const live = await liveModelCountFor(unitSlug, simAttackerSide(), simAttackerRosterSlug());
     document.getElementById('sim-attacker-models').value = live;
   }
   if (simDefender?.value === unitSlug) {
-    const live = await liveModelCountFor(unitSlug, 'attacker', hostileRosterSlug);
+    const defenderSide = simRolesSwapped ? 'defender' : 'attacker';
+    const live = await liveModelCountFor(unitSlug, defenderSide, simDefenderRosterSlug());
     document.getElementById('sim-models').value = live;
   }
 }
@@ -1538,11 +1575,11 @@ async function renderLeaderControl(unit, ds) {
     const simAttackerEl = document.getElementById('sim-attacker');
     const simDefenderEl = document.getElementById('sim-defender');
     if (simAttackerEl?.value === slug) {
-      await defaultModelCountFor(simAttackerEl, friendlyRosterSlug, 'sim-attacker-models', 'defender');
+      await defaultModelCountFor(simAttackerEl, simAttackerRosterSlug(), 'sim-attacker-models', simAttackerSide());
       await refreshWeaponDetail();
     }
     if (simDefenderEl?.value === slug) {
-      await defaultModelCountFor(simDefenderEl, hostileRosterSlug, 'sim-models', 'attacker');
+      await defaultModelCountFor(simDefenderEl, simDefenderRosterSlug(), 'sim-models', simRolesSwapped ? 'defender' : 'attacker');
     }
   });
 }
@@ -1574,11 +1611,12 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     }
 
     // Roster-aware weapon filter: restrict to equipped weapons when the sim
-    // unit appears in the loaded friendly / hostile roster.
-    const friendlyCached = await ensureRosterCached(friendlyRosterSlug);
-    const hostileCached  = await ensureRosterCached(hostileRosterSlug);
-    const attackerInRoster = friendlyCached?.unitsBySlug?.get(attackerSlug);
-    const defenderInRoster = hostileCached?.unitsBySlug?.get(defenderSlug);
+    // unit appears in the loaded roster. Which roster feeds attacker vs
+    // defender depends on the SWAP ROLES toggle.
+    const attackerCached = await ensureRosterCached(simAttackerRosterSlug());
+    const defenderCached = await ensureRosterCached(simDefenderRosterSlug());
+    const attackerInRoster = attackerCached?.unitsBySlug?.get(attackerSlug);
+    const defenderInRoster = defenderCached?.unitsBySlug?.get(defenderSlug);
 
     const filterEquipped = (unit, equippedSet) => {
       if (!equippedSet || equippedSet.size === 0) return unit;
@@ -1598,9 +1636,9 @@ document.getElementById('sim-run').addEventListener('click', async () => {
 
     const attackerModels = Math.max(1, parseInt(document.getElementById('sim-attacker-models').value, 10) || 1);
     // Check whether the sim attacker has an attached leader on the board.
-    // sim attacker is drawn on the defender-deployment side, so look up
-    // attachments['defender'] for the attacker slug.
-    const attackerSideForAttachment = 'defender';
+    // The attachment map to consult depends on which battlefield side the
+    // sim's attacker is drawn from — see SWAP ROLES.
+    const attackerSideForAttachment = simAttackerSide();
     const attackerLeaderSlug = attachedLeaderSlug(attackerSideForAttachment, attackerSlug);
     const attachedLeaderUnit = attackerLeaderSlug ? await getUnit(attackerLeaderSlug) : null;
     const { attacker: rawAttacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels, attachedLeader: attachedLeaderUnit });
