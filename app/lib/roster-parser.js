@@ -43,9 +43,13 @@ const SECTION_HEADERS = new Set([
   'ALLIED UNITS', 'FORTIFICATIONS', 'SWARMS',
 ]);
 
-const UNIT_HEADER_RE = /^(.+?) \(([\d,]+) Points\)$/;
+const UNIT_HEADER_RE = /^(.+?) \(([\d,]+) (?:Points|pts)\)$/i;
+// GW Companion App format: 2-space indented top bullets, 5-space hollow nested.
 const TOP_BULLET_RE = /^  • (.+?)\s*$/;
 const NESTED_BULLET_RE = /^\s{5}◦ (.+?)\s*$/;
+// New Recruit format: column-0 top bullets, 4-space indented nested (same • glyph).
+const TOP_BULLET_NR_RE = /^• (.+?)\s*$/;
+const NESTED_BULLET_NR_RE = /^    • (.+?)\s*$/;
 const NX_ITEM_RE = /^(\d+)x (.+)$/;
 const ENHANCEMENT_RE = /^enhancements?:\s*(.+)$/i;
 const EXPORT_FOOTER_RE = /^Exported with App Version:\s*(.+?),\s*Data Version:\s*(.+?)\s*$/;
@@ -57,6 +61,71 @@ function isSectionHeader(line) {
   return /^[A-Z ]+$/.test(s) && /[A-Z]/.test(s);
 }
 
+// Parse a New Recruit-format header block. Layout:
+//   +++++++++++++...
+//   + FACTION KEYWORD: <faction> - <subfaction>
+//   + DETACHMENT: <detachment>
+//   + TOTAL ARMY POINTS: <N>pts
+//   + ENHANCEMENT: <name>          (optional)
+//   + NUMBER OF UNITS: <N>         (informational)
+//   + SECONDARY: <text>            (informational)
+//   +++++++++++++...
+// Returns { list_name, list_points, faction, subfaction, detachment,
+//           battle_size_name, max_points, i }.
+function parseHeaderNewRecruit(lines, i) {
+  // Skip leading divider line(s).
+  while (i < lines.length && lines[i].trim().startsWith('+++')) i++;
+
+  let list_points = null;
+  let faction = null;
+  let subfaction = null;
+  let detachment = null;
+
+  while (i < lines.length) {
+    const s = lines[i].trim();
+    if (s.startsWith('+++')) { i++; break; }
+    if (!s.startsWith('+')) {
+      if (s === '' || s === '+') { i++; continue; }
+      break;
+    }
+    const body = s.replace(/^\++/, '').trim();
+    const colonIdx = body.indexOf(':');
+    if (colonIdx > 0) {
+      const key = body.slice(0, colonIdx).trim().toUpperCase();
+      const val = body.slice(colonIdx + 1).trim();
+      if (key === 'FACTION KEYWORD') {
+        if (val.includes(' - ')) {
+          const [sub, ...rest] = val.split(' - ');
+          subfaction = sub.trim();
+          faction = rest.join(' - ').trim();
+        } else {
+          faction = val;
+          subfaction = '';
+        }
+      } else if (key === 'DETACHMENT') {
+        detachment = val;
+      } else if (key === 'TOTAL ARMY POINTS') {
+        const m = val.match(/(\d+)\s*pts?/i);
+        if (m) list_points = parseInt(m[1], 10);
+      }
+    }
+    i++;
+  }
+
+  const list_name = `${faction || 'Unnamed'} ${list_points || ''}pt list`.trim();
+  const battle_size_name = list_points != null ? `${list_points} Points` : 'Unknown';
+  return {
+    list_name,
+    list_points: list_points || 0,
+    faction: faction || '',
+    subfaction: subfaction || '',
+    detachment: detachment || '',
+    battle_size_name,
+    max_points: list_points,
+    i,
+  };
+}
+
 export function parseRoster(text) {
   const lines = text.split(/\r?\n/);
   let i = 0;
@@ -64,32 +133,39 @@ export function parseRoster(text) {
   while (i < lines.length && lines[i].trim() === '') i++;
   if (i >= lines.length) throw new Error('Empty export');
 
-  const headerMatch = UNIT_HEADER_RE.exec(lines[i].trim());
-  if (!headerMatch) throw new Error(`Expected list header at line ${i+1}, got: ${JSON.stringify(lines[i])}`);
-  const list_name = headerMatch[1];
-  const list_points = parseInt(headerMatch[2].replace(/,/g, ''), 10);
-  i++;
-
-  function nextNonblank() {
-    while (i < lines.length && lines[i].trim() === '') i++;
-    if (i >= lines.length) throw new Error('Unexpected end of input in header');
-    const v = lines[i].trim();
-    i++;
-    return v;
-  }
-
-  const faction = nextNonblank();
-  const subfaction = nextNonblank();
-  const detachment = nextNonblank();
-
-  const bsLine = nextNonblank();
-  let battle_size_name, max_points = null;
-  const bsMatch = UNIT_HEADER_RE.exec(bsLine);
-  if (bsMatch) {
-    battle_size_name = bsMatch[1];
-    max_points = parseInt(bsMatch[2].replace(/,/g, ''), 10);
+  // Route by format: '+++' divider line → New Recruit; otherwise GW Companion App.
+  let list_name, list_points, faction, subfaction, detachment, battle_size_name, max_points = null;
+  if (lines[i].trim().startsWith('+++')) {
+    const h = parseHeaderNewRecruit(lines, i);
+    ({ list_name, list_points, faction, subfaction, detachment,
+       battle_size_name, max_points, i } = h);
   } else {
-    battle_size_name = bsLine;
+    const headerMatch = UNIT_HEADER_RE.exec(lines[i].trim());
+    if (!headerMatch) throw new Error(`Expected list header at line ${i+1}, got: ${JSON.stringify(lines[i])}`);
+    list_name = headerMatch[1];
+    list_points = parseInt(headerMatch[2].replace(/,/g, ''), 10);
+    i++;
+
+    const nextNonblank = () => {
+      while (i < lines.length && lines[i].trim() === '') i++;
+      if (i >= lines.length) throw new Error('Unexpected end of input in header');
+      const v = lines[i].trim();
+      i++;
+      return v;
+    };
+
+    faction = nextNonblank();
+    subfaction = nextNonblank();
+    detachment = nextNonblank();
+
+    const bsLine = nextNonblank();
+    const bsMatch = UNIT_HEADER_RE.exec(bsLine);
+    if (bsMatch) {
+      battle_size_name = bsMatch[1];
+      max_points = parseInt(bsMatch[2].replace(/,/g, ''), 10);
+    } else {
+      battle_size_name = bsLine;
+    }
   }
 
   const units = [];
@@ -123,7 +199,9 @@ export function parseRoster(text) {
       while (i < lines.length) {
         const nxt = lines[i];
         if (nxt.trim() === '') { i++; continue; }
-        if (nxt.startsWith('  •') || nxt.startsWith('     ◦')) {
+        // Companion (2-space + 5-space hollow) or New Recruit (col-0 + 4-space).
+        if (nxt.startsWith('  •') || nxt.startsWith('     ◦') ||
+            nxt.startsWith('• ') || nxt.startsWith('    • ')) {
           block.push(nxt);
           i++;
           continue;
@@ -154,8 +232,11 @@ function parseUnit(block, section) {
   const entries = [];
   let current_top = null;
   for (const raw of block.slice(1)) {
-    const tm = TOP_BULLET_RE.exec(raw);
-    const nm = NESTED_BULLET_RE.exec(raw);
+    // Try both Companion (2-space, hollow ◦) and New Recruit (col-0, 4-space •).
+    // Check nested first because NR's col-0 regex would also accept the bullet
+    // portion of an indented line if we anchored only on '•'.
+    const nm = NESTED_BULLET_RE.exec(raw) ?? NESTED_BULLET_NR_RE.exec(raw);
+    const tm = nm ? null : (TOP_BULLET_RE.exec(raw) ?? TOP_BULLET_NR_RE.exec(raw));
     if (tm) {
       current_top = { content: tm[1].trim(), children: [] };
       entries.push(current_top);

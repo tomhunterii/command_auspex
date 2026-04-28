@@ -102,9 +102,13 @@ SECTION_HEADERS = {
     'ALLIED UNITS', 'FORTIFICATIONS', 'SWARMS',
 }
 
-UNIT_HEADER_RE = re.compile(r'^(.+?) \(([\d,]+) Points\)$')
+UNIT_HEADER_RE = re.compile(r'^(.+?) \(([\d,]+) (?:Points|pts)\)$', re.IGNORECASE)
+# GW Companion App format: 2-space indented top bullets, 5-space indented hollow nested.
 TOP_BULLET_RE = re.compile(r'^  • (.+?)\s*$')
 NESTED_BULLET_RE = re.compile(r'^\s{5}◦ (.+?)\s*$')
+# New Recruit format: column-0 top bullets, 4-space indented nested bullets (same • glyph).
+TOP_BULLET_NR_RE = re.compile(r'^• (.+?)\s*$')
+NESTED_BULLET_NR_RE = re.compile(r'^    • (.+?)\s*$')
 NX_ITEM_RE = re.compile(r'^(\d+)x (.+)$')
 EXPORT_FOOTER_RE = re.compile(
     r'^Exported with App Version:\s*(.+?),\s*Data Version:\s*(.+?)\s*$'
@@ -121,6 +125,75 @@ def is_section_header(line: str) -> bool:
     return bool(re.fullmatch(r'[A-Z ]+', s)) and any(c.isalpha() for c in s)
 
 
+def _parse_header_new_recruit(lines: list[str], i: int):
+    """Parse a New Recruit-format header block.
+
+    Layout:
+        +++++++++++++...
+        + FACTION KEYWORD: <faction> - <subfaction>
+        + DETACHMENT: <detachment>
+        + TOTAL ARMY POINTS: <N>pts
+        + ENHANCEMENT: <name>           (optional, may be blank)
+        + NUMBER OF UNITS: <N>          (informational)
+        + SECONDARY: <text>             (informational)
+        +++++++++++++...
+
+    Returns (list_name, list_points, faction, subfaction, detachment,
+             battle_size_name, max_points, next_i).
+    """
+    # Skip leading divider line(s).
+    while i < len(lines) and lines[i].strip().startswith('+++'):
+        i += 1
+
+    list_points = None
+    faction = None
+    subfaction = None
+    detachment = None
+
+    # Read '+ KEY: value' lines until the next '+++' divider or a non-'+' line.
+    while i < len(lines):
+        s = lines[i].strip()
+        if s.startswith('+++'):
+            i += 1
+            break
+        if not s.startswith('+'):
+            # Blank or stray content — keep scanning unless it's clearly the body.
+            if s == '' or s == '+':
+                i += 1
+                continue
+            break
+        # Body of a '+ KEY: value' line.
+        body = s.lstrip('+').strip()
+        if ':' in body:
+            key, _, val = body.partition(':')
+            key = key.strip().upper()
+            val = val.strip()
+            if key == 'FACTION KEYWORD':
+                # 'Xenos - Tyranids' → faction='Tyranids', subfaction='Xenos'
+                if ' - ' in val:
+                    sub, _, fac = val.partition(' - ')
+                    faction = fac.strip()
+                    subfaction = sub.strip()
+                else:
+                    faction = val
+                    subfaction = ''
+            elif key == 'DETACHMENT':
+                detachment = val
+            elif key == 'TOTAL ARMY POINTS':
+                m = re.match(r'(\d+)\s*pts?', val, re.IGNORECASE)
+                if m:
+                    list_points = int(m.group(1))
+        i += 1
+
+    # New Recruit doesn't carry a list name — synthesize from faction + points.
+    list_name = f"{faction or 'Unnamed'} {list_points or ''}pt list".strip()
+    battle_size_name = f"{list_points} Points" if list_points is not None else 'Unknown'
+    max_points = list_points
+
+    return (list_name, list_points or 0, faction or '', subfaction or '',
+            detachment or '', battle_size_name, max_points, i)
+
+
 def parse_roster(text: str) -> Roster:
     lines = text.splitlines()
     i = 0
@@ -133,38 +206,44 @@ def parse_roster(text: str) -> Roster:
         raise ValueError('Empty export')
 
     # ─── Header block ──────────────────────────────────
-    header = lines[i].strip()
-    m = UNIT_HEADER_RE.match(header)
-    if not m:
-        raise ValueError(
-            f"Expected list header '<name> (<N> Points)' at line {i+1}, got: {header!r}"
+    # Route by format: '+++' divider line → New Recruit; otherwise GW Companion App.
+    if lines[i].strip().startswith('+++'):
+        list_name, list_points, faction, subfaction, detachment, battle_size_name, max_points, i = (
+            _parse_header_new_recruit(lines, i)
         )
-    list_name = m.group(1)
-    list_points = int(m.group(2).replace(',', ''))
-    i += 1
-
-    def next_nonblank() -> str:
-        nonlocal i
-        while i < len(lines) and not lines[i].strip():
-            i += 1
-        if i >= len(lines):
-            raise ValueError('Unexpected end of input in header block')
-        v = lines[i].strip()
-        i += 1
-        return v
-
-    faction = next_nonblank()
-    subfaction = next_nonblank()
-    detachment = next_nonblank()
-
-    battle_size_line = next_nonblank()
-    bs_match = UNIT_HEADER_RE.match(battle_size_line)
-    if bs_match:
-        battle_size_name = bs_match.group(1)
-        max_points = int(bs_match.group(2).replace(',', ''))
     else:
-        battle_size_name = battle_size_line
-        max_points = None
+        header = lines[i].strip()
+        m = UNIT_HEADER_RE.match(header)
+        if not m:
+            raise ValueError(
+                f"Expected list header '<name> (<N> Points)' at line {i+1}, got: {header!r}"
+            )
+        list_name = m.group(1)
+        list_points = int(m.group(2).replace(',', ''))
+        i += 1
+
+        def next_nonblank() -> str:
+            nonlocal i
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            if i >= len(lines):
+                raise ValueError('Unexpected end of input in header block')
+            v = lines[i].strip()
+            i += 1
+            return v
+
+        faction = next_nonblank()
+        subfaction = next_nonblank()
+        detachment = next_nonblank()
+
+        battle_size_line = next_nonblank()
+        bs_match = UNIT_HEADER_RE.match(battle_size_line)
+        if bs_match:
+            battle_size_name = bs_match.group(1)
+            max_points = int(bs_match.group(2).replace(',', ''))
+        else:
+            battle_size_name = battle_size_line
+            max_points = None
 
     # ─── Body: sections and units ─────────────────────
     units: list[Unit] = []
@@ -205,7 +284,9 @@ def parse_roster(text: str) -> Roster:
                 if not nxt_s:
                     i += 1
                     continue
-                if nxt.startswith('  •') or nxt.startswith('     ◦'):
+                # Companion (2-space + 5-space hollow) or New Recruit (col-0 + 4-space).
+                if (nxt.startswith('  •') or nxt.startswith('     ◦') or
+                        nxt.startswith('• ') or nxt.startswith('    • ')):
                     unit_block.append(nxt)
                     i += 1
                     continue
@@ -242,8 +323,11 @@ def _parse_unit(block: list[str], section: Optional[str]) -> Unit:
     current_top: Optional[dict] = None
 
     for raw in block[1:]:
-        tm = TOP_BULLET_RE.match(raw)
-        nm = NESTED_BULLET_RE.match(raw)
+        # Try both Companion (2-space, hollow ◦) and New Recruit (col-0, 4-space •) shapes.
+        # Order: nested-NR is checked BEFORE top-NR because the col-0 regex would also
+        # match the bullet portion of a 4-space-indented line if we anchored only on '•'.
+        nm = NESTED_BULLET_RE.match(raw) or NESTED_BULLET_NR_RE.match(raw)
+        tm = None if nm else (TOP_BULLET_RE.match(raw) or TOP_BULLET_NR_RE.match(raw))
         if tm:
             current_top = {'content': tm.group(1).strip(), 'children': []}
             entries.append(current_top)
