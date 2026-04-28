@@ -1,3 +1,24 @@
+---
+slug: wolf-guard-terminators
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 5
+    points: 170
+    default: true
+  - models: 10
+    points: 340
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Infantry, Terminator, Wolf Guard, Wolf Guard Terminators]
+led_by:
+  - arjac-rockfist
+  - logan-grimnar
+---
+
 # Wolf Guard Terminators
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter

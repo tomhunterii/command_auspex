@@ -1,3 +1,28 @@
+---
+slug: blood-claws
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: false
+battleline: true
+is_character: false
+loadouts:
+  - models: 10
+    points: 135
+    default: true
+  - models: 20
+    points: 285
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Infantry, Battleline, Grenades, Tacticus, Blood Claws]
+led_by:
+  - iron-priest
+  - njal-stormcaller
+  - ragnar-blackmane
+  - ulrik-the-slayer
+  - wolf-guard-battle-leader
+  - wolf-priest
+---
+
 # Blood Claws
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter

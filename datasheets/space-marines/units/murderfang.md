@@ -1,3 +1,20 @@
+---
+slug: murderfang
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: true
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 150
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Vehicle, Walker, Character, Epic Hero, Dreadnought, Wulfen, Murderfang]
+led_by: []
+---
+
 # Murderfang
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter

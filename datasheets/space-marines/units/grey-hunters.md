@@ -1,3 +1,25 @@
+---
+slug: grey-hunters
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: false
+battleline: true
+is_character: false
+loadouts:
+  - models: 10
+    points: 165
+    default: true
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Infantry, Battleline, Grenades, Tacticus, Grey Hunters]
+led_by:
+  - iron-priest
+  - njal-stormcaller
+  - ulrik-the-slayer
+  - wolf-guard-battle-leader
+  - wolf-priest
+---
+
 # Grey Hunters
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter

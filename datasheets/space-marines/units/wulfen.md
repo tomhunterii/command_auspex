@@ -1,3 +1,22 @@
+---
+slug: wulfen
+faction: space-marines
+sub_factions: [adeptus-astartes, space-wolves]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 5
+    points: 85
+    default: true
+  - models: 10
+    points: 170
+keywords:
+  faction: [Adeptus Astartes, Space Wolves, Imperium]
+  unit: [Infantry, Wulfen]
+led_by: []
+---
+
 # Wulfen
 
 **Faction:** Space Marines (Adeptus Astartes) — Space Wolves Chapter
