@@ -73,6 +73,7 @@ function chooseWoundThreshold(weapon, defender, attackerMods) {
   } else baseThresh = tableThresh;
 
   if (attackerMods?.plus_one_to_wound) baseThresh -= 1;
+  if (attackerMods?.plus_one_to_wound_melee && weapon.kind === 'melee') baseThresh -= 1;
   if (baseThresh < 2) baseThresh = 2;
   if (baseThresh > 6) baseThresh = 6;
   return baseThresh;

@@ -109,6 +109,35 @@ test('plus_one_to_wound: 5+ → 4+', () => {
   within(r.expected_wounds_dealt, 5.0, 0.30);
 });
 
+test('plus_one_to_wound_melee: 5+ → 4+ on melee weapon (Litany of Hate)', () => {
+  const r = simulate({
+    attacker: {
+      weapons: [{ name: 'sword', kind: 'melee', range_in: 0, attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1' }],
+      model_count: 1,
+      modifiers: { plus_one_to_wound_melee: true },
+    },
+    defender: { toughness: 4, save: '7+', wounds_per_model: 100, model_count: 1 },
+    trials: 50000,
+  });
+  // skill='N/A' → hits auto-pass (mirrors the +1 ranged test).
+  // 5+ wound +1 = 4+ → 3/6. 12 * 3/6 * 5/6 = 5.0
+  within(r.expected_wounds_dealt, 5.0, 0.30);
+});
+
+test('plus_one_to_wound_melee: ranged weapon unaffected', () => {
+  const r = simulate({
+    attacker: {
+      weapons: [{ name: 'rifle', kind: 'ranged', range_in: 24, attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1' }],
+      model_count: 1,
+      modifiers: { plus_one_to_wound_melee: true },
+    },
+    defender: { toughness: 4, save: '7+', wounds_per_model: 100, model_count: 1 },
+    trials: 50000,
+  });
+  // Ranged: no buff applies. 5+ wound stays 5+ → 2/6. 12 * 2/6 * 5/6 ≈ 3.33
+  within(r.expected_wounds_dealt, 3.33, 0.30);
+});
+
 test('FNP 5+ ignores 1/3 of damage', () => {
   const r = simulate({
     attacker: {

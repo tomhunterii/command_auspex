@@ -14,8 +14,10 @@ keywords:
   unit: [Infantry, Character, Tacticus, Wolf Priest]
 led_by: []
 grants_to_attached_unit:
+  modifiers:
+    plus_one_to_wound_melee: true
   description: "While leading a unit, that unit benefits from Litany of Hate (each time a model in this unit makes a melee attack, add 1 to the Wound roll) and Healing Balms (in your Command phase, you can return 1 destroyed model — excluding Character models — to that unit)."
-  unmodelled: "Litany of Hate is +1 to Wound on melee attacks only; the engine's plus_one_to_wound modifier applies to ALL attacks, so it cannot be used here. Healing Balms is model resurrection, which the engine vocabulary does not express."
+  unmodelled: "Healing Balms is model resurrection, which the engine vocabulary does not express."
 ---
 
 # Wolf Priest
