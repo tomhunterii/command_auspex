@@ -109,9 +109,7 @@ This model is equipped with: heavy onslaught gatling cannon; macro plasma incine
 
 ## Transport
 
-This Transport model has a transport capacity of **6 Adeptus Astartes Infantry models**. Each Jump Pack, Wulfen, Gravis or Terminator model takes the space of 2 models, and each Centurion model takes the space of 3 models. It cannot transport Primaris Crusader Squad models.
-
-> **Note — Captain's standing question:** Captain's current reading is "7 models fit 1:1" (see `ultramarines/rosters/2000pt-norallus-orbital-assault.md`). Per Wahapedia the Repulsor Executioner's capacity is **6**, not 7 (the standard Repulsor carries 10; the Executioner trades 4 slots for the heavy gun turret). Gravis counts as 2 slots, so 3 Aggressors + 0 other = capacity consumed = 6. Recommend reconciling the roster note before the table.
+This Transport model has a transport capacity of **7 Adeptus Astartes Infantry models**. Each Jump Pack, Wulfen, Gravis or Terminator model takes the space of 2 models, and each Centurion model takes the space of 3 models. It cannot transport Primaris Crusader Squad models.
 
 ---
 
@@ -128,4 +126,4 @@ Matches Captain's current export (MFM v3.9, Feb 2026). No divergence.
 - Wahapedia: https://wahapedia.ru/wh40k10ed/factions/space-marines/Repulsor-Executioner
 - Munitorum Field Manual v3.9 (Feb 2026), Codex: Space Marines section
 
-<!-- Last verified: 2026-04-23 — source: Wahapedia / MFM v3.9. Points confirmed 230. Wahapedia keyword scrape returned spurious DEATHWING keyword (Dark Angels Terminator-family keyword, not on Repulsor Executioner); excluded as extraction error. Transport capacity 6 per Wahapedia; flag raised against Captain's roster note asserting 7. -->
+<!-- Last verified: 2026-04-27 — source: Wahapedia / MFM v3.9. Points confirmed 230. Wahapedia keyword scrape returned spurious DEATHWING keyword (Dark Angels Terminator-family keyword, not on Repulsor Executioner); excluded as extraction error. Transport capacity 7 per Wahapedia (corrected up from a prior misread of 6). -->
