@@ -1,3 +1,26 @@
+---
+slug: reiver-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 5
+    points: 80
+    default: true
+  - models: 10
+    points: 160
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Grenades, Smoke, Phobos, Reiver Squad]
+led_by:
+  - captain-in-phobos-armour
+  - librarian-in-phobos-armour
+  - lieutenant-in-phobos-armour
+  - lieutenant-in-reiver-armour
+---
+
 # Reiver Squad
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +30,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Grenades, Smoke, Imperium, Phobos, Reiver Squad
 
 ---

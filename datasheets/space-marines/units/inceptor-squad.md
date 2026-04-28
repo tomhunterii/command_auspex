@@ -1,3 +1,22 @@
+---
+slug: inceptor-squad
+faction: space-marines
+sub_factions: [adeptus-astartes]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 120
+    default: true
+  - models: 6
+    points: 240
+keywords:
+  faction: [Adeptus Astartes, Imperium]
+  unit: [Infantry, Jump Pack, Fly, Gravis, Inceptor Squad]
+led_by: []
+---
+
 # Inceptor Squad
 
 **Faction:** Space Marines (Adeptus Astartes)
@@ -7,7 +26,7 @@
 
 ## Keywords
 
-**Faction Keywords:** Adeptus Astartes
+**Faction Keywords:** Adeptus Astartes, Imperium
 **Unit Keywords:** Infantry, Jump Pack, Fly, Imperium, Gravis, Inceptor Squad
 
 ---
