@@ -1,3 +1,20 @@
+---
+slug: maleceptor
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 170
+    default: true
+keywords:
+  faction: [Tyranids]
+  unit: [Monster, Psyker, Great Devourer, Synapse, Maleceptor]
+led_by: []
+---
+
 # Maleceptor
 
 **Faction:** Tyranids

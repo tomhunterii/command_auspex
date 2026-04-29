@@ -1,3 +1,20 @@
+---
+slug: old-one-eye
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: true
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 150
+    default: true
+keywords:
+  faction: [Tyranids]
+  unit: [Monster, Character, Epic Hero, Great Devourer, Old One Eye]
+led_by: []
+---
+
 # Old One Eye
 
 **Faction:** Tyranids

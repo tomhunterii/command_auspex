@@ -1,3 +1,22 @@
+---
+slug: hive-guard
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 90
+    default: true
+  - models: 6
+    points: 180
+keywords:
+  faction: [Tyranids]
+  unit: [Infantry, Great Devourer, Hive Guard]
+led_by: []
+---
+
 # Hive Guard
 
 **Faction:** Tyranids

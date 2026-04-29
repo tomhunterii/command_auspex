@@ -1,3 +1,20 @@
+---
+slug: hive-tyrant
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: true
+loadouts:
+  - models: 1
+    points: 195
+    default: true
+keywords:
+  faction: [Tyranids]
+  unit: [Monster, Character, Psyker, Great Devourer, Synapse, Hive Tyrant]
+led_by: []
+---
+
 # Hive Tyrant
 
 **Faction:** Tyranids

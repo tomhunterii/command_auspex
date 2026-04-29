@@ -1,3 +1,22 @@
+---
+slug: carnifexes
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 90
+    default: true
+  - models: 2
+    points: 180
+keywords:
+  faction: [Tyranids]
+  unit: [Monster, Great Devourer, Carnifexes]
+led_by: [old-one-eye]
+---
+
 # Carnifexes
 
 **Faction:** Tyranids

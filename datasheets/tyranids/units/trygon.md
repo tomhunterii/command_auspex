@@ -1,3 +1,20 @@
+---
+slug: trygon
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 140
+    default: true
+keywords:
+  faction: [Tyranids]
+  unit: [Monster, Great Devourer, Vanguard Invader, Burrower, Trygon]
+led_by: []
+---
+
 # Trygon
 
 **Faction:** Tyranids

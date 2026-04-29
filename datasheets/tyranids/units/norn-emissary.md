@@ -1,3 +1,20 @@
+---
+slug: norn-emissary
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 260
+    default: true
+keywords:
+  faction: [Tyranids]
+  unit: [Monster, Psyker, Great Devourer, Synapse, Norn Emissary]
+led_by: []
+---
+
 # Norn Emissary
 
 **Faction:** Tyranids

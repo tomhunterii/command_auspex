@@ -1,3 +1,22 @@
+---
+slug: termagants
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: true
+is_character: false
+loadouts:
+  - models: 10
+    points: 60
+    default: true
+  - models: 20
+    points: 120
+keywords:
+  faction: [Tyranids]
+  unit: [Infantry, Battleline, Great Devourer, Endless Multitude, Termagants]
+led_by: []
+---
+
 # Termagants
 
 **Faction:** Tyranids

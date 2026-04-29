@@ -1,3 +1,20 @@
+---
+slug: mawloc
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 1
+    points: 135
+    default: true
+keywords:
+  faction: [Tyranids]
+  unit: [Monster, Great Devourer, Vanguard Invader, Burrower, Mawloc]
+led_by: []
+---
+
 # Mawloc
 
 **Faction:** Tyranids

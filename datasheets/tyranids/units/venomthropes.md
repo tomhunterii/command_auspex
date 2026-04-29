@@ -1,3 +1,22 @@
+---
+slug: venomthropes
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 70
+    default: true
+  - models: 6
+    points: 140
+keywords:
+  faction: [Tyranids]
+  unit: [Infantry, Fly, Great Devourer, Venomthropes]
+led_by: []
+---
+
 # Venomthropes
 
 **Faction:** Tyranids

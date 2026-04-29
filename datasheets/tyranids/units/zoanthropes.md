@@ -1,3 +1,22 @@
+---
+slug: zoanthropes
+faction: tyranids
+sub_factions: [tyranids]
+epic_hero: false
+battleline: false
+is_character: false
+loadouts:
+  - models: 3
+    points: 100
+    default: true
+  - models: 6
+    points: 200
+keywords:
+  faction: [Tyranids]
+  unit: [Infantry, Psyker, Fly, Great Devourer, Synapse, Zoanthropes]
+led_by: []
+---
+
 # Zoanthropes
 
 **Faction:** Tyranids
