@@ -2,7 +2,7 @@
 // SVG rendering helpers for the Command Auspex.
 // Convention: SVG user unit = 1 inch. All coordinates are in inches.
 
-import { baseDiameterPx, clusterOffsets } from './base-geometry.js';
+import { baseDiameterPx, clusterOffsets, formationOffsets } from './base-geometry.js';
 
 // Codex Astartes role markings for Space Marine model circles.
 // Per the 10th-edition unit role classification.
@@ -533,11 +533,16 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
 
   // Flatten to per-model list. When the datasheet enumerates per-model bases
   // (e.g., Wardens of Ultramar: 2 × 40mm + 4 × 28.5mm), each submodel carries
-  // its own diameter; otherwise every model uses the unit's default.
+  // its own diameter; otherwise every model uses the unit's default. Submodels
+  // tagged with `_sourceDatasheet` (attached leaders folded into a squad) use
+  // their own datasheet's base size, not the host squad's.
   const models = [];
   for (const sub of unit.models) {
-    const match = perModel?.find(pm => pm.submodel === sub.submodel);
-    const mm = match?.diameter_mm ?? defaultMm;
+    const ownDs = sub._sourceDatasheet ?? null;
+    const ownDefaultMm = ownDs?.base?.diameter_mm ?? defaultMm;
+    const ownPerModel = ownDs?.base?.per_model ?? perModel;
+    const match = ownPerModel?.find(pm => pm.submodel === sub.submodel);
+    const mm = match?.diameter_mm ?? ownDefaultMm;
     for (let k = 0; k < sub.count; k++) {
       models.push({ sub, mm });
     }
@@ -545,7 +550,8 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
 
   // Cluster spacing uses the largest base so smaller bases never collide.
   const maxMm = models.reduce((m, x) => Math.max(m, x.mm), defaultMm);
-  const offsets = clusterOffsets(models.length, baseDiameterPx(maxMm));
+  const formation = unit._formation ?? 'cluster';
+  const offsets = formationOffsets(formation, models.length, baseDiameterPx(maxMm));
 
   // Pre-compute label context values once for this unit.
   const totalUnitModels = models.length;
@@ -577,14 +583,21 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     group.appendChild(circle);
 
     // --- Per-model label (role symbol / sergeant marker / weapon fallback) ---
+    // Attached leaders carry their own datasheet on the submodel and must use
+    // it for keyword-driven role markings, otherwise they inherit the host
+    // squad's symbol (e.g., a Captain attached to Bladeguard would render
+    // with Veteran markings).
+    const ownDs = m.sub._sourceDatasheet ?? null;
+    const labelKeywords = ownDs?.keywords ?? datasheet?.keywords ?? unit.keywords ?? [];
+    // Slug also flows through ownDs so a Judiciar attached to Bladeguard does
+    // not pick up the bladeguard-veteran-squad slug (which would match the
+    // VETERAN regex and override the CHARACTER → leader-skull branch).
+    const labelSlug = ownDs?.slug ?? unit.slug ?? unitSlug;
     const label = modelLabel(m.sub, {
       totalUnitModels,
       unit: {
-        slug: unit.slug ?? unitSlug,
-        // Catalogue keywords live on the datasheet (getUnit returns
-        // [{keyword, is_faction}]). The roster's `unit` object carries
-        // a different shape, so prefer the datasheet first.
-        keywords: datasheet?.keywords ?? unit.keywords ?? [],
+        slug: labelSlug,
+        keywords: labelKeywords,
       },
     });
 

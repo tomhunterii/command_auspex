@@ -38,3 +38,64 @@ export function clusterOffsets(n, baseDiameterPx) {
   }
   return offsets.slice(0, n);
 }
+
+// Center an [rows × cols] rectangular grid of points around the origin,
+// fill row-major up to `n` slots, return [dx, dy] inches per slot.
+function gridOffsetsRowMajor(n, baseDiameterPx, rows, cols) {
+  if (n <= 0) return [];
+  const gap = 0.5 * INCH_PX;
+  const step = baseDiameterPx + gap;
+  const x0 = -((cols - 1) * step) / 2;
+  const y0 = -((rows - 1) * step) / 2;
+  const offsets = [];
+  for (let r = 0; r < rows && offsets.length < n; r++) {
+    for (let c = 0; c < cols && offsets.length < n; c++) {
+      offsets.push([x0 + c * step, y0 + r * step]);
+    }
+  }
+  return offsets;
+}
+
+// Single-file line. Orientation 'horizontal' = row of n; 'vertical' = column of n.
+export function lineOffsets(n, baseDiameterPx, orientation = 'horizontal') {
+  const rows = orientation === 'vertical' ? n : 1;
+  const cols = orientation === 'vertical' ? 1 : n;
+  return gridOffsetsRowMajor(n, baseDiameterPx, rows, cols);
+}
+
+// Fixed-width column formation, defaults to 2 wide. Fills row-major.
+export function columnOffsets(n, baseDiameterPx, cols = 2) {
+  if (n <= 0) return [];
+  const c = Math.max(1, Math.min(cols, n));
+  const rows = Math.ceil(n / c);
+  return gridOffsetsRowMajor(n, baseDiameterPx, rows, c);
+}
+
+// Standard rectangular block — caps row count at `maxRows` (default 4),
+// growing columns as needed. Fills row-major. n=10, maxRows=4 → 3 cols × 4 rows.
+export function standardOffsets(n, baseDiameterPx, maxRows = 4) {
+  if (n <= 0) return [];
+  const cols = Math.max(1, Math.ceil(n / maxRows));
+  const rows = Math.min(maxRows, Math.ceil(n / cols));
+  return gridOffsetsRowMajor(n, baseDiameterPx, rows, cols);
+}
+
+// Formation dispatcher. Unknown formations fall back to 'cluster'.
+export function formationOffsets(formation, n, baseDiameterPx) {
+  switch (formation) {
+    case 'line_horizontal': return lineOffsets(n, baseDiameterPx, 'horizontal');
+    case 'line_vertical':   return lineOffsets(n, baseDiameterPx, 'vertical');
+    case 'column':          return columnOffsets(n, baseDiameterPx, 2);
+    case 'standard':        return standardOffsets(n, baseDiameterPx, 4);
+    case 'cluster':
+    default:                return clusterOffsets(n, baseDiameterPx);
+  }
+}
+
+export const FORMATIONS = [
+  { id: 'cluster',         label: 'Cluster' },
+  { id: 'line_vertical',   label: 'Vertical Line' },
+  { id: 'line_horizontal', label: 'Horizontal Line' },
+  { id: 'column',          label: 'Column (2 wide)' },
+  { id: 'standard',        label: 'Standard (max 4 rows)' },
+];

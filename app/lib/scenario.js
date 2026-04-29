@@ -21,6 +21,7 @@ export function buildScenario({ id, name, missionPath, defender, attacker, place
       placement: p.placement ?? 'on_board',
       position: p.centerIn,
       orientation_deg: p.orientation_deg ?? 0,
+      formation: p.formation ?? 'cluster',
     });
   }
 
@@ -51,6 +52,7 @@ export function serializeScenario(s) {
       out += `      placement: ${yamlString(u.placement)}\n`;
       out += `      position: [${u.position[0]}, ${u.position[1]}]\n`;
       out += `      orientation_deg: ${u.orientation_deg}\n`;
+      out += `      formation: ${yamlString(u.formation ?? 'cluster')}\n`;
     }
   }
   out += '---\n\n';
