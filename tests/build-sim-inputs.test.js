@@ -116,6 +116,73 @@ test('buildSimInputs: bare-unit leader entry still works (legacy compat)', () =>
   assert.strictEqual(attacker.weapons.length, 11);
 });
 
+test('buildSimInputs: equippedCounts base-name fallback for multi-profile weapons', () => {
+  // Catalogue stores Old One Eye-shaped multi-profile melee as two rows
+  // ("Foo – strike", "Foo – sweep"). The roster equips the BASE weapon
+  // ("Foo") once — the lookup must fall back from the profile-suffixed
+  // catalogue name to the base name in equippedCounts and emit BOTH
+  // profiles into the merged pool (the melee-selection filter then
+  // picks one per turn).
+  const u = makeUnit({
+    weapons: [
+      W('Massive scything talons – strike', 'melee'),
+      W('Massive scything talons – sweep',  'melee'),
+      W('Psychic overload – blast',         'ranged'),
+      // A non-profile weapon whose name happens to contain a dash should
+      // NOT match a base-name lookup and stays at 0 copies if absent.
+      W('Some-Other Weapon', 'ranged'),
+    ],
+  });
+  const ec = new Map([
+    ['massive scything talons', 1],
+    ['psychic overload',        1],
+  ]);
+  const { attacker } = buildSimInputs(u, { kind: 'all', equippedCounts: ec });
+  const names = attacker.weapons.map(w => w.name).sort();
+  assert.deepStrictEqual(names, [
+    'Massive scything talons – strike',
+    'Massive scything talons – sweep',
+    'Psychic overload – blast',
+  ]);
+});
+
+test('buildSimInputs: equippedCounts strips parenthetical annotation in fallback', () => {
+  // Catalogue annotates with "(twin-linked)"; roster drops it.
+  const u = makeUnit({
+    weapons: [
+      W('Monstrous bonesword and lash whip (twin-linked)', 'melee'),
+      W('Monstrous scything talons', 'melee'),
+    ],
+  });
+  const ec = new Map([
+    ['monstrous bonesword and lash whip', 1],
+    ['monstrous scything talons', 1],
+  ]);
+  const { attacker } = buildSimInputs(u, { kind: 'all', equippedCounts: ec });
+  assert.strictEqual(attacker.weapons.length, 2);
+});
+
+test('buildSimInputs: equippedCounts exact match takes precedence over base-name fallback', () => {
+  // If the roster happens to list the full profile-suffixed name, that
+  // exact entry must win — base-name fallback only kicks in on miss.
+  const u = makeUnit({
+    weapons: [
+      W('Massive scything talons – strike', 'melee'),
+      W('Massive scything talons – sweep',  'melee'),
+    ],
+  });
+  const ec = new Map([
+    ['massive scything talons – strike', 2], // exact wins
+    ['massive scything talons',          0], // would otherwise emit 0 — no override
+  ]);
+  const { attacker } = buildSimInputs(u, { kind: 'all', equippedCounts: ec });
+  // Strike: 2 copies (exact match). Sweep: tries exact (miss), tries base
+  // (matches "massive scything talons" → 0) — emits 0.
+  const names = attacker.weapons.map(w => w.name);
+  assert.strictEqual(names.filter(n => n.includes('strike')).length, 2);
+  assert.strictEqual(names.filter(n => n.includes('sweep')).length, 0);
+});
+
 test('buildSimInputs: defender invulnerable save flows through', () => {
   const tyrant = {
     slug: 'hive-tyrant', name: 'Hive Tyrant',

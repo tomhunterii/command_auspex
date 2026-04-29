@@ -181,11 +181,38 @@ export function buildSimInputs(unit, opts = {}) {
       ? entry
       : { unit: entry, equippedCounts: null });
 
+  // Equipped-count lookup with two fallback layers, applied to handle the
+  // two ways a catalogue weapon name can diverge from the roster wargear
+  // name for the same physical weapon:
+  //
+  //   1. Profile suffix — catalogue stores multi-profile weapons as
+  //      separate rows ("Foo – strike", "Foo – sweep"); rosters list the
+  //      base weapon ("Foo"). Stripping the suffix surfaces the base name.
+  //
+  //   2. Parenthetical — catalogue annotates weapons with characteristics
+  //      like "Monstrous bonesword and lash whip (twin-linked)"; rosters
+  //      drop the annotation. Stripping " (...)" surfaces the base name.
+  //
+  // Order: exact match wins; then strip parens; then strip profile; then
+  // strip both. Equipping "Foo" once on the roster makes every catalogue
+  // row whose canonical-base equals "foo" eligible (with the melee /
+  // overcharge filters narrowing to a single profile per turn).
+  const PROFILE_SUFFIX_RE = /\s+[–—-]\s+\w+(?:\s+\w+)?\s*$/;
+  const PAREN_SUFFIX_RE   = /\s*\([^)]*\)\s*$/;
+  function lookupCount(ec, fullKey) {
+    if (ec.has(fullKey)) return ec.get(fullKey);
+    const noParens = fullKey.replace(PAREN_SUFFIX_RE, '').trim();
+    if (noParens !== fullKey && ec.has(noParens)) return ec.get(noParens);
+    const noProfile = noParens.replace(PROFILE_SUFFIX_RE, '').trim();
+    if (noProfile !== noParens && ec.has(noProfile)) return ec.get(noProfile);
+    return 0;
+  }
+
   function replicate(weapons, ec, fallbackCount) {
     const out = [];
     for (const w of weapons) {
       const key = String(w.name).toLowerCase().trim();
-      const count = ec ? (ec.get(key) ?? 0) : fallbackCount;
+      const count = ec ? lookupCount(ec, key) : fallbackCount;
       for (let i = 0; i < count; i++) {
         out.push({
           name: w.name,
