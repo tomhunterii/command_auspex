@@ -174,6 +174,47 @@ test('Cover: 4+ save → 3+ save', () => {
   within(r.expected_wounds_dealt, 3.33, 0.30);
 });
 
+test('IGNORES COVER: defender cover bonus skipped against this weapon', () => {
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'flamer', kind: 'ranged', range_in: 12, attacks: '12',
+        skill: 'N/A', strength: 100, ap: 0, damage: '1',
+        abilities: { ignores_cover: true },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 1, save: '4+', wounds_per_model: 100, model_count: 1,
+      modifiers: { cover: true }, // would normally improve 4+ → 3+
+    },
+    trials: 50000,
+  });
+  // Cover ignored → save stays at 4+. P(wound)=5/6, P(fail save)=3/6.
+  // 12 * 5/6 * 3/6 = 12 * 5/12 = 5.0
+  within(r.expected_wounds_dealt, 5.0, 0.30);
+});
+
+test('IGNORES COVER: no effect when defender is not in cover', () => {
+  // Without cover, ignores_cover is a no-op — verify it does not
+  // accidentally penalise the defender beyond baseline.
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'flamer', kind: 'ranged', range_in: 12, attacks: '12',
+        skill: 'N/A', strength: 100, ap: 0, damage: '1',
+        abilities: { ignores_cover: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '4+', wounds_per_model: 100, model_count: 1 },
+    trials: 50000,
+  });
+  // 4+ save (no cover, no ignores effect): P(fail save) = 3/6 = 0.5.
+  // 12 * 5/6 * 1/2 = 5.0
+  within(r.expected_wounds_dealt, 5.0, 0.30);
+});
+
 test('Cover caps at 3+', () => {
   const r = simulate({
     attacker: {

@@ -31,6 +31,10 @@ const FLAG_KEYWORDS = new Map([
   // these weapons identically — the keyword only matters to the upstream
   // melee-selection filter (app/lib/melee-selection.js).
   ['EXTRA ATTACKS',       'extra_attacks'],
+  // IGNORES COVER: defender's Benefit-of-Cover armor bonus does not
+  // apply against this weapon. Combat engine gates the +1 armor branch
+  // in effectiveSave on this flag.
+  ['IGNORES COVER',       'ignores_cover'],
 ]);
 
 const SUSTAINED_HITS_RE = /^SUSTAINED HITS\s*(\d*)$/;

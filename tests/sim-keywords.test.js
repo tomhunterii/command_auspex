@@ -459,6 +459,12 @@ test('parseKeywords: MELTA N captures the integer', () => {
   assert.strictEqual(parseKeywords('[MELTA 4]').melta, 4);
 });
 
+test('parseKeywords: IGNORES COVER parses as a flag (not unmodelled)', () => {
+  const k = parseKeywords('[IGNORES COVER]');
+  assert.strictEqual(k.ignores_cover, true);
+  assert.strictEqual(k.unmodelled, undefined);
+});
+
 // --- Pass B simulator effects ---
 
 test('Heavy: +1 to hit when attacker_stationary is true', () => {

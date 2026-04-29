@@ -47,9 +47,9 @@ function rollAndMaybeReroll(threshold, rng, rerollPolicy) {
   return { roll, passed: passesRoll(roll, threshold) };
 }
 
-function effectiveSave(armorPlus, ap, invulnPlus, defenderMods) {
+function effectiveSave(armorPlus, ap, invulnPlus, defenderMods, ignoresCover = false) {
   let modifiedArmor = armorPlus - ap;
-  if (defenderMods?.cover) {
+  if (defenderMods?.cover && !ignoresCover) {
     modifiedArmor -= 1;
     // Cover cap: cannot improve armor beyond 3+.
     if (modifiedArmor < 3) modifiedArmor = 3;
@@ -176,7 +176,8 @@ function resolvePostHit(weapon, defender, rng, context, autoWound, attackerMods,
   const invuln = (defender.invulnerable !== undefined && defender.invulnerable !== null)
     ? parseSkill(defender.invulnerable)
     : null;
-  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln, defenderMods);
+  const ignoresCover = !!ab.ignores_cover;
+  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln, defenderMods, ignoresCover);
   const saveRoll = D6(rng);
   if (passesRoll(saveRoll, save)) return { damage: 0, mortal: 0 };
 
