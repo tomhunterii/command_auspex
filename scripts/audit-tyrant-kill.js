@@ -106,14 +106,15 @@ const titusWeapons = [
   w('Master-crafted chainsword',     'melee',  8, 2, 5, -1, 2, '[ANTI-INFANTRY 2+]'),
 ];
 
-// --- Apply Titus's Press the Attack to every weapon -------------------
-// Press the Attack grants ONLY [SUSTAINED HITS 1] — no re-roll of any
-// kind (per the printed datasheet "Press the Attack: Weapons equipped
-// by models in this model's unit have the [SUSTAINED HITS 1] ability").
-// First-wins so the Sternguard heavy bolter's printed [SUSTAINED HITS 1]
-// is not double-applied.
+// --- Apply Titus's Press the Attack to ranged weapons -----------------
+// Press the Attack grants ONLY [SUSTAINED HITS 1], and only to RANGED
+// weapons (per the printed datasheet — confirmed in the per-kind grants
+// schema: `weapon_abilities_ranged: { sustained_hits: 1 }`). First-wins
+// so the Sternguard heavy bolter's printed [SUSTAINED HITS 1] is not
+// double-applied. Melee weapons untouched.
 function applyTitusGrants(weapons) {
   return weapons.map(weapon => {
+    if (weapon.kind !== 'ranged') return weapon;
     const ab = { ...weapon.abilities };
     if (ab.sustained_hits == null) ab.sustained_hits = 1;
     return { ...weapon, abilities: ab };

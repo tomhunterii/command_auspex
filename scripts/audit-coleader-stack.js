@@ -214,11 +214,24 @@ check(
   granted.modifiers?.reroll_hits == null,
   `modifiers.reroll_hits=${granted.modifiers?.reroll_hits ?? '(unset, correct)'}`,
 );
-const allGotSh = granted.weapons.every(w => w.abilities?.sustained_hits === 1);
+// Press the Attack is RANGED-ONLY (catalogue uses
+// `weapon_abilities_ranged` per the per-kind schema). Confirm the
+// sustained_hits=1 grant reaches every RANGED weapon and NO melee
+// weapon — Titus's buff must not leak across the kind boundary.
+const rangedWeapons = granted.weapons.filter(w => w.kind === 'ranged');
+const meleeWeapons  = granted.weapons.filter(w => w.kind === 'melee');
+const allRangedGotSh = rangedWeapons.every(w => w.abilities?.sustained_hits === 1);
+const noMeleeGotSh   = meleeWeapons.every(w => w.abilities?.sustained_hits == null
+                                            || w.abilities.sustained_hits === undefined);
 check(
-  'sustained_hits=1 reached every weapon in the merged pool',
-  allGotSh,
-  `${granted.weapons.filter(w => w.abilities?.sustained_hits === 1).length}/${granted.weapons.length} weapons carry SH 1`,
+  'sustained_hits=1 reached every RANGED weapon in the merged pool',
+  allRangedGotSh,
+  `${rangedWeapons.filter(w => w.abilities?.sustained_hits === 1).length}/${rangedWeapons.length} ranged weapons carry SH 1`,
+);
+check(
+  'NO melee weapon picked up sustained_hits=1 (Press the Attack is ranged-only)',
+  noMeleeGotSh,
+  `${meleeWeapons.filter(w => w.abilities?.sustained_hits === 1).length}/${meleeWeapons.length} melee weapons inadvertently buffed`,
 );
 
 console.log('\nCO-LEADER STACK — simulate() with grants applied (combined ½-range)\n');
@@ -243,22 +256,22 @@ check(
   `granted=${rGranted.expected_wounds_dealt.toFixed(2)} vs baseline=${rNoGrants.expected_wounds_dealt.toFixed(2)}, Δ=+${(rGranted.expected_wounds_dealt - rNoGrants.expected_wounds_dealt).toFixed(2)}`,
 );
 // Loose hand-built sanity comparison (audit-tyrant-kill.js, no Oath,
-// combined ½-range — re-run after the Press-the-Attack reroll_hits fix:
-//   P(kill) ≈ 52.8%, E[wounds] ≈ 8.62/10).
+// combined ½-range — re-run after the per-kind grants fix:
+//   P(kill) ≈ 44.9%, E[wounds] ≈ 8.31/10).
 // Loadouts differ between the two scripts — Norallus has a sergeant
 // Power fist + 2 heavy bolters that the hand-built reference does not
 // include — so we expect the catalogue path to skew somewhat higher.
 // ±20pp / ±1.0 wounds is enough to catch a wiring regression without
 // flagging the legitimate loadout-fidelity uplift.
 check(
-  'P(kill) within 20pp of hand-built reference (~52.8%, loose)',
-  Math.abs(rGranted.p_target_destroyed - 0.528) <= 0.20,
-  `${(rGranted.p_target_destroyed * 100).toFixed(1)}% vs ref 52.8%, Δ=${((rGranted.p_target_destroyed - 0.528) * 100).toFixed(1)}pp`,
+  'P(kill) within 20pp of hand-built reference (~44.9%, loose)',
+  Math.abs(rGranted.p_target_destroyed - 0.449) <= 0.20,
+  `${(rGranted.p_target_destroyed * 100).toFixed(1)}% vs ref 44.9%, Δ=${((rGranted.p_target_destroyed - 0.449) * 100).toFixed(1)}pp`,
 );
 check(
-  'E[wounds] within 1.0 of hand-built reference (~8.62, loose)',
-  Math.abs(rGranted.expected_wounds_dealt - 8.62) <= 1.0,
-  `${rGranted.expected_wounds_dealt.toFixed(2)} vs ref 8.62, Δ=${(rGranted.expected_wounds_dealt - 8.62).toFixed(2)}`,
+  'E[wounds] within 1.0 of hand-built reference (~8.31, loose)',
+  Math.abs(rGranted.expected_wounds_dealt - 8.31) <= 1.0,
+  `${rGranted.expected_wounds_dealt.toFixed(2)} vs ref 8.31, Δ=${(rGranted.expected_wounds_dealt - 8.31).toFixed(2)}`,
 );
 
 // Per-submodel allocation check — assert the total merged pool matches
@@ -333,13 +346,6 @@ check(
   zoaProfiles.has('warp blast') && zoaProfiles.get('warp blast').length === 2,
   `groups: ${[...zoaProfiles.keys()].join(', ')}`,
 );
-
-console.log('\nKNOWN LIMITATION (not failing this audit):');
-console.log('  Titus\'s Press the Attack is RANGED-ONLY per the printed datasheet,');
-console.log('  but `grants_to_attached_unit.weapon_abilities` has no kind-filter so');
-console.log('  the merge applies sustained_hits to melee weapons too. Hand-built');
-console.log('  reference (audit-tyrant-kill.js applyTitusGrants) has the same gap.');
-console.log('  Real fix: extend the grants schema to support per-kind targeting.');
 
 console.log(`\n${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);
