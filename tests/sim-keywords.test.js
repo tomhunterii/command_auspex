@@ -310,6 +310,14 @@ test('parseKeywords: combined Pass A + Pass B keywords', () => {
   assert.strictEqual(k.blast, true);
 });
 
+test('parseKeywords: ASSAULT, PISTOL, PSYCHIC parse as flags (not unmodelled)', () => {
+  const k = parseKeywords('[ASSAULT], [PISTOL], [PSYCHIC]');
+  assert.strictEqual(k.assault, true);
+  assert.strictEqual(k.pistol, true);
+  assert.strictEqual(k.psychic, true);
+  assert.strictEqual(k.unmodelled, undefined);
+});
+
 // --- Pass B simulator effects ---
 
 test('Heavy: +1 to hit when attacker_stationary is true', () => {
@@ -466,4 +474,108 @@ test('Hazardous: two weapons → ~0.33 expected self-damage', () => {
     trials: 50000,
   });
   within(result.expected_attacker_self_damage, 2/6, 0.05);
+});
+
+// --- ASSAULT / PISTOL gates ---
+
+const dummyDefender = { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 };
+
+test('Assault: after Advance, only ASSAULT-tagged ranged weapons fire', () => {
+  // Two ranged weapons of the same profile, only one tagged Assault. Auto-hit
+  // (skill N/A) keeps the math clean: 6 attacks × (5/6 wound) × (5/6 no save)
+  // = 6 × 25/36 ≈ 4.17 expected wounds when only the Assault weapon fires.
+  const advanced = simulate({
+    attacker: {
+      weapons: [
+        { name: 'std',    kind: 'ranged', range_in: 24, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: {} },
+        { name: 'assault', kind: 'ranged', range_in: 24, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: { assault: true } },
+      ],
+      model_count: 1,
+    },
+    defender: dummyDefender,
+    context: { attacker_advanced: true },
+    trials: 30000,
+  });
+  within(advanced.expected_wounds_dealt, 4.17, 0.20);
+
+  // Same loadout without the Advance flag: BOTH weapons fire → 12 × 25/36 ≈ 8.33.
+  const stationary = simulate({
+    attacker: {
+      weapons: [
+        { name: 'std',    kind: 'ranged', range_in: 24, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: {} },
+        { name: 'assault', kind: 'ranged', range_in: 24, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: { assault: true } },
+      ],
+      model_count: 1,
+    },
+    defender: dummyDefender,
+    trials: 30000,
+  });
+  within(stationary.expected_wounds_dealt, 8.33, 0.30);
+});
+
+test('Assault: melee weapons are unaffected by attacker_advanced', () => {
+  const result = simulate({
+    attacker: {
+      weapons: [
+        { name: 'cc', kind: 'melee', range_in: 0, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: {} },
+        { name: 'rifle', kind: 'ranged', range_in: 24, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: {} },
+      ],
+      model_count: 1,
+    },
+    defender: dummyDefender,
+    context: { attacker_advanced: true },
+    trials: 30000,
+  });
+  // Only the melee weapon fires: 6 × 25/36 ≈ 4.17.
+  within(result.expected_wounds_dealt, 4.17, 0.20);
+});
+
+test('Pistol: in Engagement Range, only PISTOL-tagged ranged weapons fire', () => {
+  const engaged = simulate({
+    attacker: {
+      weapons: [
+        { name: 'rifle',  kind: 'ranged', range_in: 24, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: {} },
+        { name: 'pistol', kind: 'ranged', range_in: 12, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: { pistol: true } },
+      ],
+      model_count: 1,
+    },
+    defender: dummyDefender,
+    context: { attacker_in_engagement_range: true },
+    trials: 30000,
+  });
+  // Only the pistol fires: 6 × 25/36 ≈ 4.17.
+  within(engaged.expected_wounds_dealt, 4.17, 0.20);
+});
+
+test('Pistol: outside Engagement Range, pistols and non-pistols both fire', () => {
+  const result = simulate({
+    attacker: {
+      weapons: [
+        { name: 'rifle',  kind: 'ranged', range_in: 24, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: {} },
+        { name: 'pistol', kind: 'ranged', range_in: 12, attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: { pistol: true } },
+      ],
+      model_count: 1,
+    },
+    defender: dummyDefender,
+    trials: 30000,
+  });
+  // Both fire: 12 × 25/36 ≈ 8.33.
+  within(result.expected_wounds_dealt, 8.33, 0.30);
+});
+
+test('Hazardous: a gated-out weapon does NOT roll its self-damage die', () => {
+  // One Hazardous non-Assault rifle, with Advance flag set. The weapon
+  // cannot fire, so its Hazardous die must not roll.
+  const result = simulate({
+    attacker: {
+      weapons: [
+        { name: 'haz-non-assault', kind: 'ranged', range_in: 24, attacks: '1', skill: 'N/A', strength: 10, ap: 0, damage: '1', abilities: { hazardous: true } },
+      ],
+      model_count: 1,
+    },
+    defender: dummyDefender,
+    context: { attacker_advanced: true },
+    trials: 30000,
+  });
+  assert.strictEqual(result.expected_attacker_self_damage, 0);
 });

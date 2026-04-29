@@ -215,14 +215,29 @@ function applyDamageToDefender(state, entry, defender) {
   }
 }
 
-function rollHazardousSelfDamage(attacker, rng) {
+function rollHazardousSelfDamage(attacker, context, rng) {
   let mw = 0;
   for (const w of attacker.weapons) {
-    if (w.abilities?.hazardous) {
-      if (D6(rng) === 1) mw += 1;
-    }
+    if (!w.abilities?.hazardous) continue;
+    // A weapon that was gated out (Advance / Engagement Range) did not fire,
+    // so it cannot trigger its Hazardous self-damage roll.
+    if (!canFireWeapon(w, context)) continue;
+    if (D6(rng) === 1) mw += 1;
   }
   return mw;
+}
+
+// 10th-ed firing gates that depend on what the unit did this turn:
+//   - A unit that Advanced may shoot only ASSAULT weapons.
+//   - A unit in Engagement Range may shoot only PISTOL weapons.
+// Both gates are ranged-only (melee weapons fire regardless). Unset context
+// flags leave behaviour unchanged so existing call sites are unaffected.
+function canFireWeapon(weapon, context) {
+  if (weapon.kind !== 'ranged') return true;
+  const ab = weapon.abilities ?? {};
+  if (context?.attacker_advanced && !ab.assault) return false;
+  if (context?.attacker_in_engagement_range && !ab.pistol) return false;
+  return true;
 }
 
 function runOneTrial(attacker, defender, context, rng) {
@@ -234,6 +249,7 @@ function runOneTrial(attacker, defender, context, rng) {
     totalWoundsDealt: 0,
   };
   for (const weapon of attacker.weapons) {
+    if (!canFireWeapon(weapon, context)) continue;
     const attackCount = rollAttacksCount(weapon, defender, context, rng);
     for (let i = 0; i < attackCount; i++) {
       if (state.modelsRemaining <= 0) break;
@@ -246,7 +262,7 @@ function runOneTrial(attacker, defender, context, rng) {
     if (state.modelsRemaining <= 0) break;
   }
   const modelsLost = defender.model_count - state.modelsRemaining;
-  const attackerSelfDamage = rollHazardousSelfDamage(attacker, rng);
+  const attackerSelfDamage = rollHazardousSelfDamage(attacker, context, rng);
   return {
     wounds: state.totalWoundsDealt,
     models_lost: modelsLost,

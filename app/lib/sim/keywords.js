@@ -15,6 +15,15 @@ const FLAG_KEYWORDS = new Map([
   ['HEAVY',               'heavy'],
   ['BLAST',               'blast'],
   ['HAZARDOUS',           'hazardous'],
+  // ASSAULT: this weapon can shoot after the bearer's unit Advanced.
+  // PISTOL: this weapon can shoot while the bearer's unit is in Engagement
+  //   Range (and a unit that is in Engagement Range can only shoot Pistols).
+  // PSYCHIC: pure label — flagged so it does not pollute `unmodelled`.
+  //   Has no effect on the damage chain by itself; future Anti-Psyker rules
+  //   can read this flag.
+  ['ASSAULT',             'assault'],
+  ['PISTOL',              'pistol'],
+  ['PSYCHIC',             'psychic'],
 ]);
 
 const SUSTAINED_HITS_RE = /^SUSTAINED HITS\s*(\d*)$/;
