@@ -405,9 +405,10 @@ import { renderBoard, renderUnits } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
 import { FORMATIONS } from './lib/base-geometry.js';
 import {
-  isOverchargeProfile, baseWeaponName, findOverchargePairs,
-  applyOverchargeFilter as filterOverchargePairs,
-} from './lib/overcharge.js';
+  canonicalBase, profileSuffix,
+  findWeaponProfiles, defaultProfile,
+  applyProfileSelection as filterProfiles,
+} from './lib/profile-selection.js';
 import { findMeleeChoices, applyMeleeSelection } from './lib/melee-selection.js';
 import { mergeLeaderGrants } from './lib/leader-grants.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
@@ -500,24 +501,27 @@ const formations = {
   attacker: new Map(),
 };
 
-// Overcharge / supercharge plasma profiles. Selection is per-(side, slug,
-// base-weapon-name); pure helpers live in app/lib/overcharge.js.
-const overchargeChoices = {
+// Multi-profile weapon picks (plasma standard/supercharge, melee
+// strike/sweep, ranged witchfire/focused, Norn Tendril modes — all the
+// same feature). Selection is per-(side, slug, canonical-base) and
+// stores the LOWERCASED+TRIMMED weapon name of the chosen profile.
+// Pure helpers live in app/lib/profile-selection.js.
+const profileChoices = {
   defender: new Map(),
   attacker: new Map(),
 };
 
-function overchargeChoice(side, slug, baseLower) {
-  return overchargeChoices[side]?.get(`${slug}:${baseLower}`) ?? 'standard';
+function profileChoice(side, slug, baseLower) {
+  return profileChoices[side]?.get(`${slug}:${baseLower}`) ?? null;
 }
 
-function setOverchargeChoice(side, slug, baseLower, choice) {
-  if (choice === 'overcharge') overchargeChoices[side].set(`${slug}:${baseLower}`, 'overcharge');
-  else overchargeChoices[side].delete(`${slug}:${baseLower}`);
+function setProfileChoice(side, slug, baseLower, weaponNameLower) {
+  if (weaponNameLower) profileChoices[side].set(`${slug}:${baseLower}`, weaponNameLower);
+  else profileChoices[side].delete(`${slug}:${baseLower}`);
 }
 
-function applyOverchargeFilter(weapons, side, slug) {
-  return filterOverchargePairs(weapons, base => overchargeChoice(side, slug, base));
+function applyProfileSelection(weapons, side, slug) {
+  return filterProfiles(weapons, base => profileChoice(side, slug, base));
 }
 
 // Melee weapon pick. 10th-ed rule: each model fights with ONE of its melee
@@ -743,42 +747,51 @@ async function loadCatalogueAndPopulate() {
           .map(e => `<div style="color:var(--phosphor); font-size:9px; letter-spacing:1.2px; margin-bottom:4px; padding:3px 6px; border:1px dashed var(--phosphor-dim);">&#9881; GRANTS (${e.unit.name.toUpperCase()}) &middot; ${e.unit.grants.description.toUpperCase()}</div>`)
           .join('');
 
-        // Apply overcharge profile filter so each pair shows only the
-        // currently-selected profile in the weapon table. Selectors for
-        // toggling appear above the table (see overchargeBlock below).
+        // Apply unified weapon profile filter so each multi-profile group
+        // (plasma std/oc, melee strike/sweep, witchfire/focused, etc.) only
+        // shows the currently-selected profile in the weapon table.
+        // Selectors appear above the table (see profileBlock below).
         const ocSide = simAttackerSide();
         const ocSlug = slug;
-        const filteredDisplayWeapons = applyOverchargeFilter(displayUnit.weapons, ocSide, ocSlug);
+        const filteredDisplayWeapons = applyProfileSelection(displayUnit.weapons, ocSide, ocSlug);
         for (const e of leaderEntries) {
-          e.filteredWeapons = applyOverchargeFilter(e.weapons, ocSide, e.slug);
+          e.filteredWeapons = applyProfileSelection(e.weapons, ocSide, e.slug);
         }
         const ranged = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'ranged');
         const melee = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'melee');
 
-        // Overcharge selectors: one row per overcharge-capable weapon, on the
-        // squad and/or its attached leader.
-        const buildOcRows = (weapons, side, ownerSlug, ownerLabel) => {
-          const pairs = findOverchargePairs(weapons);
-          if (pairs.size === 0) return '';
-          const rows = [...pairs.entries()].map(([base, pair]) => {
-            const choice = overchargeChoice(side, ownerSlug, base);
-            const stdActive = choice !== 'overcharge';
-            const ocActive = choice === 'overcharge';
-            const display = baseWeaponName(pair.standard.name);
+        // PROFILE PICK: one row per multi-profile group (canonical-base) with
+        // a button per profile. Subsumes the previous FIRE MODE (plasma) and
+        // any future ranged-multi-profile selectors. Active button is
+        // highlighted; clicking another swaps. Selection is per-(side, slug,
+        // canonical-base) → chosen weapon name (lowercased, trimmed).
+        const profileLabel = (suffix) => suffix ? suffix.toUpperCase() : 'STANDARD';
+        const buildProfileRows = (weapons, side, ownerSlug, ownerLabel) => {
+          const groups = findWeaponProfiles(weapons);
+          if (groups.size === 0) return '';
+          const rows = [...groups.entries()].map(([base, profiles]) => {
+            const stored = profileChoice(side, ownerSlug, base);
+            const active = profiles.find(p => p.name.toLowerCase().trim() === stored)
+                        ?? defaultProfile(profiles);
+            const buttons = profiles.map(p => {
+              const isActive = p === active;
+              const nameLower = p.name.toLowerCase().trim();
+              return `<button type="button" class="btn profile-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-base="${escapeHtml(base)}" data-name="${escapeHtml(nameLower)}" style="padding:1px 6px; font-size:9px; letter-spacing:1px; color:var(--amber); ${isActive ? '' : 'opacity:0.45;'}">${escapeHtml(profileLabel(p.suffix))}</button>`;
+            }).join('');
+            const display = profiles[0].name.replace(/\s+[–—-]\s+.*$/, '').trim();
             return `<div style="display:flex; align-items:center; gap:6px; margin:2px 0;">
               <span style="flex:1; color:var(--paper); font-size:10px;">${escapeHtml(display)}</span>
-              <button type="button" class="btn oc-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-base="${escapeHtml(base)}" data-choice="standard" style="padding:1px 6px; font-size:9px; letter-spacing:1px; ${stdActive ? '' : 'opacity:0.45;'}">STD</button>
-              <button type="button" class="btn oc-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-base="${escapeHtml(base)}" data-choice="overcharge" style="padding:1px 6px; font-size:9px; letter-spacing:1px; color:var(--amber); ${ocActive ? '' : 'opacity:0.45;'}">OC</button>
+              ${buttons}
             </div>`;
           }).join('');
           const heading = ownerLabel
-            ? `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">FIRE MODE — ${ownerLabel.toUpperCase()}</div>`
-            : `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">FIRE MODE</div>`;
+            ? `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">PROFILE PICK — ${ownerLabel.toUpperCase()}</div>`
+            : `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">PROFILE PICK</div>`;
           return heading + rows;
         };
-        const overchargeBlock =
-          buildOcRows(displayUnit.weapons, ocSide, ocSlug, leaderEntries.length > 0 ? unit.name : null)
-          + leaderEntries.map(e => buildOcRows(e.weapons, ocSide, e.slug, e.unit.name)).join('');
+        const profileBlock =
+          buildProfileRows(displayUnit.weapons, ocSide, ocSlug, leaderEntries.length > 0 ? unit.name : null)
+          + leaderEntries.map(e => buildProfileRows(e.weapons, ocSide, e.slug, e.unit.name)).join('');
 
         // Melee weapon pick: surface a row of buttons for each unit (squad +
         // each attached leader) when its weapon pool has >1 non-EXTRA-ATTACKS
@@ -855,14 +868,15 @@ async function loadCatalogueAndPopulate() {
           `).join('');
 
         if (sections === '') {
-          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + meleeBlock + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + profileBlock + meleeBlock + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
         } else {
-          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + meleeBlock + sections;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + profileBlock + meleeBlock + sections;
         }
-        // Wire overcharge toggle clicks: update choice and re-render the panel.
-        for (const btn of detailEl.querySelectorAll('.oc-toggle')) {
+        // Wire profile-pick clicks: persist the chosen weapon name and
+        // re-render. Clicking the already-active profile is a no-op.
+        for (const btn of detailEl.querySelectorAll('.profile-toggle')) {
           btn.addEventListener('click', () => {
-            setOverchargeChoice(btn.dataset.side, btn.dataset.slug, btn.dataset.base, btn.dataset.choice);
+            setProfileChoice(btn.dataset.side, btn.dataset.slug, btn.dataset.base, btn.dataset.name);
             refreshWeaponDetail();
           });
         }
@@ -1978,16 +1992,17 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     const filteredDefenderEquipped = defenderInRoster
       ? filterEquipped(defenderUnit, defenderInRoster.equippedWeapons)
       : defenderUnit;
-    // Apply overcharge profile choice — keep only the selected std/oc weapon
-    // for each pair so the simulator does not roll both at once. Then apply
-    // the melee-pick filter so a model with multiple non-EXTRA-ATTACKS melee
-    // weapons fights with only the chosen one (Hive Tyrant: bonesword XOR
-    // scything talons), with EXTRA ATTACKS weapons always stacking.
+    // Apply unified weapon-profile picks — keeps only the chosen profile
+    // from each multi-profile group (plasma std/oc, melee strike/sweep,
+    // witchfire/focused, etc.) so the simulator never rolls every profile
+    // at once. Then apply the per-model melee-pick filter so a model with
+    // multiple distinct melee weapons fights with only the chosen one,
+    // with [EXTRA ATTACKS] weapons always stacking.
     const ocSide = simAttackerSide();
     const filteredAttacker = {
       ...filteredAttackerEquipped,
       weapons: applyMeleeSelection(
-        applyOverchargeFilter(filteredAttackerEquipped.weapons, ocSide, attackerSlug),
+        applyProfileSelection(filteredAttackerEquipped.weapons, ocSide, attackerSlug),
         meleeChoice(ocSide, attackerSlug),
       ),
     };
@@ -2010,7 +2025,7 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       const raw = await getUnit(leaderSlug);
       if (!raw) continue;
       const filteredWeapons = applyMeleeSelection(
-        applyOverchargeFilter(raw.weapons, attackerSideForAttachment, leaderSlug),
+        applyProfileSelection(raw.weapons, attackerSideForAttachment, leaderSlug),
         meleeChoice(attackerSideForAttachment, leaderSlug),
       );
       const leaderInRoster = attackerCached?.unitsBySlug?.get(leaderSlug);

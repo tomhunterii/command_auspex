@@ -31,6 +31,9 @@ import { simulate } from '../app/lib/sim/combat.js';
 import { buildSimInputs } from '../app/lib/catalogue.js';
 import { parseFrontmatter } from '../app/lib/yaml-frontmatter.js';
 import { findMeleeChoices, applyMeleeSelection } from '../app/lib/melee-selection.js';
+import {
+  findWeaponProfiles, applyProfileSelection,
+} from '../app/lib/profile-selection.js';
 import { mergeLeaderGrants } from '../app/lib/leader-grants.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -293,29 +296,42 @@ check(
   `${wardensExpected} copies declared in roster`,
 );
 
-// Melee selection check — Old One Eye prints two melee profiles of the
-// same weapon (claws and talons – strike vs – sweep). Neither has
-// [EXTRA ATTACKS], so findMeleeChoices should return exactly 2 entries
-// and the player must pick one per turn. (The Hive Tyrant's scything
-// talons carry [EXTRA ATTACKS] and always stack with its bonesword, so
-// it is NOT a useful selection-test target.)
+// Profile-pick check — Old One Eye prints two profiles of the same melee
+// weapon (claws and talons – strike vs – sweep). Same-base profiles
+// belong to the unified profile picker, NOT the per-model melee picker
+// (the melee picker handles a model with multiple DIFFERENT melee
+// weapons, e.g. sergeant ccw + power fist). Verify: findWeaponProfiles
+// surfaces the strike/sweep pair as one group; applyProfileSelection
+// reduces it to the chosen profile.
 const ooeUnit = readUnit(db, 'old-one-eye');
 const ooeInputs = buildSimInputs(ooeUnit, { kind: 'all', model_count: 1 });
-const ooeMeleeChoices = findMeleeChoices(ooeInputs.attacker.weapons);
+const ooeProfiles = findWeaponProfiles(ooeInputs.attacker.weapons);
 check(
-  'Old One Eye exposes 2 melee picks (strike vs sweep profiles)',
-  ooeMeleeChoices.size === 2,
-  `${ooeMeleeChoices.size} non-EXTRA-ATTACKS melee weapons`,
+  "Old One Eye claws & talons surface as ONE profile group (strike + sweep)",
+  ooeProfiles.size === 1 && ooeProfiles.get("old one eye's claws and talons")?.length === 2,
+  `${ooeProfiles.size} groups, ${ooeProfiles.get("old one eye's claws and talons")?.length ?? 0} profiles in the talons group`,
 );
-const ooeAfterPick = applyMeleeSelection(
+const ooeAfterPick = applyProfileSelection(
   ooeInputs.attacker.weapons,
-  "old one eye's claws and talons – strike",
+  () => "old one eye's claws and talons – strike",
 );
 const ooeMeleeAfter = ooeAfterPick.filter(w => w.kind === 'melee');
 check(
-  'After melee pick = strike, only the strike profile remains',
+  'After profile pick = strike, only the strike profile survives',
   ooeMeleeAfter.length === 1 && ooeMeleeAfter[0].name.toLowerCase().includes('strike'),
   ooeMeleeAfter.map(w => w.name).join(', '),
+);
+
+// Cross-check: Zoanthropes' Warp Blast (witchfire vs focused, ranged) is
+// the same kind of profile pick. Without the unified picker this case
+// previously fired both profiles simultaneously.
+const zoaUnit = readUnit(db, 'zoanthropes');
+const zoaInputs = buildSimInputs(zoaUnit, { kind: 'all', model_count: 1 });
+const zoaProfiles = findWeaponProfiles(zoaInputs.attacker.weapons);
+check(
+  'Zoanthropes Warp Blast surfaces as ONE profile group (witchfire + focused)',
+  zoaProfiles.has('warp blast') && zoaProfiles.get('warp blast').length === 2,
+  `groups: ${[...zoaProfiles.keys()].join(', ')}`,
 );
 
 console.log('\nKNOWN LIMITATION (not failing this audit):');
