@@ -40,13 +40,14 @@ function tyranidRoleSymbol(unit) {
   if (!unit) return null;
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isTyranid(kws)) return null;
-  // Priority: MONSTER (creature class) > INFILTRATORS (deployment role) > FLY
-  // (movement type) > BATTLELINE (rank-and-file). A flying monster reads as
-  // monster; a Genestealer-style infiltrator beats Battleline default.
+  // Priority: MONSTER (creature class) > INFILTRATORS (deployment role) >
+  // INFANTRY (the swarm — all foot infantry, not just Battleline) > FLY
+  // (non-infantry flyers). A flying infantry unit reads as a bug-swarm,
+  // not a mosquito; FLY only catches non-infantry/non-monster flyers.
   if (hasKeyword(kws, 'MONSTER')) return 'icon:bug';
   if (hasKeyword(kws, 'INFILTRATORS')) return 'icon:spider';
+  if (hasKeyword(kws, 'INFANTRY')) return 'icon:bugs';
   if (hasKeyword(kws, 'FLY')) return 'icon:mosquito';
-  if (hasKeyword(kws, 'BATTLELINE')) return 'icon:bugs';
   return null;
 }
 
