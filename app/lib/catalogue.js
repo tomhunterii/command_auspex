@@ -143,56 +143,51 @@ export async function getUnit(slug) {
 // Reshape a getUnit() result into the structured input shapes the sim
 // engine (app/lib/sim/combat.js) expects. `kind` filters the weapons
 // list ('ranged' | 'melee' | 'all').
+//
+// REPLICATION POLICY:
+//   • If `equippedCounts` is provided (Map<weapon-name-lowercase-trim, count>),
+//     each weapon row is replicated by that count. Drives faithful per-submodel
+//     allocation for fixed-loadout heroes (Wardens of Ultramar) where every
+//     character carries DIFFERENT gear — only the characters who carry that
+//     weapon contribute attacks.
+//   • Otherwise each weapon row is replicated by `attacker_model_count`,
+//     suitable for uniform squads where every model carries the same loadout.
+//
 // `attachedLeader` (optional) is a single getUnit() result for a leader.
-// `attachedLeaders` (optional) is an array of getUnit() results — used for
-// stacked attachments (e.g. Wardens of Ultramar + Captain Titus on a
-// Sternguard squad). Each leader's weapons are appended to the attacker's
-// weapon pool (1 copy per leader model). The defender model count is not
-// affected by leader attachment (the squad's own model count is passed
-// separately). If both are supplied, `attachedLeaders` takes precedence.
+// `attachedLeaders` (optional) accepts either bare getUnit() results
+// (legacy — uses leader's loadouts[0].model_count) OR
+// `{ unit, equippedCounts }` wrappers (new — uses per-submodel allocation
+// for the leader). Mix is fine. Each leader's weapons are appended to the
+// attacker's weapon pool. The defender model count is not affected by
+// leader attachment (the squad's own model count is passed separately).
+// If both `attachedLeader` and `attachedLeaders` are supplied,
+// `attachedLeaders` takes precedence.
 export function buildSimInputs(unit, opts = {}) {
   if (!unit) return null;
-  const { kind = 'ranged', model_count = 1, attacker_model_count = 1, attachedLeader = null, attachedLeaders = null } = opts;
-  const leadersList = Array.isArray(attachedLeaders) && attachedLeaders.length
+  const {
+    kind = 'ranged',
+    model_count = 1,
+    attacker_model_count = 1,
+    attachedLeader = null,
+    attachedLeaders = null,
+    equippedCounts = null,
+  } = opts;
+  const rawLeaders = Array.isArray(attachedLeaders) && attachedLeaders.length
     ? attachedLeaders.filter(Boolean)
     : (attachedLeader ? [attachedLeader] : []);
-  const filteredWeapons = (unit.weapons ?? []).filter(w =>
-    kind === 'all' ? true : w.kind === kind
-  );
-  // Each weapon's stat row represents ONE model's allocation. To simulate
-  // a squad of N models, multiply each weapon's attack count by N. We do
-  // this by wrapping the original attacks expression in `(N)*(...)`. The
-  // dice parser doesn't support multiplication; instead emit a synthetic
-  // expression that runs N copies of the same weapon (preserves dice
-  // variance).
-  // For now we keep it simple: split each weapon into N copies. The sim
-  // engine doesn't care if there are repeated weapon entries.
-  const weapons = [];
-  for (const w of filteredWeapons) {
-    for (let i = 0; i < attacker_model_count; i++) {
-      weapons.push({
-        name: w.name,
-        kind: w.kind,
-        range_in: w.range_in,
-        attacks: w.attacks,
-        skill: w.skill,
-        strength: w.strength,
-        ap: w.ap,
-        damage: w.damage,
-        abilities: parseKeywords(w.keywords),
-      });
-    }
-  }
-  // Append each leader's weapons — 1 copy per leader model. Leaders are
-  // typically single-model; fall back to loadout[0].model_count if present.
-  for (const leader of leadersList) {
-    const leaderModelCount = leader.loadouts?.[0]?.model_count ?? 1;
-    const leaderWeapons = (leader.weapons ?? []).filter(w =>
-      kind === 'all' ? true : w.kind === kind
-    );
-    for (const w of leaderWeapons) {
-      for (let i = 0; i < leaderModelCount; i++) {
-        weapons.push({
+  // Normalise legacy bare-unit entries into the wrapped shape.
+  const leadersList = rawLeaders.map(entry =>
+    entry && typeof entry === 'object' && 'unit' in entry
+      ? entry
+      : { unit: entry, equippedCounts: null });
+
+  function replicate(weapons, ec, fallbackCount) {
+    const out = [];
+    for (const w of weapons) {
+      const key = String(w.name).toLowerCase().trim();
+      const count = ec ? (ec.get(key) ?? 0) : fallbackCount;
+      for (let i = 0; i < count; i++) {
+        out.push({
           name: w.name,
           kind: w.kind,
           range_in: w.range_in,
@@ -205,7 +200,23 @@ export function buildSimInputs(unit, opts = {}) {
         });
       }
     }
+    return out;
   }
+
+  const filteredWeapons = (unit.weapons ?? []).filter(w =>
+    kind === 'all' ? true : w.kind === kind
+  );
+  const weapons = replicate(filteredWeapons, equippedCounts, attacker_model_count);
+
+  for (const { unit: leader, equippedCounts: lec } of leadersList) {
+    if (!leader) continue;
+    const leaderWeapons = (leader.weapons ?? []).filter(w =>
+      kind === 'all' ? true : w.kind === kind
+    );
+    const fallbackCount = leader.loadouts?.[0]?.model_count ?? 1;
+    weapons.push(...replicate(leaderWeapons, lec, fallbackCount));
+  }
+
   const attacker = { weapons, model_count: attacker_model_count };
   const defenderKeywords = (unit.keywords ?? []).map(k => String(k.keyword).toUpperCase());
   const defender = {
