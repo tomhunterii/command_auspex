@@ -58,9 +58,10 @@ function spaceMarineRoleSymbol(unit) {
   // unit.keywords may be an array of {keyword, ...} or strings — normalize.
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
-  // Walkers (Dreadnoughts, Ballistus, Redemptor, etc.) — robot. Tested before
-  // VEHICLE because most walkers carry both keywords.
-  if (hasKeyword(kws, 'WALKER')) return 'icon:robot';
+  // Dreadnoughts (Ballistus, Redemptor, Brutalis, Contemptor, etc.) — Captain
+  // groups them with the veteran caste, so they share the templar cross (✠).
+  // Tested before VEHICLE because all dreadnoughts carry both keywords.
+  if (hasKeyword(kws, 'DREADNOUGHT', 'WALKER')) return '✠';
   if (hasKeyword(kws, 'VEHICLE')) return 'icon:shield';
   // Captains, Lieutenants, Apothecaries, Epic Heroes — leaders read as skull.
   // Tested before veteran so a leader who is also tagged as a veteran unit
@@ -141,7 +142,13 @@ function abbreviateWeapon(name) {
  *    in wargear list).
  */
 export function modelLabel(submodel, unitMeta) {
-  // unitMeta: { totalUnitModels, unit? }
+  // unitMeta: { totalUnitModels, unit?, warlord?, isLeaderModel? }
+  // Warlord crown wins over every other marking. Only one model per army carries
+  // it: the attached leader of an attached squad, or the sole model of a solo
+  // character unit. Squad members of a warlord-led unit do NOT get the crown.
+  if (unitMeta.warlord && (unitMeta.isLeaderModel || unitMeta.totalUnitModels === 1)) {
+    return 'icon:crown';
+  }
   // Sergeant detection by submodel name first — overrides role symbol.
   const subName = (submodel.submodel ?? '').toLowerCase();
   if (subName.includes('sergeant') || subName.includes('sgt')) return 'icon:star';
@@ -669,10 +676,16 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
     }
   }
 
-  // Cluster spacing uses the largest base so smaller bases never collide.
+  // For non-cluster formations a single uniform step is correct (grid/line
+  // layouts are explicit user choices and mixed bases there are rare); we
+  // pass max so the lattice is sized to the largest model. For 'cluster' we
+  // additionally pass per-model diameters so mixed-base squads (e.g., 40mm
+  // Wolf Guard Terminators + 80mm Logan Grimnar) pack rank-and-file tightly
+  // and only push the oversize leader outward enough to clear neighbors.
   const maxMm = models.reduce((m, x) => Math.max(m, x.mm), defaultMm);
   const formation = unit._formation ?? 'cluster';
-  const offsets = formationOffsets(formation, models.length, baseDiameterPx(maxMm));
+  const perModelPx = models.map(m => baseDiameterPx(m.mm));
+  const offsets = formationOffsets(formation, models.length, baseDiameterPx(maxMm), perModelPx);
 
   // Pre-compute label context values once for this unit.
   const totalUnitModels = models.length;
@@ -721,6 +734,8 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
         slug: labelSlug,
         keywords: labelKeywords,
       },
+      warlord: unit.warlord === true,
+      isLeaderModel: ownDs !== null,
     });
 
     if (label) {

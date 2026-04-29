@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import {
-  baseDiameterPx, clusterOffsets, lineOffsets, columnOffsets, standardOffsets,
-  formationOffsets, FORMATIONS, INCH_PX, MM_PER_INCH,
+  baseDiameterPx, clusterOffsets, clusterOffsetsMixed, lineOffsets,
+  columnOffsets, standardOffsets, formationOffsets, FORMATIONS,
+  INCH_PX, MM_PER_INCH,
 } from '../app/lib/base-geometry.js';
 
 test('baseDiameterPx converts mm to inches (INCH_PX=1)', () => {
@@ -99,4 +100,96 @@ test('formationOffsets handles n=0 gracefully', () => {
   assert.deepStrictEqual(formationOffsets('line_horizontal', 0, 1.26), []);
   assert.deepStrictEqual(formationOffsets('column', 0, 1.26), []);
   assert.deepStrictEqual(formationOffsets('standard', 0, 1.26), []);
+});
+
+// ── clusterOffsetsMixed (mixed-base squads) ──────────────────────────────────
+
+test('clusterOffsetsMixed all-equal diameters matches uniform clusterOffsets', () => {
+  const dia = baseDiameterPx(40);
+  const a = clusterOffsetsMixed([dia, dia, dia, dia, dia, dia]);
+  const b = clusterOffsets(6, dia);
+  assert.deepStrictEqual(a, b);
+});
+
+test('clusterOffsetsMixed packs 5 × 40mm + 1 × 80mm tighter than uniform-max would', () => {
+  const small = baseDiameterPx(40); // ≈ 1.575"
+  const large = baseDiameterPx(80); // ≈ 3.150"
+  const dias = [small, small, small, small, small, large];
+  const offsets = clusterOffsetsMixed(dias);
+  assert.strictEqual(offsets.length, 6);
+
+  // Rank-and-file (modal) ring 1 radius should match small step (40mm + 0.5"),
+  // not the uniform-max step (80mm + 0.5").
+  const smallStep = small + 0.5;
+  const rankFileRadii = offsets.slice(1, 5).map(([x, y]) => Math.sqrt(x*x + y*y));
+  for (const r of rankFileRadii) {
+    assert.ok(
+      Math.abs(r - smallStep) < 1e-6,
+      `rank-and-file at radius ${r}, expected modal step ${smallStep}`
+    );
+  }
+
+  // Logan (oversize, last index) is pushed outward beyond the modal step
+  // but still well inside the uniform-max step.
+  const [lx, ly] = offsets[5];
+  const loganRadius = Math.sqrt(lx*lx + ly*ly);
+  assert.ok(loganRadius > smallStep, `Logan must be outside the modal ring (${loganRadius} ≤ ${smallStep})`);
+  assert.ok(loganRadius < large + 0.5, `Logan must be inside the uniform-max step (${loganRadius} ≥ ${large + 0.5})`);
+});
+
+test('clusterOffsetsMixed: oversize never overlaps any rank-and-file neighbor', () => {
+  const small = baseDiameterPx(40);
+  const large = baseDiameterPx(80);
+  const dias = [small, small, small, small, small, large];
+  const offsets = clusterOffsetsMixed(dias);
+  const sR = small / 2, lR = large / 2;
+  // Distance from Logan to every other model >= sR + lR (no overlap).
+  const [lx, ly] = offsets[5];
+  for (let i = 0; i < 5; i++) {
+    const [x, y] = offsets[i];
+    const dist = Math.sqrt((lx - x) ** 2 + (ly - y) ** 2);
+    assert.ok(dist >= sR + lR, `Logan-vs-WGT[${i}] dist ${dist} < min ${sR + lR}`);
+  }
+});
+
+test('clusterOffsetsMixed: rank-and-file never overlap each other', () => {
+  const small = baseDiameterPx(40);
+  const large = baseDiameterPx(80);
+  const dias = [small, small, small, small, small, large];
+  const offsets = clusterOffsetsMixed(dias);
+  const sR = small / 2;
+  for (let i = 0; i < 5; i++) {
+    for (let j = i + 1; j < 5; j++) {
+      const [x1, y1] = offsets[i];
+      const [x2, y2] = offsets[j];
+      const dist = Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
+      assert.ok(dist >= 2 * sR - 1e-6, `WGT[${i}]-vs-WGT[${j}] dist ${dist} < ${2*sR}`);
+    }
+  }
+});
+
+test('formationOffsets routes to clusterOffsetsMixed when per-model differs', () => {
+  const small = baseDiameterPx(40);
+  const large = baseDiameterPx(80);
+  const dias = [small, small, small, small, small, large];
+  const a = formationOffsets('cluster', 6, baseDiameterPx(80), dias);
+  const b = clusterOffsetsMixed(dias);
+  assert.deepStrictEqual(a, b);
+});
+
+test('formationOffsets ignores per-model when all-equal (uniform path stays current)', () => {
+  const dia = baseDiameterPx(40);
+  const a = formationOffsets('cluster', 5, dia, [dia, dia, dia, dia, dia]);
+  const b = clusterOffsets(5, dia);
+  assert.deepStrictEqual(a, b);
+});
+
+test('formationOffsets: per-model is ignored for non-cluster formations', () => {
+  const small = baseDiameterPx(40);
+  const large = baseDiameterPx(80);
+  const dias = [small, small, large];
+  // 'line' uses uniform-step and ignores per-model — output must not change.
+  const a = formationOffsets('line_horizontal', 3, baseDiameterPx(80), dias);
+  const b = lineOffsets(3, baseDiameterPx(80), 'horizontal');
+  assert.deepStrictEqual(a, b);
 });
