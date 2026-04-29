@@ -12,7 +12,16 @@ loadouts:
 keywords:
   faction: [Adeptus Astartes, Ultramarines]
   unit: [Infantry, Epic Hero, Grenades, Imperium, Tacticus, Wardens of Ultramar]
-led_by: []
+led_by: [captain-demetrian-titus]
+# Heroes of Ultramar: this unit can ATTACH to one of the listed squads at the
+# start of the Declare Battle Formations step (it counts as part of that unit
+# for the rest of the battle). Modelled here as the Wardens being a leader
+# candidate on each target squad.
+can_join: [assault-intercessor-squad, bladeguard-veteran-squad, intercessor-squad, sternguard-veteran-squad]
+# When the Wardens have joined a target squad, ONLY Captain Titus may also
+# attach to that squad (per the Heroes of Ultramar rule). The UI exposes
+# Titus as a co-leader slot on the target squad.
+enables_co_leader: captain-demetrian-titus
 ---
 
 # Wardens of Ultramar

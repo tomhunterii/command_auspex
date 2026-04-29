@@ -112,6 +112,10 @@ export async function getUnit(slug) {
   if (u.grants_json) {
     try { grants = JSON.parse(u.grants_json); } catch {}
   }
+  let canJoin = [];
+  if (u.can_join_json) {
+    try { canJoin = JSON.parse(u.can_join_json); } catch {}
+  }
   return {
     slug: u.slug,
     name: u.name,
@@ -131,20 +135,27 @@ export async function getUnit(slug) {
     weapons,
     led_by: ledBy.map(r => r.leader_slug),
     grants,
+    can_join: canJoin,
+    enables_co_leader: u.enables_co_leader ?? null,
   };
 }
 
 // Reshape a getUnit() result into the structured input shapes the sim
 // engine (app/lib/sim/combat.js) expects. `kind` filters the weapons
 // list ('ranged' | 'melee' | 'all').
-// `attachedLeader` (optional) is a full getUnit() result for a leader that
-// has been attached to this unit on the map. Their weapons are appended to
-// the attacker's weapon pool (1 copy each, representing the leader's single
-// model). The defender model count is not affected by the leader attachment
-// (the squad's own model count is passed in separately).
+// `attachedLeader` (optional) is a single getUnit() result for a leader.
+// `attachedLeaders` (optional) is an array of getUnit() results — used for
+// stacked attachments (e.g. Wardens of Ultramar + Captain Titus on a
+// Sternguard squad). Each leader's weapons are appended to the attacker's
+// weapon pool (1 copy per leader model). The defender model count is not
+// affected by leader attachment (the squad's own model count is passed
+// separately). If both are supplied, `attachedLeaders` takes precedence.
 export function buildSimInputs(unit, opts = {}) {
   if (!unit) return null;
-  const { kind = 'ranged', model_count = 1, attacker_model_count = 1, attachedLeader = null } = opts;
+  const { kind = 'ranged', model_count = 1, attacker_model_count = 1, attachedLeader = null, attachedLeaders = null } = opts;
+  const leadersList = Array.isArray(attachedLeaders) && attachedLeaders.length
+    ? attachedLeaders.filter(Boolean)
+    : (attachedLeader ? [attachedLeader] : []);
   const filteredWeapons = (unit.weapons ?? []).filter(w =>
     kind === 'all' ? true : w.kind === kind
   );
@@ -172,11 +183,11 @@ export function buildSimInputs(unit, opts = {}) {
       });
     }
   }
-  // Append leader weapons — 1 copy per leader model (leaders are typically
-  // single-model; use model_count_default from loadouts if available, else 1).
-  if (attachedLeader) {
-    const leaderModelCount = attachedLeader.loadouts?.[0]?.model_count ?? 1;
-    const leaderWeapons = (attachedLeader.weapons ?? []).filter(w =>
+  // Append each leader's weapons — 1 copy per leader model. Leaders are
+  // typically single-model; fall back to loadout[0].model_count if present.
+  for (const leader of leadersList) {
+    const leaderModelCount = leader.loadouts?.[0]?.model_count ?? 1;
+    const leaderWeapons = (leader.weapons ?? []).filter(w =>
       kind === 'all' ? true : w.kind === kind
     );
     for (const w of leaderWeapons) {
