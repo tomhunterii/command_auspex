@@ -42,6 +42,11 @@ const FLAG_KEYWORDS = new Map([
   // physically in cover. Targeting permission (whether the firer needs
   // LoS at all) is a board-state concern outside the sim engine.
   ['INDIRECT FIRE',       'indirect_fire'],
+  // PRECISION: each attack made with this weapon against a Character can
+  // bypass the Look Out, Sir rule and target the leader of an Attached
+  // Unit directly. Combat engine routes precision attacks to the
+  // defender's leader pool when both leader and bodyguard are alive.
+  ['PRECISION',           'precision'],
 ]);
 
 const SUSTAINED_HITS_RE = /^SUSTAINED HITS\s*(\d*)$/;

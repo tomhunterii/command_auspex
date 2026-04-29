@@ -217,14 +217,15 @@ function effectiveHitThreshold(weapon, context, attackerMods) {
 
 // Resolve one attack roll. Returns an array of post-hit result objects
 // (length ≥ 1 because Sustained Hits can generate extra hits from a single
-// attack roll).
-function resolveOneAttack(weapon, defender, rng, context, attackerMods, defenderMods) {
+// attack roll). Stats are taken from `targetStats`, which the caller has
+// already chosen to match the routed slot (bodyguard or leader).
+function resolveOneAttack(weapon, targetStats, rng, context, attackerMods, defenderMods) {
   const skill = effectiveHitThreshold(weapon, context, attackerMods);
   const ab = weapon.abilities ?? {};
 
   // Auto-hit case (Torrent / N/A skill): single hit, no nat-6 hit triggers.
   if (skill === null) {
-    return [resolvePostHit(weapon, defender, rng, context, false, attackerMods, defenderMods)];
+    return [resolvePostHit(weapon, targetStats, rng, context, false, attackerMods, defenderMods)];
   }
 
   const { roll: hitRoll, passed: hit } = rollAndMaybeReroll(skill, rng, attackerMods?.reroll_hits ?? null);
@@ -236,27 +237,74 @@ function resolveOneAttack(weapon, defender, rng, context, attackerMods, defender
 
   const out = [];
   // The primary hit (potentially auto-wounded by Lethal Hits).
-  out.push(resolvePostHit(weapon, defender, rng, context, lethalAuto, attackerMods, defenderMods));
+  out.push(resolvePostHit(weapon, targetStats, rng, context, lethalAuto, attackerMods, defenderMods));
   // Sustained Hits extras — these are additional hits that proceed to the
   // wound roll normally. They do NOT carry nat-6 hit properties (to prevent
   // infinite recursion and per 10th ed rules).
   for (let i = 0; i < sustainedExtras; i++) {
-    out.push(resolvePostHit(weapon, defender, rng, context, false, attackerMods, defenderMods));
+    out.push(resolvePostHit(weapon, targetStats, rng, context, false, attackerMods, defenderMods));
   }
   return out;
 }
 
-function applyDamageToDefender(state, entry, defender) {
-  if (state.modelsRemaining <= 0) return;
+// Pick which slot of the defender unit this attack hits. Per the
+// Look Out, Sir rule, an Attached Unit's leader is normally protected
+// while bodyguard models remain — non-precision attacks must hit the
+// bodyguard pool first. PRECISION bypasses Look Out, Sir and lets
+// the attack target the leader directly. When only one pool is alive,
+// every attack hits that pool regardless of precision.
+//
+// Returns 'leader' | 'bodyguard' | null (both pools dead).
+function pickTargetSlot(state, weapon) {
+  const isPrecision = !!weapon.abilities?.precision;
+  const bodyguardAlive = state.bodyguard.modelsRemaining > 0;
+  const leaderAlive = state.leader && state.leader.modelsRemaining > 0;
+  if (isPrecision && leaderAlive) return 'leader';
+  if (bodyguardAlive) return 'bodyguard';
+  if (leaderAlive) return 'leader';
+  return null;
+}
+
+// Build the per-attack stats view for a defender slot. The leader sub-
+// object inherits any stats it does not override from the bodyguard
+// (e.g. a Captain attached to Intercessors typically shares the
+// squad's toughness but has his own wounds and invuln). model_count
+// always reports the TOTAL unit size for keyword purposes (Blast etc.)
+// — slot routing affects the save/wound chain, not the unit-size
+// dependent counters.
+function effectiveDefenderStats(defender, slot) {
+  const totalModels = (defender.model_count ?? 0) + (defender.leader ? 1 : 0);
+  if (slot === 'leader' && defender.leader) {
+    const L = defender.leader;
+    return {
+      toughness:        L.toughness ?? defender.toughness,
+      save:             L.save ?? defender.save,
+      invulnerable:     L.invulnerable ?? defender.invulnerable,
+      wounds_per_model: L.wounds_per_model ?? defender.wounds_per_model,
+      keywords:         L.keywords ?? defender.keywords ?? [],
+      model_count:      totalModels,
+      modifiers:        defender.modifiers,
+    };
+  }
+  return {
+    ...defender,
+    model_count: totalModels,
+  };
+}
+
+function applyDamageToDefender(state, slot, entry, defender) {
+  const pool = slot === 'leader' ? state.leader : state.bodyguard;
+  if (!pool || pool.modelsRemaining <= 0) return;
   const totalDamage = (entry.damage || 0) + (entry.mortal || 0);
   if (totalDamage <= 0) return;
   // Damage caps at current model's remaining wounds — no spillover for this pass.
-  const applied = Math.min(totalDamage, state.currentModelWounds);
-  state.currentModelWounds -= applied;
+  const applied = Math.min(totalDamage, pool.currentModelWounds);
+  pool.currentModelWounds -= applied;
   state.totalWoundsDealt += applied;
-  if (state.currentModelWounds <= 0) {
-    state.modelsRemaining -= 1;
-    state.currentModelWounds = defender.wounds_per_model;
+  if (pool.currentModelWounds <= 0) {
+    pool.modelsRemaining -= 1;
+    const refillSource = slot === 'leader' ? defender.leader : defender;
+    pool.currentModelWounds = refillSource.wounds_per_model;
   }
 }
 
@@ -285,34 +333,61 @@ function canFireWeapon(weapon, context) {
   return true;
 }
 
+function unitDestroyed(state) {
+  const bodyDead = state.bodyguard.modelsRemaining <= 0;
+  const leaderDead = !state.leader || state.leader.modelsRemaining <= 0;
+  return bodyDead && leaderDead;
+}
+
 function runOneTrial(attacker, defender, context, rng) {
   const attackerMods = attacker.modifiers ?? null;
   const defenderMods = defender.modifiers ?? null;
   const state = {
-    modelsRemaining: defender.model_count,
-    currentModelWounds: defender.wounds_per_model,
+    bodyguard: {
+      modelsRemaining: defender.model_count,
+      currentModelWounds: defender.wounds_per_model,
+    },
+    leader: defender.leader ? {
+      modelsRemaining: 1,
+      currentModelWounds: defender.leader.wounds_per_model ?? defender.wounds_per_model,
+    } : null,
     totalWoundsDealt: 0,
   };
   for (const weapon of attacker.weapons) {
     if (!canFireWeapon(weapon, context)) continue;
-    const attackCount = rollAttacksCount(weapon, defender, context, rng);
+    const attackCount = rollAttacksCount(weapon, statsForBlast(defender), context, rng);
     for (let i = 0; i < attackCount; i++) {
-      if (state.modelsRemaining <= 0) break;
-      const results = resolveOneAttack(weapon, defender, rng, context, attackerMods, defenderMods);
+      if (unitDestroyed(state)) break;
+      const slot = pickTargetSlot(state, weapon);
+      if (!slot) break;
+      const targetStats = effectiveDefenderStats(defender, slot);
+      const results = resolveOneAttack(weapon, targetStats, rng, context, attackerMods, defenderMods);
       for (const r of results) {
-        applyDamageToDefender(state, r, defender);
-        if (state.modelsRemaining <= 0) break;
+        applyDamageToDefender(state, slot, r, defender);
+        if (unitDestroyed(state)) break;
       }
     }
-    if (state.modelsRemaining <= 0) break;
+    if (unitDestroyed(state)) break;
   }
-  const modelsLost = defender.model_count - state.modelsRemaining;
+  const initialBody = defender.model_count;
+  const initialLeader = defender.leader ? 1 : 0;
+  const modelsLost =
+    (initialBody - state.bodyguard.modelsRemaining) +
+    (initialLeader - (state.leader?.modelsRemaining ?? 0));
   const attackerSelfDamage = rollHazardousSelfDamage(attacker, context, rng);
   return {
     wounds: state.totalWoundsDealt,
     models_lost: modelsLost,
-    destroyed: state.modelsRemaining <= 0,
+    destroyed: unitDestroyed(state),
     attacker_self_damage: attackerSelfDamage,
+  };
+}
+
+// Blast counts initial unit size (bodyguard + leader if any).
+function statsForBlast(defender) {
+  return {
+    ...defender,
+    model_count: (defender.model_count ?? 0) + (defender.leader ? 1 : 0),
   };
 }
 
@@ -330,8 +405,12 @@ export function simulate({ attacker, defender, context = {}, trials = 5000, rng 
   let totalModelsLost = 0;
   let destroyedCount = 0;
   let totalAttackerSelfDamage = 0;
-  const histogram_models_lost = new Array(defender.model_count + 1).fill(0);
-  const histogram_wounds_dealt = new Array(defender.model_count * defender.wounds_per_model + 1).fill(0);
+  const totalModels = defender.model_count + (defender.leader ? 1 : 0);
+  const totalWoundCap =
+    defender.model_count * defender.wounds_per_model +
+    (defender.leader ? (defender.leader.wounds_per_model ?? defender.wounds_per_model) : 0);
+  const histogram_models_lost = new Array(totalModels + 1).fill(0);
+  const histogram_wounds_dealt = new Array(totalWoundCap + 1).fill(0);
 
   for (let t = 0; t < trials; t++) {
     const r = runOneTrial(attacker, defender, context, rng);

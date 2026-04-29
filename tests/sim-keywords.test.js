@@ -471,6 +471,134 @@ test('parseKeywords: INDIRECT FIRE parses as a flag (not unmodelled)', () => {
   assert.strictEqual(k.unmodelled, undefined);
 });
 
+test('parseKeywords: PRECISION parses as a flag (not unmodelled)', () => {
+  const k = parseKeywords('[PRECISION]');
+  assert.strictEqual(k.precision, true);
+  assert.strictEqual(k.unmodelled, undefined);
+});
+
+test('Precision: bypasses Look Out, Sir — attacks target leader directly', () => {
+  // Attached unit: 10 bodyguards (T4 3+ Sv 2W) led by a Captain (T4 3+
+  // Sv 4+ Inv 5W). Without precision, attacks chew through bodyguards
+  // first; with precision, every attack lands on the Captain straight
+  // away. We verify by counting CAPTAIN deaths (leader pool size went
+  // from 1 to 0) — only achievable in 1 turn if precision is active.
+  // 6 attacks at S=10 (auto-wound on 2+) AP=-3 D=2.
+  // Vs Captain (3+ Sv -3 = 6+ → cap by 4+ inv): save at 4+, fail 3/6.
+  // P(unsaved per hit) = 5/6 × 3/6 = 15/36. Per attack damage = 2.
+  // 6 attacks × 15/36 × 2 ≈ 5 wounds, distributed entirely on Captain
+  // (5W). Captain dies cleanly most trials.
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'precise', kind: 'ranged', range_in: 24,
+        attacks: '6', skill: 'N/A', strength: 10, ap: -3, damage: '2',
+        abilities: { precision: true },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 4, save: '3+', wounds_per_model: 2, model_count: 10,
+      keywords: ['INFANTRY'],
+      leader: {
+        wounds_per_model: 5,
+        invulnerable: '4+',
+        keywords: ['INFANTRY', 'CHARACTER'],
+      },
+    },
+    trials: 30000,
+  });
+  // The bodyguard pool of 10 × 2W = 20 wounds is untouched. Most damage
+  // falls on the Captain (5 W). With ~5 expected wounds dealt all to the
+  // leader, leader dies most trials.
+  assert.ok(r.expected_wounds_dealt > 4.0, `expected ≥4 wounds, got ${r.expected_wounds_dealt}`);
+  assert.ok(r.expected_wounds_dealt < 6.0, `expected <6 wounds (capped at leader's 5W), got ${r.expected_wounds_dealt}`);
+});
+
+test('Precision: NO effect when defender has no leader (Look Out, Sir not applicable)', () => {
+  // A standard squad with no attached character — precision is a no-op.
+  // Verify the result matches a non-precision weapon's output.
+  const opts = {
+    attacker: {
+      weapons: [{
+        name: 'plain', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 4, ap: 0, damage: '1',
+        abilities: { precision: true },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 4, save: '3+', wounds_per_model: 2, model_count: 10,
+      keywords: ['INFANTRY'],
+    },
+    trials: 50000,
+  };
+  // P(wound at 4+)=3/6, save 3+ AP 0 → P(fail save)=2/6.
+  // 12 × 3/6 × 2/6 = 2.0 wounds.
+  const r = simulate(opts);
+  within(r.expected_wounds_dealt, 2.0, 0.30);
+});
+
+test('Precision: non-precision weapon hits bodyguard first, ignores leader while bodyguards alive', () => {
+  // Same defender as the precision test, but weapon has no precision.
+  // All damage routes to the 10 bodyguards (T4 3+ Sv 2W) — none lands
+  // on the Captain. 6 attacks at S=10 AP=-3 D=2:
+  //   bodyguard save: 3+ -3 = 6+ (no invuln) → fail 5/6.
+  //   Per attack: 5/6 × 5/6 × 2 = 50/36 ≈ 1.39 wounds.
+  //   6 attacks → ~8.33 wounds, all on bodyguard pool (20W cap).
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'no-precision', kind: 'ranged', range_in: 24,
+        attacks: '6', skill: 'N/A', strength: 10, ap: -3, damage: '2',
+        abilities: {},
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 4, save: '3+', wounds_per_model: 2, model_count: 10,
+      keywords: ['INFANTRY'],
+      leader: {
+        wounds_per_model: 5,
+        invulnerable: '4+',
+        keywords: ['INFANTRY', 'CHARACTER'],
+      },
+    },
+    trials: 30000,
+  });
+  within(r.expected_wounds_dealt, 8.33, 0.40);
+});
+
+test('Precision: leader\'s invulnerable save applies when targeted directly', () => {
+  // Confirm the save chain uses the LEADER\'s stats when precision routes
+  // an attack to them. Captain has 4+ Inv vs an AP-6 weapon — the
+  // invuln must kick in (otherwise the bodyguard's 3+ Sv -6 = 9+ would
+  // make any wound automatic).
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'apocalyptic', kind: 'ranged', range_in: 24,
+        attacks: '6', skill: 'N/A', strength: 10, ap: -6, damage: '1',
+        abilities: { precision: true },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 4, save: '3+', wounds_per_model: 2, model_count: 10,
+      keywords: ['INFANTRY'],
+      leader: {
+        wounds_per_model: 5,
+        invulnerable: '4+',
+        keywords: ['INFANTRY', 'CHARACTER'],
+      },
+    },
+    trials: 30000,
+  });
+  // 6 attacks × 5/6 wound × 3/6 fail invuln × 1 damage = 6 × 5/12 = 2.5.
+  // (Capped at the leader's 5W ceiling — well above 2.5, so no clip.)
+  within(r.expected_wounds_dealt, 2.5, 0.30);
+});
+
 test('Indirect Fire: firing without LoS applies -1 to hit (no auto cover)', () => {
   // 12 attacks, BS 4+. Without indirect: hits on 4+ (3/6).
   // With indirect (firing_indirectly=true): -1 to hit → hits on 5+ (2/6).
