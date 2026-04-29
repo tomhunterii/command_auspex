@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "audit:sim": "node scripts/audit-sim-math.js",
     "build:catalogue": "node scripts/build-catalogue.js",
     "build:icons": "node scripts/build-icons.js",
     "tauri": "tauri",
