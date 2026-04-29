@@ -24,10 +24,13 @@
 // Run: node scripts/audit-coleader-stack.js [--trials=20000] [--seed=42]
 
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { simulate } from '../app/lib/sim/combat.js';
 import { buildSimInputs } from '../app/lib/catalogue.js';
+import { parseFrontmatter } from '../app/lib/yaml-frontmatter.js';
+import { findMeleeChoices, applyMeleeSelection } from '../app/lib/melee-selection.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = dirname(HERE);
@@ -134,13 +137,40 @@ check(
   `InvSv=${titus.profile.InvSv ?? '(null)'}`,
 );
 
-console.log('\nCO-LEADER STACK — buildSimInputs\n');
-// Mirror what the UI does: call buildSimInputs twice (once per side) and
-// stitch attacker + defender from their respective calls.
+// Load the Norallus roster YAML so we can drive buildSimInputs the way the
+// UI does — with per-submodel equippedCounts for each unit. Without this
+// the bare-catalogue path replicates each Warden weapon × 6 (their loadout
+// model count), badly inflating the merged pool.
+const ROSTER_PATH = join(REPO, 'rosters/norallus-purge-and-burn.md');
+const rosterFm = await parseFrontmatter(readFileSync(ROSTER_PATH, 'utf8'));
+function rosterEquippedCounts(unitName) {
+  const u = rosterFm?.units?.find(x => x.name === unitName);
+  if (!u) return null;
+  const counts = new Map();
+  for (const m of u.models ?? []) {
+    for (const w of m.wargear ?? []) {
+      if (!w.item) continue;
+      const key = String(w.item).toLowerCase().trim();
+      // Roster wargear count is the absolute total across the submodel
+      // group already; do not multiply by submodel count.
+      counts.set(key, (counts.get(key) ?? 0) + (w.count ?? 1));
+    }
+  }
+  return counts;
+}
+const sternguardEc = rosterEquippedCounts('Sternguard Veteran Squad');
+const wardensEc    = rosterEquippedCounts('Wardens of Ultramar');
+const titusEc      = rosterEquippedCounts('Captain Titus'); // roster shorthand for Demetrian Titus
+
+console.log('\nCO-LEADER STACK — buildSimInputs (with per-submodel equippedCounts)\n');
 const { attacker } = buildSimInputs(sternguard, {
   kind: 'all',
   attacker_model_count: 10,
-  attachedLeaders: [wardens, titus],
+  attachedLeaders: [
+    { unit: wardens, equippedCounts: wardensEc },
+    { unit: titus,   equippedCounts: titusEc   },
+  ],
+  equippedCounts: sternguardEc,
 });
 const { defender } = buildSimInputs(tyrantUnit, { kind: 'all', model_count: 1 });
 const ranged = attacker.weapons.filter(w => w.kind === 'ranged').length;
@@ -182,14 +212,65 @@ check(
   `P(kill)=${(r.p_target_destroyed * 100).toFixed(1)}%, E[wounds]=${r.expected_wounds_dealt.toFixed(2)}/10`,
 );
 
-console.log('\nKNOWN LIMITATION (not failing this audit):');
-console.log('  buildSimInputs replicates each leader weapon row × loadouts[0].model_count.');
-console.log('  For uniform leader squads (e.g. a sergeant + 5 troopers), this is right.');
-console.log('  For fixed-loadout hero squads where every submodel carries DIFFERENT gear');
-console.log('  (Wardens of Ultramar: 6 named characters, each with a unique loadout), the');
-console.log('  6× multiplier OVER-counts. Correct fix is to drive replication off the');
-console.log(`  roster's per-submodel wargear arrays, not loadouts[0].model_count.`);
-console.log(`  Surfaced in this run: Wardens contributed ${attacker.weapons.filter(w => wardenNames.has(w.name)).length} weapon copies (printed datasheet allocates 12 — 2 per character × 6).`);
+// Per-submodel allocation check — assert the total merged pool matches
+// the sum of the three roster equippedCounts (filtering each map to keys
+// that actually exist as weapons in that unit's catalogue list, since
+// rosters also list non-weapon wargear like 'Storm Shield' / 'Refractor
+// Field' that don't appear in the weapons table).
+function expectedFromRoster(unit, ec) {
+  if (!ec) return 0;
+  const weaponNames = new Set(unit.weapons.map(w => String(w.name).toLowerCase().trim()));
+  let total = 0;
+  for (const [key, n] of ec.entries()) {
+    if (weaponNames.has(key)) total += n;
+  }
+  return total;
+}
+const expected =
+  expectedFromRoster(sternguard, sternguardEc) +
+  expectedFromRoster(wardens, wardensEc) +
+  expectedFromRoster(titus, titusEc);
+check(
+  `Merged pool size matches per-roster expected total (${expected})`,
+  attacker.weapons.length === expected,
+  `pool=${attacker.weapons.length}`,
+);
+// And specifically: Wardens (6 named characters) should contribute the
+// 12 weapons their roster wargear arrays declare. Compare via the
+// per-Warden equippedCounts map rather than name-matching against the
+// merged pool (Wardens' "Close combat weapon" name collides with
+// Sternguard's "Close combat weapon", which would inflate a name match).
+const wardensExpected = expectedFromRoster(wardens, wardensEc);
+check(
+  'Wardens roster equippedCounts sum to 12 weapon copies',
+  wardensExpected === 12,
+  `${wardensExpected} copies declared in roster`,
+);
+
+// Melee selection check — Old One Eye prints two melee profiles of the
+// same weapon (claws and talons – strike vs – sweep). Neither has
+// [EXTRA ATTACKS], so findMeleeChoices should return exactly 2 entries
+// and the player must pick one per turn. (The Hive Tyrant's scything
+// talons carry [EXTRA ATTACKS] and always stack with its bonesword, so
+// it is NOT a useful selection-test target.)
+const ooeUnit = readUnit(db, 'old-one-eye');
+const ooeInputs = buildSimInputs(ooeUnit, { kind: 'all', model_count: 1 });
+const ooeMeleeChoices = findMeleeChoices(ooeInputs.attacker.weapons);
+check(
+  'Old One Eye exposes 2 melee picks (strike vs sweep profiles)',
+  ooeMeleeChoices.size === 2,
+  `${ooeMeleeChoices.size} non-EXTRA-ATTACKS melee weapons`,
+);
+const ooeAfterPick = applyMeleeSelection(
+  ooeInputs.attacker.weapons,
+  "old one eye's claws and talons – strike",
+);
+const ooeMeleeAfter = ooeAfterPick.filter(w => w.kind === 'melee');
+check(
+  'After melee pick = strike, only the strike profile remains',
+  ooeMeleeAfter.length === 1 && ooeMeleeAfter[0].name.toLowerCase().includes('strike'),
+  ooeMeleeAfter.map(w => w.name).join(', '),
+);
 
 console.log(`\n${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);

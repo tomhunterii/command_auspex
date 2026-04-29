@@ -408,6 +408,7 @@ import {
   isOverchargeProfile, baseWeaponName, findOverchargePairs,
   applyOverchargeFilter as filterOverchargePairs,
 } from './lib/overcharge.js';
+import { findMeleeChoices, applyMeleeSelection } from './lib/melee-selection.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
 
 const statusEl = document.getElementById('status');
@@ -518,6 +519,23 @@ function applyOverchargeFilter(weapons, side, slug) {
   return filterOverchargePairs(weapons, base => overchargeChoice(side, slug, base));
 }
 
+// Melee weapon pick. 10th-ed rule: each model fights with ONE of its melee
+// weapons per turn, except [EXTRA ATTACKS] weapons (those always stack).
+// Selection is per-(side, slug); helpers in app/lib/melee-selection.js.
+const meleeChoices = {
+  defender: new Map(),
+  attacker: new Map(),
+};
+
+function meleeChoice(side, slug) {
+  return meleeChoices[side]?.get(slug) ?? null;
+}
+
+function setMeleeChoice(side, slug, nameLower) {
+  if (nameLower) meleeChoices[side].set(slug, nameLower);
+  else meleeChoices[side].delete(slug);
+}
+
 function unitFormation(side, squadSlug) {
   return formations[side]?.get(squadSlug) ?? 'cluster';
 }
@@ -575,17 +593,32 @@ async function ensureRosterCached(rosterSlug) {
       } catch { /* best effort */ }
     }
     if (!slug) continue;
-    // Aggregate all wargear item names across the unit's models, lowercased.
+    // Aggregate all wargear across the unit's models. Two views:
+    //   • equippedWeapons: Set<lowercased-name>     (used for filtering)
+    //   • equippedCounts:  Map<lowercased-name,N>   (used for sim replication —
+    //     drives faithful per-submodel allocation, e.g. Wardens' 6 named
+    //     characters with unique loadouts contribute exactly the weapons
+    //     each one carries, not loadouts[0].model_count × every weapon row.)
     const equipped = new Set();
+    const equippedCounts = new Map();
     for (const m of u.models ?? []) {
       for (const w of m.wargear ?? []) {
-        if (w.item) equipped.add(String(w.item).toLowerCase().trim());
+        if (!w.item) continue;
+        const key = String(w.item).toLowerCase().trim();
+        equipped.add(key);
+        // Roster wargear `count` is the absolute total across the submodel
+        // group (GW Companion / New Recruit emit per-line totals already —
+        // "9× Sternguard bolt pistol" inside a 9-vet submodel means 9 in
+        // total, NOT 9 per model). Do NOT multiply by submodel count.
+        const total = w.count ?? 1;
+        equippedCounts.set(key, (equippedCounts.get(key) ?? 0) + total);
       }
     }
     const totalModels = (u.models ?? []).reduce((sum, m) => sum + (m.count ?? 0), 0);
     unitsBySlug.set(slug.split('/').pop(), {
       name: u.name,
       equippedWeapons: equipped,
+      equippedCounts,
       totalModels: totalModels > 0 ? totalModels : 1,
     });
   }
@@ -718,8 +751,8 @@ async function loadCatalogueAndPopulate() {
         for (const e of leaderEntries) {
           e.filteredWeapons = applyOverchargeFilter(e.weapons, ocSide, e.slug);
         }
-        const ranged = filteredDisplayWeapons.filter(w => w.kind === 'ranged');
-        const melee = filteredDisplayWeapons.filter(w => w.kind === 'melee');
+        const ranged = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'ranged');
+        const melee = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'melee');
 
         // Overcharge selectors: one row per overcharge-capable weapon, on the
         // squad and/or its attached leader.
@@ -745,6 +778,43 @@ async function loadCatalogueAndPopulate() {
         const overchargeBlock =
           buildOcRows(displayUnit.weapons, ocSide, ocSlug, leaderEntries.length > 0 ? unit.name : null)
           + leaderEntries.map(e => buildOcRows(e.weapons, ocSide, e.slug, e.unit.name)).join('');
+
+        // Melee weapon pick: surface a row of buttons for each unit (squad +
+        // each attached leader) when its weapon pool has >1 non-EXTRA-ATTACKS
+        // melee weapon. The active selection is highlighted; clicking another
+        // option swaps the active one. Selection is per-(side, slug). EXTRA
+        // ATTACKS weapons (e.g. Carnifex extra scything talons) are not
+        // shown — they always stack regardless of choice.
+        const buildMeleeRows = (weapons, side, ownerSlug, ownerLabel) => {
+          const choices = findMeleeChoices(weapons);
+          if (choices.size <= 1) return '';
+          const current = meleeChoice(side, ownerSlug)
+            ?? [...choices.keys()][0];
+          const rows = [...choices.entries()].map(([nameLower, w]) => {
+            const active = nameLower === current;
+            return `<div style="display:flex; align-items:center; gap:6px; margin:2px 0;">
+              <span style="flex:1; color:var(--paper); font-size:10px;">${escapeHtml(w.name)}</span>
+              <button type="button" class="btn melee-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-name="${escapeHtml(nameLower)}" style="padding:1px 8px; font-size:9px; letter-spacing:1px; ${active ? 'color:var(--amber);' : 'opacity:0.45;'}">${active ? 'PICK' : 'pick'}</button>
+            </div>`;
+          }).join('');
+          const heading = ownerLabel
+            ? `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">MELEE PICK — ${ownerLabel.toUpperCase()}</div>`
+            : `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">MELEE PICK</div>`;
+          return heading + rows;
+        };
+        const meleeBlock =
+          buildMeleeRows(displayUnit.weapons, ocSide, ocSlug, leaderEntries.length > 0 ? unit.name : null)
+          + leaderEntries.map(e => buildMeleeRows(e.weapons, ocSide, e.slug, e.unit.name)).join('');
+
+        // Apply melee selection to the panel's display weapon lists, so the
+        // weapon table only shows the active melee + every EXTRA ATTACKS
+        // melee + every ranged. Mirrors what the simulator does at runtime.
+        const meleePickedSquad  = meleeChoice(ocSide, ocSlug);
+        const meleePickedLeader = e => meleeChoice(ocSide, e.slug);
+        const filteredDisplayWeaponsAfterMelee = applyMeleeSelection(filteredDisplayWeapons, meleePickedSquad);
+        for (const e of leaderEntries) {
+          e.filteredWeapons = applyMeleeSelection(e.filteredWeapons, meleePickedLeader(e));
+        }
         const groups = [];
         if (kind === 'ranged' || kind === 'all') groups.push(['RANGED', ranged]);
         if (kind === 'melee'  || kind === 'all') groups.push(['MELEE',  melee]);
@@ -784,14 +854,22 @@ async function loadCatalogueAndPopulate() {
           `).join('');
 
         if (sections === '') {
-          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + meleeBlock + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
         } else {
-          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + sections;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + meleeBlock + sections;
         }
         // Wire overcharge toggle clicks: update choice and re-render the panel.
         for (const btn of detailEl.querySelectorAll('.oc-toggle')) {
           btn.addEventListener('click', () => {
             setOverchargeChoice(btn.dataset.side, btn.dataset.slug, btn.dataset.base, btn.dataset.choice);
+            refreshWeaponDetail();
+          });
+        }
+        // Wire melee-pick toggle clicks: persist the chosen weapon name and
+        // re-render. Clicking the already-active option is a no-op.
+        for (const btn of detailEl.querySelectorAll('.melee-toggle')) {
+          btn.addEventListener('click', () => {
+            setMeleeChoice(btn.dataset.side, btn.dataset.slug, btn.dataset.name);
             refreshWeaponDetail();
           });
         }
@@ -1900,10 +1978,17 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       ? filterEquipped(defenderUnit, defenderInRoster.equippedWeapons)
       : defenderUnit;
     // Apply overcharge profile choice — keep only the selected std/oc weapon
-    // for each pair so the simulator does not roll both at once.
+    // for each pair so the simulator does not roll both at once. Then apply
+    // the melee-pick filter so a model with multiple non-EXTRA-ATTACKS melee
+    // weapons fights with only the chosen one (Hive Tyrant: bonesword XOR
+    // scything talons), with EXTRA ATTACKS weapons always stacking.
+    const ocSide = simAttackerSide();
     const filteredAttacker = {
       ...filteredAttackerEquipped,
-      weapons: applyOverchargeFilter(filteredAttackerEquipped.weapons, simAttackerSide(), attackerSlug),
+      weapons: applyMeleeSelection(
+        applyOverchargeFilter(filteredAttackerEquipped.weapons, ocSide, attackerSlug),
+        meleeChoice(ocSide, attackerSlug),
+      ),
     };
     const filteredDefender = filteredDefenderEquipped;
 
@@ -1914,19 +1999,36 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     const attackerSideForAttachment = simAttackerSide();
     const attackerLeaderSlugs = attachedLeaderSlugsAll(attackerSideForAttachment, attackerSlug);
     // Resolve every attached leader (primary + optional secondary) and
-    // apply their own overcharge selections so e.g. Titus's plasma pistol
-    // honours the FIRE MODE toggle.
+    // apply their own overcharge + melee selections, then wrap each with
+    // its roster equippedCounts so buildSimInputs replicates each weapon
+    // by the actual count of leader-side submodels carrying it (rather
+    // than loadouts[0].model_count, which over-counts fixed-loadout
+    // hero squads like Wardens of Ultramar).
     const attachedLeaderUnits = [];
     for (const leaderSlug of attackerLeaderSlugs) {
       const raw = await getUnit(leaderSlug);
       if (!raw) continue;
+      const filteredWeapons = applyMeleeSelection(
+        applyOverchargeFilter(raw.weapons, attackerSideForAttachment, leaderSlug),
+        meleeChoice(attackerSideForAttachment, leaderSlug),
+      );
+      const leaderInRoster = attackerCached?.unitsBySlug?.get(leaderSlug);
       attachedLeaderUnits.push({
-        ...raw,
-        weapons: applyOverchargeFilter(raw.weapons, attackerSideForAttachment, leaderSlug),
+        unit: { ...raw, weapons: filteredWeapons },
+        equippedCounts: leaderInRoster?.equippedCounts ?? null,
       });
     }
-    const { attacker: rawAttacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels, attachedLeaders: attachedLeaderUnits });
-    const { defender } = buildSimInputs(filteredDefender, { kind: 'all', model_count: modelCount });
+    const { attacker: rawAttacker } = buildSimInputs(filteredAttacker, {
+      kind,
+      attacker_model_count: attackerModels,
+      attachedLeaders: attachedLeaderUnits,
+      equippedCounts: attackerInRoster?.equippedCounts ?? null,
+    });
+    const { defender } = buildSimInputs(filteredDefender, {
+      kind: 'all',
+      model_count: modelCount,
+      equippedCounts: defenderInRoster?.equippedCounts ?? null,
+    });
 
     // Merge each attached leader's grants into the attacker. Grants stack
     // across leaders by union (e.g. Wardens of Ultramar + Titus on the
@@ -1935,7 +2037,11 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     // First-wins per key, so duplicate sources don't overwrite a stronger
     // value already present on a weapon.
     function mergeLeaderGrants(attacker, leaders) {
-      const list = (Array.isArray(leaders) ? leaders : [leaders]).filter(l => l && l.grants);
+      // Leaders may arrive as bare units OR wrapped { unit, equippedCounts }.
+      // Unwrap and keep only entries with grants metadata.
+      const list = (Array.isArray(leaders) ? leaders : [leaders])
+        .map(l => (l && typeof l === 'object' && 'unit' in l) ? l.unit : l)
+        .filter(l => l && l.grants);
       if (list.length === 0) return attacker;
       const mods = { ...(attacker.modifiers ?? {}) };
       for (const leader of list) {
