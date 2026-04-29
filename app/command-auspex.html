@@ -452,6 +452,11 @@ function simAttackerSide() {
   // drawn from — determines which `attachments` map to consult for leaders.
   return simRolesSwapped ? 'attacker' : 'defender';
 }
+function simDefenderSide() {
+  // Inverse of simAttackerSide — which battlefield side the sim's defender
+  // is drawn from, for resolving defender-side leader attachments.
+  return simRolesSwapped ? 'defender' : 'attacker';
+}
 
 // Map<targetSquadSlug, leaderSlug> — single-leader attachments per side.
 // Keyed per side because the same squad slug may exist on both sides if
@@ -2040,10 +2045,21 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       attachedLeaders: attachedLeaderUnits,
       equippedCounts: attackerInRoster?.equippedCounts ?? null,
     });
+    // Defender-side leader attachment: when the sim's defender unit has a
+    // Character attached on the board (mirroring how attacker attachments
+    // work), surface it as `defenderLeader` so the engine populates the
+    // bodyguard/leader split. Required for PRECISION-tagged attacks to
+    // route past Look Out, Sir to the leader directly. We only support
+    // a SINGLE defender-side leader for now — the rare Wardens+Titus
+    // double-leader stack is an attacker-side construct.
+    const defenderSideForAttachment = simDefenderSide();
+    const defenderLeaderSlug = attachedLeaderSlug(defenderSideForAttachment, defenderSlug);
+    const defenderLeaderUnit = defenderLeaderSlug ? await getUnit(defenderLeaderSlug) : null;
     const { defender } = buildSimInputs(filteredDefender, {
       kind: 'all',
       model_count: modelCount,
       equippedCounts: defenderInRoster?.equippedCounts ?? null,
+      defenderLeader: defenderLeaderUnit ? { unit: defenderLeaderUnit } : null,
     });
 
     // Merge each attached leader's grants_to_attached_unit block into the

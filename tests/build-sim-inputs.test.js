@@ -183,6 +183,65 @@ test('buildSimInputs: equippedCounts exact match takes precedence over base-name
   assert.strictEqual(names.filter(n => n.includes('sweep')).length, 0);
 });
 
+test('buildSimInputs: defenderLeader populates the defender.leader sub-object', () => {
+  // Sternguard squad (T4 3+ Sv 2W) led by Captain Titus (T4 3+ Sv 4+ Inv 6W).
+  // The combat engine reads defender.leader.* for PRECISION routing.
+  const sternguard = {
+    slug: 'sternguard-veteran-squad',
+    name: 'Sternguard Veteran Squad',
+    profile: { T: 4, Sv: '3+', InvSv: null, W: 2 },
+    keywords: [
+      { keyword: 'INFANTRY', is_faction: 0 },
+      { keyword: 'ADEPTUS ASTARTES', is_faction: 1 },
+    ],
+    weapons: [],
+    loadouts: [{ model_count: 10, points: 200, is_default: 1 }],
+  };
+  const titus = {
+    slug: 'captain-demetrian-titus',
+    name: 'Captain Titus',
+    profile: { T: 4, Sv: '3+', InvSv: '4+', W: 6 },
+    keywords: [
+      { keyword: 'INFANTRY', is_faction: 0 },
+      { keyword: 'CHARACTER', is_faction: 0 },
+      { keyword: 'EPIC HERO', is_faction: 0 },
+    ],
+    weapons: [],
+    loadouts: [{ model_count: 1, points: 90, is_default: 1 }],
+  };
+  const { defender } = buildSimInputs(sternguard, {
+    kind: 'all',
+    model_count: 10,
+    defenderLeader: { unit: titus },
+  });
+  // Bodyguard stats unchanged.
+  assert.strictEqual(defender.toughness, 4);
+  assert.strictEqual(defender.save, '3+');
+  assert.strictEqual(defender.wounds_per_model, 2);
+  assert.strictEqual(defender.model_count, 10);
+  // Leader sub-object populated with leader's stats.
+  assert.ok(defender.leader, 'defender.leader should be present');
+  assert.strictEqual(defender.leader.invulnerable, '4+');
+  assert.strictEqual(defender.leader.wounds_per_model, 6);
+  // Keyword union: bodyguard's INFANTRY/AA + leader's CHARACTER/EPIC HERO.
+  assert.ok(defender.keywords.includes('INFANTRY'));
+  assert.ok(defender.keywords.includes('ADEPTUS ASTARTES'));
+  assert.ok(defender.keywords.includes('CHARACTER'));
+  assert.ok(defender.keywords.includes('EPIC HERO'));
+});
+
+test('buildSimInputs: no defenderLeader → defender.leader undefined (back-compat)', () => {
+  const sternguard = {
+    slug: 'sternguard-veteran-squad',
+    profile: { T: 4, Sv: '3+', InvSv: null, W: 2 },
+    keywords: [],
+    weapons: [],
+    loadouts: [{ model_count: 10, points: 200, is_default: 1 }],
+  };
+  const { defender } = buildSimInputs(sternguard, { kind: 'all', model_count: 10 });
+  assert.strictEqual(defender.leader, undefined);
+});
+
 test('buildSimInputs: defender invulnerable save flows through', () => {
   const tyrant = {
     slug: 'hive-tyrant', name: 'Hive Tyrant',

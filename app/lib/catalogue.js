@@ -153,15 +153,22 @@ export async function getUnit(slug) {
 //   • Otherwise each weapon row is replicated by `attacker_model_count`,
 //     suitable for uniform squads where every model carries the same loadout.
 //
-// `attachedLeader` (optional) is a single getUnit() result for a leader.
-// `attachedLeaders` (optional) accepts either bare getUnit() results
-// (legacy — uses leader's loadouts[0].model_count) OR
-// `{ unit, equippedCounts }` wrappers (new — uses per-submodel allocation
-// for the leader). Mix is fine. Each leader's weapons are appended to the
-// attacker's weapon pool. The defender model count is not affected by
-// leader attachment (the squad's own model count is passed separately).
-// If both `attachedLeader` and `attachedLeaders` are supplied,
-// `attachedLeaders` takes precedence.
+// ATTACKER-SIDE LEADERS:
+//   `attachedLeader` (optional) is a single getUnit() result for a leader.
+//   `attachedLeaders` (optional) accepts either bare getUnit() results
+//   (legacy — uses leader's loadouts[0].model_count) OR
+//   `{ unit, equippedCounts }` wrappers (new — uses per-submodel allocation
+//   for the leader). Mix is fine. Each leader's weapons are appended to the
+//   attacker's weapon pool. If both `attachedLeader` and `attachedLeaders`
+//   are supplied, `attachedLeaders` takes precedence.
+//
+// DEFENDER-SIDE LEADER:
+//   `defenderLeader` (optional) — `{ unit: getUnit-result }`. When
+//   supplied, the returned defender shape carries a populated `leader`
+//   sub-object so the combat engine can route PRECISION attacks past
+//   the bodyguard pool (Look Out, Sir bypass). The defender's keyword
+//   list becomes the UNION of bodyguard + leader keywords so Anti-X
+//   keywords like ANTI-CHARACTER fire correctly against the unit.
 export function buildSimInputs(unit, opts = {}) {
   if (!unit) return null;
   const {
@@ -171,6 +178,7 @@ export function buildSimInputs(unit, opts = {}) {
     attachedLeader = null,
     attachedLeaders = null,
     equippedCounts = null,
+    defenderLeader = null,
   } = opts;
   const rawLeaders = Array.isArray(attachedLeaders) && attachedLeaders.length
     ? attachedLeaders.filter(Boolean)
@@ -245,14 +253,39 @@ export function buildSimInputs(unit, opts = {}) {
   }
 
   const attacker = { weapons, model_count: attacker_model_count };
-  const defenderKeywords = (unit.keywords ?? []).map(k => String(k.keyword).toUpperCase());
+  const bodyguardKeywords = (unit.keywords ?? []).map(k => String(k.keyword).toUpperCase());
+
+  // Defender-side leader: build the optional `leader` sub-object the combat
+  // engine looks at for Look Out, Sir / PRECISION routing. Stats default to
+  // the bodyguard's where the leader unit doesn't override (toughness most
+  // commonly matches; wounds and invuln usually differ).
+  let leaderSubObject;
+  let leaderKeywords = [];
+  if (defenderLeader && defenderLeader.unit) {
+    const L = defenderLeader.unit;
+    leaderKeywords = (L.keywords ?? []).map(k => String(k.keyword).toUpperCase());
+    leaderSubObject = {
+      toughness:        L.profile?.T  ?? unit.profile?.T,
+      save:             L.profile?.Sv ?? unit.profile?.Sv,
+      invulnerable:     L.profile?.InvSv ?? null,
+      wounds_per_model: L.profile?.W  ?? 1,
+      keywords:         leaderKeywords,
+    };
+  }
+
   const defender = {
     toughness: unit.profile?.T ?? 4,
     save: unit.profile?.Sv ?? '3+',
     invulnerable: unit.profile?.InvSv ?? null,
     wounds_per_model: unit.profile?.W ?? 1,
     model_count,
-    keywords: defenderKeywords,
+    // Anti-X consults the unit's keyword list as a whole; merge in the
+    // leader's keywords so e.g. ANTI-CHARACTER fires against an Attached
+    // Unit even when the precision routing has not yet reached the leader.
+    keywords: leaderSubObject
+      ? [...new Set([...bodyguardKeywords, ...leaderKeywords])]
+      : bodyguardKeywords,
+    leader: leaderSubObject,
   };
   return { attacker, defender };
 }
