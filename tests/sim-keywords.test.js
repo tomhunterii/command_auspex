@@ -454,6 +454,11 @@ test('parseKeywords: ASSAULT, PISTOL, PSYCHIC parse as flags (not unmodelled)', 
   assert.strictEqual(k.unmodelled, undefined);
 });
 
+test('parseKeywords: MELTA N captures the integer', () => {
+  assert.strictEqual(parseKeywords('[MELTA 2]').melta, 2);
+  assert.strictEqual(parseKeywords('[MELTA 4]').melta, 4);
+});
+
 // --- Pass B simulator effects ---
 
 test('Heavy: +1 to hit when attacker_stationary is true', () => {
@@ -507,6 +512,73 @@ test('Heavy: skill cap at 2+ — does not improve to 1+', () => {
   });
   // 12 * (5/6) * (5/6) * (5/6) = 12 * 125/216 = 6.94
   within(result.expected_wounds_dealt, 6.94, 0.20);
+});
+
+test('Melta 2: +2 damage per attack at half range', () => {
+  // 6 auto-hit attacks. S=10 vs T=1 (wound on 2+ per table). Wound
+  // success rate accounts for nat-1 always failing → 5/6. Save 7+ →
+  // nat-6 always succeeds → 5/6 unsaved. Damage = 1 base + 2 melta = 3
+  // per unsaved wound. Per attack: 5/6 × 5/6 × 3 = 75/36 ≈ 2.083.
+  // 6 attacks → ~12.5 wounds.
+  const half = simulate({
+    attacker: {
+      weapons: [{
+        name: 'melta', kind: 'ranged', range_in: 24,
+        attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { melta: 2 },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { at_half_range: true },
+    trials: 50000,
+  });
+  within(half.expected_wounds_dealt, 12.5, 0.50);
+});
+
+test('Melta 2: NO bonus beyond half range', () => {
+  // Same setup, at_half_range=false. Damage = 1 (no melta bonus). Per
+  // attack: 5/6 × 5/6 × 1 = 25/36 ≈ 0.694. 6 attacks → ~4.17 wounds.
+  const long = simulate({
+    attacker: {
+      weapons: [{
+        name: 'melta', kind: 'ranged', range_in: 24,
+        attacks: '6', skill: 'N/A', strength: 10, ap: 0, damage: '1',
+        abilities: { melta: 2 },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { at_half_range: false },
+    trials: 50000,
+  });
+  within(long.expected_wounds_dealt, 4.17, 0.30);
+});
+
+test('Melta 2: bonus also applies on Devastating Wounds critical-mortals', () => {
+  // The melta bonus must apply to the DW critical path AS WELL — Critical
+  // wounds roll the weapon's damage characteristic, and at half range that
+  // characteristic is base+melta.
+  // S=4, T=4 → 4+ wound. DW makes nat-6 a Critical Wound → mortal damage
+  // bypasses save. P(crit wound) = 1/6 per attack. Damage at half range
+  // = 1 + 2 = 3 mortal per crit. 12 attacks × 1/6 × 3 = 6.0 mortals.
+  // Plus normal wounds: 12 × P(wound)·non-crit × P(unsaved) × damage
+  //   = 12 × (2/6) × (5/6) × 3 = 10.0 (the 4/5 wound rolls also get melta)
+  // Total expected: 16.0.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'melta-dw', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 4, ap: 0, damage: '1',
+        abilities: { melta: 2, devastating_wounds: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 4, save: '7+', wounds_per_model: 100, model_count: 1 },
+    context: { at_half_range: true },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 16.0, 0.60);
 });
 
 test('Rapid Fire 1: +1 attack at half range', () => {

@@ -101,13 +101,26 @@ function applyFnp(damage, fnpThreshold, rng) {
   return surviving;
 }
 
+// Roll one weapon's damage characteristic. Applies the [MELTA N] bonus
+// when the attack is at half range — N flat is added to the rolled
+// damage characteristic (10th-ed core: "Each time an attack made with
+// this weapon targets a unit within Half range, improve the Damage
+// characteristic of that attack by N").
+function rollDamage(weapon, context, rng) {
+  let dmg = parseDice(String(weapon.damage ?? '1'))(rng);
+  if (context?.at_half_range && weapon.abilities?.melta) {
+    dmg += weapon.abilities.melta;
+  }
+  return dmg;
+}
+
 // Resolves a single attack that has already been determined to be a hit.
 // Returns { damage: number, mortal: number }.
 //
 // autoWound: true when Lethal Hits triggered — skip the wound roll entirely.
 // Devastating Wounds CANNOT trigger from auto-wounds (no wound roll → no nat-6
 // wound roll to detect).
-function resolvePostHit(weapon, defender, rng, autoWound, attackerMods, defenderMods) {
+function resolvePostHit(weapon, defender, rng, context, autoWound, attackerMods, defenderMods) {
   const ab = weapon.abilities ?? {};
 
   if (!autoWound) {
@@ -152,7 +165,7 @@ function resolvePostHit(weapon, defender, rng, autoWound, attackerMods, defender
       woundRoll === 6 ||
       (antiCritThresh !== null && woundRoll >= antiCritThresh);
     if (dev && isCritical) {
-      const rawDmg = parseDice(String(weapon.damage ?? '1'))(rng);
+      const rawDmg = rollDamage(weapon, context, rng);
       const mortal = applyFnp(rawDmg, defenderMods?.fnp ?? null, rng);
       return { damage: 0, mortal };
     }
@@ -167,7 +180,7 @@ function resolvePostHit(weapon, defender, rng, autoWound, attackerMods, defender
   const saveRoll = D6(rng);
   if (passesRoll(saveRoll, save)) return { damage: 0, mortal: 0 };
 
-  const rawDmg = parseDice(String(weapon.damage ?? '1'))(rng);
+  const rawDmg = rollDamage(weapon, context, rng);
   const woundDamage = applyFnp(rawDmg, defenderMods?.fnp ?? null, rng);
   return { damage: woundDamage, mortal: 0 };
 }
@@ -204,7 +217,7 @@ function resolveOneAttack(weapon, defender, rng, context, attackerMods, defender
 
   // Auto-hit case (Torrent / N/A skill): single hit, no nat-6 hit triggers.
   if (skill === null) {
-    return [resolvePostHit(weapon, defender, rng, false, attackerMods, defenderMods)];
+    return [resolvePostHit(weapon, defender, rng, context, false, attackerMods, defenderMods)];
   }
 
   const { roll: hitRoll, passed: hit } = rollAndMaybeReroll(skill, rng, attackerMods?.reroll_hits ?? null);
@@ -216,12 +229,12 @@ function resolveOneAttack(weapon, defender, rng, context, attackerMods, defender
 
   const out = [];
   // The primary hit (potentially auto-wounded by Lethal Hits).
-  out.push(resolvePostHit(weapon, defender, rng, lethalAuto, attackerMods, defenderMods));
+  out.push(resolvePostHit(weapon, defender, rng, context, lethalAuto, attackerMods, defenderMods));
   // Sustained Hits extras — these are additional hits that proceed to the
   // wound roll normally. They do NOT carry nat-6 hit properties (to prevent
   // infinite recursion and per 10th ed rules).
   for (let i = 0; i < sustainedExtras; i++) {
-    out.push(resolvePostHit(weapon, defender, rng, false, attackerMods, defenderMods));
+    out.push(resolvePostHit(weapon, defender, rng, context, false, attackerMods, defenderMods));
   }
   return out;
 }

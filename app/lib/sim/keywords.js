@@ -36,6 +36,9 @@ const FLAG_KEYWORDS = new Map([
 const SUSTAINED_HITS_RE = /^SUSTAINED HITS\s*(\d*)$/;
 const RAPID_FIRE_RE = /^RAPID FIRE\s*(\d*)$/;
 const ANTI_RE = /^ANTI-([A-Z][A-Z\s\-]*?)\s+(\d+)\+$/;
+// MELTA N — at half range, add N to the damage roll. Multi-melta has
+// MELTA 2 most often; single-target meltas are MELTA 2 in 10th ed.
+const MELTA_RE = /^MELTA\s*(\d+)$/;
 
 export function parseKeywords(input) {
   if (!input || typeof input !== 'string') return {};
@@ -71,6 +74,11 @@ export function parseKeywords(input) {
     const a = ANTI_RE.exec(tok);
     if (a) {
       anti.push({ target_keyword: a[1].trim(), threshold: parseInt(a[2], 10) });
+      continue;
+    }
+    const mel = MELTA_RE.exec(tok);
+    if (mel) {
+      out.melta = parseInt(mel[1], 10);
       continue;
     }
     unmodelled.push(tok);
