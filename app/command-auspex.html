@@ -409,6 +409,7 @@ import {
   applyOverchargeFilter as filterOverchargePairs,
 } from './lib/overcharge.js';
 import { findMeleeChoices, applyMeleeSelection } from './lib/melee-selection.js';
+import { mergeLeaderGrants } from './lib/leader-grants.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
 
 const statusEl = document.getElementById('status');
@@ -2030,43 +2031,10 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       equippedCounts: defenderInRoster?.equippedCounts ?? null,
     });
 
-    // Merge each attached leader's grants into the attacker. Grants stack
-    // across leaders by union (e.g. Wardens of Ultramar + Titus on the
-    // same squad — Titus's [SUSTAINED HITS 1] / re-roll-1s reach every
-    // weapon in the combined unit, including the Wardens' own weapons).
-    // First-wins per key, so duplicate sources don't overwrite a stronger
-    // value already present on a weapon.
-    function mergeLeaderGrants(attacker, leaders) {
-      // Leaders may arrive as bare units OR wrapped { unit, equippedCounts }.
-      // Unwrap and keep only entries with grants metadata.
-      const list = (Array.isArray(leaders) ? leaders : [leaders])
-        .map(l => (l && typeof l === 'object' && 'unit' in l) ? l.unit : l)
-        .filter(l => l && l.grants);
-      if (list.length === 0) return attacker;
-      const mods = { ...(attacker.modifiers ?? {}) };
-      for (const leader of list) {
-        const g = leader.grants;
-        if (g.modifiers) {
-          for (const [k, v] of Object.entries(g.modifiers)) {
-            if (mods[k] == null) mods[k] = v;
-          }
-        }
-      }
-      const weapons = (attacker.weapons ?? []).map(w => {
-        const merged = { ...(w.abilities ?? {}) };
-        for (const leader of list) {
-          const g = leader.grants;
-          if (g.weapon_abilities) {
-            for (const [k, v] of Object.entries(g.weapon_abilities)) {
-              if (merged[k] == null) merged[k] = v;
-            }
-          }
-        }
-        return { ...w, abilities: merged };
-      });
-      return { ...attacker, weapons, modifiers: mods };
-    }
-
+    // Merge each attached leader's grants_to_attached_unit block into the
+    // attacker (Press the Attack, etc.). Implementation lives in
+    // app/lib/leader-grants.js so the audit script and combat tests can
+    // drive the same logic.
     const attacker = mergeLeaderGrants(rawAttacker, attachedLeaderUnits);
 
     if (attacker.weapons.length === 0) {
