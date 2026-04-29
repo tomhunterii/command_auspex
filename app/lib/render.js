@@ -40,10 +40,12 @@ function tyranidRoleSymbol(unit) {
   if (!unit) return null;
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isTyranid(kws)) return null;
-  // Priority: MONSTER (creature class) > INFILTRATORS (deployment role) >
-  // INFANTRY (the swarm — all foot infantry, not just Battleline) > FLY
-  // (non-infantry flyers). A flying infantry unit reads as a bug-swarm,
-  // not a mosquito; FLY only catches non-infantry/non-monster flyers.
+  // Priority: EPIC HERO > MONSTER (creature class) > INFILTRATORS
+  // (deployment role) > INFANTRY (the swarm — all foot infantry, not just
+  // Battleline) > FLY (non-infantry flyers). Epic Heroes (Old One Eye,
+  // Swarmlord, etc.) are typically also Monsters — disease wins so the
+  // named character reads distinctly from the rank-and-file Carnifex.
+  if (hasKeyword(kws, 'EPIC HERO')) return 'icon:disease';
   if (hasKeyword(kws, 'MONSTER')) return 'icon:bug';
   if (hasKeyword(kws, 'INFILTRATORS')) return 'icon:spider';
   if (hasKeyword(kws, 'INFANTRY')) return 'icon:bugs';

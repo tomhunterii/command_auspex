@@ -245,6 +245,7 @@ test('smoke: Tyranid role symbols wired in renderer', () => {
   assert.match(RENDER, /icon:bugs/);
   assert.match(RENDER, /icon:mosquito/);
   assert.match(RENDER, /icon:spider/);
+  assert.match(RENDER, /icon:disease/);
 });
 
 test('smoke: zoom/pan + FIT button wired', () => {

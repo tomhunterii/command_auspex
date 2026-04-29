@@ -26,9 +26,10 @@ const ICONS = [
   'star',        // Sergeant
   // Tyranid role markers
   'bug',         // Monster
-  'bugs',        // Tyranid Battleline
-  'mosquito',    // Tyranid Fly
+  'bugs',        // Tyranid Infantry
+  'mosquito',    // Tyranid Fly (non-infantry, non-monster)
   'spider',      // Tyranid Infiltrators
+  'disease',     // Tyranid Epic Hero
   // Veterans use unicode ✠ rendered as <text> — no SVG icon needed.
 ];
 
