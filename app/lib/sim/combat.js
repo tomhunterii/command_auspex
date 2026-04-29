@@ -47,12 +47,13 @@ function rollAndMaybeReroll(threshold, rng, rerollPolicy) {
   return { roll, passed: passesRoll(roll, threshold) };
 }
 
-function effectiveSave(armorPlus, ap, invulnPlus, defenderMods, ignoresCover = false, indirectCover = false) {
+function effectiveSave(armorPlus, ap, invulnPlus, defenderMods, ignoresCover = false) {
   let modifiedArmor = armorPlus - ap;
-  // Benefit of Cover applies if the defender is positioned in cover OR
-  // an [INDIRECT FIRE] weapon is firing without line-of-sight at this
-  // target — both gated by [IGNORES COVER] (which trumps either path).
-  if ((defenderMods?.cover || indirectCover) && !ignoresCover) {
+  // Benefit of Cover applies only when the defender is physically in
+  // cover (positional — set by the caller). [IGNORES COVER] trumps it.
+  // INDIRECT FIRE does NOT grant automatic cover; cover is purely
+  // positional per 10th-ed core.
+  if (defenderMods?.cover && !ignoresCover) {
     modifiedArmor -= 1;
     // Cover cap: cannot improve armor beyond 3+.
     if (modifiedArmor < 3) modifiedArmor = 3;
@@ -180,10 +181,7 @@ function resolvePostHit(weapon, defender, rng, context, autoWound, attackerMods,
     ? parseSkill(defender.invulnerable)
     : null;
   const ignoresCover = !!ab.ignores_cover;
-  // INDIRECT FIRE without LoS grants the target Benefit of Cover for
-  // this attack only — separate from the defender's positional cover.
-  const indirectCover = !!ab.indirect_fire && !!context?.firing_indirectly;
-  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln, defenderMods, ignoresCover, indirectCover);
+  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln, defenderMods, ignoresCover);
   const saveRoll = D6(rng);
   if (passesRoll(saveRoll, save)) return { damage: 0, mortal: 0 };
 

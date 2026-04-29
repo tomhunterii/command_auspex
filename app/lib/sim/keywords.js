@@ -37,10 +37,10 @@ const FLAG_KEYWORDS = new Map([
   ['IGNORES COVER',       'ignores_cover'],
   // INDIRECT FIRE: weapon can target enemy units the firing unit cannot
   // see. When firing without line-of-sight (`context.firing_indirectly`),
-  // attacks suffer -1 to hit AND the target gets Benefit of Cover.
-  // Targeting permission itself (whether the firer needs LoS) is a
-  // board-state concern outside the sim engine; only the damage-math
-  // penalties live here.
+  // attacks suffer -1 to hit. Cover is NOT automatic — it remains
+  // positional, granted by `defenderMods.cover` only when the target is
+  // physically in cover. Targeting permission (whether the firer needs
+  // LoS at all) is a board-state concern outside the sim engine.
   ['INDIRECT FIRE',       'indirect_fire'],
 ]);
 
