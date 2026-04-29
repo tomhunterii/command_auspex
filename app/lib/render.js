@@ -508,7 +508,7 @@ export function renderThreatRanges(svg, placements) {
   }
 }
 
-function renderUnit({ unit, datasheet, centerIn, role }) {
+function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
   const color = role === 'attacker' ? '#ff5d6c' : '#6fff8e';
   const fill  = role === 'attacker' ? 'rgba(255,93,108,0.6)' : 'rgba(111,255,142,0.55)';
   const labelColor = role === 'attacker' ? 'var(--hostile)' : 'var(--phosphor)';
@@ -518,10 +518,14 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
   group.dataset.unitName = unit.name;
 
   // Derive bare slug (e.g. 'aggressor-squad') from the datasheet field
-  // ('space-marines/aggressor-squad') so it matches the unitsBySlug cache key.
+  // ('space-marines/aggressor-squad') so it matches the unitsByInstanceId
+  // cache key's slug portion.
   const rawDs = unit.datasheet ?? '';
   const unitSlug = rawDs.includes('/') ? rawDs.split('/').pop() : rawDs;
   group.dataset.unitSlug = unitSlug;
+  // Per-unit-instance ID — distinguishes duplicate units (5× Hormagaunts)
+  // for click-routing and per-instance state lookups.
+  if (_instanceId) group.dataset.instanceId = _instanceId;
   // Tag with deployment side so sim-pair line can resolve by slug+side
   // when both rosters are the same list.
   group.dataset.side = role; // 'defender' or 'attacker'
@@ -579,6 +583,7 @@ function renderUnit({ unit, datasheet, centerIn, role }) {
     circle.setAttribute('stroke-width', isSergeant ? 0.12 : 0.06);
     circle.classList.add('model-circle');
     circle.dataset.unitSlug = unitSlug;
+    if (_instanceId) circle.dataset.instanceId = _instanceId;
     circle.dataset.modelIdx = String(i);
     group.appendChild(circle);
 

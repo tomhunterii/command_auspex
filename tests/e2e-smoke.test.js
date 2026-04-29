@@ -206,8 +206,12 @@ test('smoke: render emits data-side on unit groups', () => {
   assert.match(RENDER, /dataset\.side|setAttribute\(['"]data-side['"]/);
 });
 
-test('smoke: refreshSimPairLine queries by side', () => {
-  assert.match(HTML, /clusterCenter\([^)]*['"](attacker|defender)['"]/);
+test('smoke: refreshSimPairLine queries by per-unit-instance ID', () => {
+  // Post-2026-04-29 refactor: clusterCenter takes an instanceId (e.g.
+  // "hormagaunts:0") so duplicate units on the board resolve to the
+  // specific clicked instance, not the first slug match.
+  assert.match(HTML, /clusterCenter\(attackerInstanceId\)/);
+  assert.match(HTML, /data-instance-id=/);
 });
 
 test('smoke: sim model-count inputs are read-only', () => {

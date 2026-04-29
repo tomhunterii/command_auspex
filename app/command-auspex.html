@@ -431,7 +431,7 @@ let currentScenarioName = null;
 let autoSaveTimer = null;
 
 // Cached parsed rosters for sim filtering. Populated by friendly/hostile
-// dropdown change events. Map<slug, {roster, unitsBySlug}|null>.
+// dropdown change events. Map<rosterSlug, {roster, unitsByInstanceId}|null>.
 const rosterCache = new Map();
 let friendlyRosterSlug = null;
 let hostileRosterSlug = null;
@@ -574,6 +574,16 @@ function destroyedCountFor(unitSlug) {
 }
 
 
+// Per-unit-instance ID. Two units of the same datasheet (5× Hormagaunts,
+// 2× Carnifexes) need distinct keys so leader / formation / profile / melee
+// state and destroyed-model bookkeeping don't leak across them.
+//   format: `<slug>:<n>` where n is 0-indexed occurrence in the side's
+//   roster sequence — e.g. "hormagaunts:0", "hormagaunts:1".
+function makeInstanceId(slug, n) { return `${slug}:${n}`; }
+function slugOf(instanceId) {
+  return String(instanceId ?? '').split(':')[0];
+}
+
 async function ensureRosterCached(rosterSlug) {
   if (!rosterSlug) return null;
   if (rosterCache.has(rosterSlug)) return rosterCache.get(rosterSlug);
@@ -588,9 +598,11 @@ async function ensureRosterCached(rosterSlug) {
   try {
     fm = await parseFrontmatter(rosterRecord.body_md);
   } catch { fm = null; }
-  // Build a datasheetSlug → { name, equippedWeapons } map for fast lookup.
-  // Roster shape: units[].models[].wargear[].item (confirmed from Step A probe).
-  const unitsBySlug = new Map();
+  // Build an instanceId → unit-info map. Key on instanceId (not slug) so
+  // duplicate units (5× Hormagaunts, 2× Carnifexes) get distinct entries.
+  // Roster shape: units[].models[].wargear[].item.
+  const unitsByInstanceId = new Map();
+  const slugCounts = new Map(); // slug → next-n
   for (const u of fm?.units ?? []) {
     // The datasheet field is "space-marines/some-slug" — take the last segment.
     let slug = u.datasheet ? String(u.datasheet).split('/').pop().toLowerCase() : null;
@@ -603,6 +615,9 @@ async function ensureRosterCached(rosterSlug) {
       } catch { /* best effort */ }
     }
     if (!slug) continue;
+    const n = slugCounts.get(slug) ?? 0;
+    slugCounts.set(slug, n + 1);
+    const instanceId = makeInstanceId(slug, n);
     // Aggregate all wargear across the unit's models. Two views:
     //   • equippedWeapons: Set<lowercased-name>     (used for filtering)
     //   • equippedCounts:  Map<lowercased-name,N>   (used for sim replication —
@@ -625,14 +640,16 @@ async function ensureRosterCached(rosterSlug) {
       }
     }
     const totalModels = (u.models ?? []).reduce((sum, m) => sum + (m.count ?? 0), 0);
-    unitsBySlug.set(slug.split('/').pop(), {
+    unitsByInstanceId.set(instanceId, {
+      instanceId,
+      slug,
       name: u.name,
       equippedWeapons: equipped,
       equippedCounts,
       totalModels: totalModels > 0 ? totalModels : 1,
     });
   }
-  const cached = { roster: rosterRecord, unitsBySlug };
+  const cached = { roster: rosterRecord, unitsByInstanceId };
   rosterCache.set(rosterSlug, cached);
   return cached;
 }
@@ -643,13 +660,27 @@ async function populateSimDropdownFromRoster(selectEl, rosterSlug) {
     return;
   }
   const cached = await ensureRosterCached(rosterSlug);
-  if (!cached || cached.unitsBySlug.size === 0) {
+  if (!cached || cached.unitsByInstanceId.size === 0) {
     selectEl.innerHTML = '<option value="">— ROSTER HAS NO RESOLVABLE UNITS —</option>';
     return;
   }
+  // Count occurrences per name so duplicates can be disambiguated in the
+  // dropdown label ("Hormagaunts (1)", "Hormagaunts (2)", etc.). Singletons
+  // stay un-numbered.
+  const nameCounts = new Map();
+  for (const info of cached.unitsByInstanceId.values()) {
+    nameCounts.set(info.name, (nameCounts.get(info.name) ?? 0) + 1);
+  }
+  const seenSoFar = new Map();
   const opts = ['<option value="">— SELECT —</option>'];
-  for (const [slug, info] of cached.unitsBySlug.entries()) {
-    opts.push(`<option value="${slug}">${info.name}</option>`);
+  for (const [instanceId, info] of cached.unitsByInstanceId.entries()) {
+    let label = info.name;
+    if ((nameCounts.get(info.name) ?? 0) > 1) {
+      const k = (seenSoFar.get(info.name) ?? 0) + 1;
+      seenSoFar.set(info.name, k);
+      label = `${info.name} (${k})`;
+    }
+    opts.push(`<option value="${instanceId}">${label}</option>`);
   }
   selectEl.innerHTML = opts.join('');
 }
@@ -694,13 +725,14 @@ async function loadCatalogueAndPopulate() {
 
     async function refreshWeaponDetail() {
       const detailEl = document.getElementById('sim-weapon-detail');
-      const slug = document.getElementById('sim-attacker').value;
+      const instanceId = document.getElementById('sim-attacker').value;
       const kind = document.getElementById('sim-kind').value;
-      if (!slug) {
+      if (!instanceId) {
         detailEl.style.display = 'none';
         detailEl.innerHTML = '';
         return;
       }
+      const slug = slugOf(instanceId);
       try {
         const unit = await getUnit(slug);
         if (!unit) {
@@ -711,7 +743,7 @@ async function loadCatalogueAndPopulate() {
 
         // Roster-aware filter: restrict to equipped weapons when applicable.
         const attackerInRoster = simAttackerRosterSlug()
-          ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsBySlug?.get(slug)
+          ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsByInstanceId?.get(instanceId)
           : null;
         const equipped = attackerInRoster?.equippedWeapons;
         const filterByEquipped = (weapons, eq) => weapons.filter(w =>
@@ -725,20 +757,21 @@ async function loadCatalogueAndPopulate() {
         // Leader merge: a squad may have a primary leader and (per the
         // Wardens of Ultramar / Titus rule) an optional secondary leader.
         // Resolve every attached leader so the panel shows their weapons
-        // and grants in their own sections.
-        const leaderSlugs = attachedLeaderSlugsAll(simAttackerSide(), slug);
+        // and grants in their own sections. Leaders are tracked by
+        // instanceId too — slugOf() recovers the catalogue slug.
+        const leaderInstanceIds = attachedLeaderSlugsAll(simAttackerSide(), instanceId);
         const leaderEntries = [];
-        for (const lSlug of leaderSlugs) {
-          const lUnit = await getUnit(lSlug);
+        for (const lInstanceId of leaderInstanceIds) {
+          const lUnit = await getUnit(slugOf(lInstanceId));
           if (!lUnit) continue;
           const lInRoster = simAttackerRosterSlug()
-            ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsBySlug?.get(lSlug)
+            ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsByInstanceId?.get(lInstanceId)
             : null;
           const lEquipped = lInRoster?.equippedWeapons;
           const lWeapons = lEquipped && lEquipped.size > 0
             ? filterByEquipped(lUnit.weapons, lEquipped)
             : lUnit.weapons;
-          leaderEntries.push({ slug: lSlug, unit: lUnit, weapons: lWeapons });
+          leaderEntries.push({ instanceId: lInstanceId, slug: slugOf(lInstanceId), unit: lUnit, weapons: lWeapons });
         }
 
         const filterBadge = equipped && equipped.size > 0
@@ -756,32 +789,33 @@ async function loadCatalogueAndPopulate() {
         // (plasma std/oc, melee strike/sweep, witchfire/focused, etc.) only
         // shows the currently-selected profile in the weapon table.
         // Selectors appear above the table (see profileBlock below).
+        // Per-unit-instance keying: state is keyed by instanceId so duplicate
+        // units (5× Hormagaunts) keep distinct profile/melee picks.
         const ocSide = simAttackerSide();
-        const ocSlug = slug;
-        const filteredDisplayWeapons = applyProfileSelection(displayUnit.weapons, ocSide, ocSlug);
+        const ocInstanceId = instanceId;
+        const filteredDisplayWeapons = applyProfileSelection(displayUnit.weapons, ocSide, ocInstanceId);
         for (const e of leaderEntries) {
-          e.filteredWeapons = applyProfileSelection(e.weapons, ocSide, e.slug);
+          e.filteredWeapons = applyProfileSelection(e.weapons, ocSide, e.instanceId);
         }
         const ranged = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'ranged');
         const melee = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'melee');
 
         // PROFILE PICK: one row per multi-profile group (canonical-base) with
-        // a button per profile. Subsumes the previous FIRE MODE (plasma) and
-        // any future ranged-multi-profile selectors. Active button is
-        // highlighted; clicking another swaps. Selection is per-(side, slug,
-        // canonical-base) → chosen weapon name (lowercased, trimmed).
+        // a button per profile. Active button highlighted; clicking another
+        // swaps. Selection is per-(side, instanceId, canonical-base) →
+        // chosen weapon name (lowercased, trimmed).
         const profileLabel = (suffix) => suffix ? suffix.toUpperCase() : 'STANDARD';
-        const buildProfileRows = (weapons, side, ownerSlug, ownerLabel) => {
+        const buildProfileRows = (weapons, side, ownerInstanceId, ownerLabel) => {
           const groups = findWeaponProfiles(weapons);
           if (groups.size === 0) return '';
           const rows = [...groups.entries()].map(([base, profiles]) => {
-            const stored = profileChoice(side, ownerSlug, base);
+            const stored = profileChoice(side, ownerInstanceId, base);
             const active = profiles.find(p => p.name.toLowerCase().trim() === stored)
                         ?? defaultProfile(profiles);
             const buttons = profiles.map(p => {
               const isActive = p === active;
               const nameLower = p.name.toLowerCase().trim();
-              return `<button type="button" class="btn profile-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-base="${escapeHtml(base)}" data-name="${escapeHtml(nameLower)}" style="padding:1px 6px; font-size:9px; letter-spacing:1px; color:var(--amber); ${isActive ? '' : 'opacity:0.45;'}">${escapeHtml(profileLabel(p.suffix))}</button>`;
+              return `<button type="button" class="btn profile-toggle" data-side="${side}" data-instance="${escapeHtml(ownerInstanceId)}" data-base="${escapeHtml(base)}" data-name="${escapeHtml(nameLower)}" style="padding:1px 6px; font-size:9px; letter-spacing:1px; color:var(--amber); ${isActive ? '' : 'opacity:0.45;'}">${escapeHtml(profileLabel(p.suffix))}</button>`;
             }).join('');
             const display = profiles[0].name.replace(/\s+[–—-]\s+.*$/, '').trim();
             return `<div style="display:flex; align-items:center; gap:6px; margin:2px 0;">
@@ -795,25 +829,22 @@ async function loadCatalogueAndPopulate() {
           return heading + rows;
         };
         const profileBlock =
-          buildProfileRows(displayUnit.weapons, ocSide, ocSlug, leaderEntries.length > 0 ? unit.name : null)
-          + leaderEntries.map(e => buildProfileRows(e.weapons, ocSide, e.slug, e.unit.name)).join('');
+          buildProfileRows(displayUnit.weapons, ocSide, ocInstanceId, leaderEntries.length > 0 ? unit.name : null)
+          + leaderEntries.map(e => buildProfileRows(e.weapons, ocSide, e.instanceId, e.unit.name)).join('');
 
         // Melee weapon pick: surface a row of buttons for each unit (squad +
         // each attached leader) when its weapon pool has >1 non-EXTRA-ATTACKS
-        // melee weapon. The active selection is highlighted; clicking another
-        // option swaps the active one. Selection is per-(side, slug). EXTRA
-        // ATTACKS weapons (e.g. Carnifex extra scything talons) are not
-        // shown — they always stack regardless of choice.
-        const buildMeleeRows = (weapons, side, ownerSlug, ownerLabel) => {
+        // melee weapon. Selection is per-(side, instanceId).
+        const buildMeleeRows = (weapons, side, ownerInstanceId, ownerLabel) => {
           const choices = findMeleeChoices(weapons);
           if (choices.size <= 1) return '';
-          const current = meleeChoice(side, ownerSlug)
+          const current = meleeChoice(side, ownerInstanceId)
             ?? [...choices.keys()][0];
           const rows = [...choices.entries()].map(([nameLower, w]) => {
             const active = nameLower === current;
             return `<div style="display:flex; align-items:center; gap:6px; margin:2px 0;">
               <span style="flex:1; color:var(--paper); font-size:10px;">${escapeHtml(w.name)}</span>
-              <button type="button" class="btn melee-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-name="${escapeHtml(nameLower)}" style="padding:1px 8px; font-size:9px; letter-spacing:1px; ${active ? 'color:var(--amber);' : 'opacity:0.45;'}">${active ? 'PICK' : 'pick'}</button>
+              <button type="button" class="btn melee-toggle" data-side="${side}" data-instance="${escapeHtml(ownerInstanceId)}" data-name="${escapeHtml(nameLower)}" style="padding:1px 8px; font-size:9px; letter-spacing:1px; ${active ? 'color:var(--amber);' : 'opacity:0.45;'}">${active ? 'PICK' : 'pick'}</button>
             </div>`;
           }).join('');
           const heading = ownerLabel
@@ -822,14 +853,12 @@ async function loadCatalogueAndPopulate() {
           return heading + rows;
         };
         const meleeBlock =
-          buildMeleeRows(displayUnit.weapons, ocSide, ocSlug, leaderEntries.length > 0 ? unit.name : null)
-          + leaderEntries.map(e => buildMeleeRows(e.weapons, ocSide, e.slug, e.unit.name)).join('');
+          buildMeleeRows(displayUnit.weapons, ocSide, ocInstanceId, leaderEntries.length > 0 ? unit.name : null)
+          + leaderEntries.map(e => buildMeleeRows(e.weapons, ocSide, e.instanceId, e.unit.name)).join('');
 
-        // Apply melee selection to the panel's display weapon lists, so the
-        // weapon table only shows the active melee + every EXTRA ATTACKS
-        // melee + every ranged. Mirrors what the simulator does at runtime.
-        const meleePickedSquad  = meleeChoice(ocSide, ocSlug);
-        const meleePickedLeader = e => meleeChoice(ocSide, e.slug);
+        // Apply melee selection to the panel's display weapon lists.
+        const meleePickedSquad  = meleeChoice(ocSide, ocInstanceId);
+        const meleePickedLeader = e => meleeChoice(ocSide, e.instanceId);
         const filteredDisplayWeaponsAfterMelee = applyMeleeSelection(filteredDisplayWeapons, meleePickedSquad);
         for (const e of leaderEntries) {
           e.filteredWeapons = applyMeleeSelection(e.filteredWeapons, meleePickedLeader(e));
@@ -877,19 +906,18 @@ async function loadCatalogueAndPopulate() {
         } else {
           detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + profileBlock + meleeBlock + sections;
         }
-        // Wire profile-pick clicks: persist the chosen weapon name and
-        // re-render. Clicking the already-active profile is a no-op.
+        // Wire profile-pick clicks: persist the chosen weapon name (per
+        // unit-instance) and re-render.
         for (const btn of detailEl.querySelectorAll('.profile-toggle')) {
           btn.addEventListener('click', () => {
-            setProfileChoice(btn.dataset.side, btn.dataset.slug, btn.dataset.base, btn.dataset.name);
+            setProfileChoice(btn.dataset.side, btn.dataset.instance, btn.dataset.base, btn.dataset.name);
             refreshWeaponDetail();
           });
         }
-        // Wire melee-pick toggle clicks: persist the chosen weapon name and
-        // re-render. Clicking the already-active option is a no-op.
+        // Wire melee-pick toggle clicks (per unit-instance).
         for (const btn of detailEl.querySelectorAll('.melee-toggle')) {
           btn.addEventListener('click', () => {
-            setMeleeChoice(btn.dataset.side, btn.dataset.slug, btn.dataset.name);
+            setMeleeChoice(btn.dataset.side, btn.dataset.instance, btn.dataset.name);
             refreshWeaponDetail();
           });
         }
@@ -935,19 +963,20 @@ attackerSel.addEventListener('change', async () => {
 });
 
 // Auto-populate model count inputs from the roster when a sim unit is selected.
-// Subtracts any destroyed models from the live count.
+// Subtracts any destroyed models from the live count. Lookups are per-
+// instance so duplicate units (5× Hormagaunts) keep distinct live counts.
 async function defaultModelCountFor(selectEl, rosterSlug, modelInputId, side = 'defender') {
-  const slug = selectEl.value;
-  if (!slug || !rosterSlug) return;
+  const instanceId = selectEl.value;
+  if (!instanceId || !rosterSlug) return;
   const cached = await ensureRosterCached(rosterSlug);
-  const u = cached?.unitsBySlug?.get(slug);
+  const u = cached?.unitsByInstanceId?.get(instanceId);
   if (!u || !u.totalModels) return;
-  let live = Math.max(1, u.totalModels - destroyedCountFor(slug));
+  let live = Math.max(1, u.totalModels - destroyedCountFor(instanceId));
   // Add every attached leader's model count (primary + optional secondary).
-  for (const ls of attachedLeaderSlugsAll(side, slug)) {
-    const leaderInfo = cached?.unitsBySlug?.get(ls);
+  for (const lInstanceId of attachedLeaderSlugsAll(side, instanceId)) {
+    const leaderInfo = cached?.unitsByInstanceId?.get(lInstanceId);
     if (leaderInfo?.totalModels) {
-      live += Math.max(0, leaderInfo.totalModels - destroyedCountFor(ls));
+      live += Math.max(0, leaderInfo.totalModels - destroyedCountFor(lInstanceId));
     }
   }
   document.getElementById(modelInputId).value = live;
@@ -1030,20 +1059,37 @@ async function loadFromScenario(s) {
   const candidates = (await listUnits()).map(c => ({ slug: c.slug, faction: c.faction_slug }));
   for (const role of ['defender', 'attacker']) {
     const roster = role === 'defender' ? defender : attacker;
+    // Per-side slug-occurrence counter so duplicate units in the scenario
+    // get distinct instance IDs. Also avoids the legacy bug where
+    // `find(u => u.name === entry.unit_ref)` returned the same first
+    // matching roster unit for every duplicate scenario entry.
+    const slugCounts = new Map();
+    const usedRosterIndices = new Set();
     for (const entry of s.board_state[role]) {
-      const unit = roster.units.find(u => u.name === entry.unit_ref);
-      if (!unit) continue;
+      // Find the n-th roster unit matching unit_ref so duplicates pair up
+      // by occurrence order in the scenario file.
+      const matchingIndices = roster.units
+        .map((u, i) => (u.name === entry.unit_ref ? i : -1))
+        .filter(i => i >= 0 && !usedRosterIndices.has(i));
+      const rosterIdx = matchingIndices[0];
+      if (rosterIdx == null) continue;
+      const unit = roster.units[rosterIdx];
+      usedRosterIndices.add(rosterIdx);
       const dsSlug = await resolveUnitDatasheet(unit, candidates);
       if (!dsSlug) continue;
       const ds = await loadDatasheet(dsSlug);
       const slug = dsSlug.split('/').pop();
-      const formation = entry.formation ?? unitFormation(role, slug);
-      if (entry.formation) setUnitFormation(role, slug, entry.formation);
+      const n = slugCounts.get(slug) ?? 0;
+      slugCounts.set(slug, n + 1);
+      const _instanceId = makeInstanceId(slug, n);
+      const formation = entry.formation ?? unitFormation(role, _instanceId);
+      if (entry.formation) setUnitFormation(role, _instanceId, entry.formation);
       placements.push({
         unit: { ...unit, datasheet: dsSlug, _base: ds.base, _formation: formation },
         datasheet: ds,
         centerIn: entry.position,
         role,
+        _instanceId,
       });
     }
   }
@@ -1085,21 +1131,30 @@ loadBtn.addEventListener('click', async () => {
     const candidates = (await listUnits()).map(c => ({ slug: c.slug, faction: c.faction_slug }));
     async function buildPlacements(roster, zonePolygon, role) {
       const enriched = [];
+      // Per-side slug-occurrence counter for stable per-unit-instance IDs.
+      const slugCounts = new Map();
       for (const u of roster.units) {
         const dsSlug = await resolveUnitDatasheet(u, candidates);
         if (!dsSlug) continue;
         const ds = await loadDatasheet(dsSlug);
         const slug = dsSlug.split('/').pop();
-        const copy = { ...u, datasheet: dsSlug, _base: ds.base, _formation: unitFormation(role, slug) };
-        enriched.push({ u: copy, ds });
+        const n = slugCounts.get(slug) ?? 0;
+        slugCounts.set(slug, n + 1);
+        const _instanceId = makeInstanceId(slug, n);
+        const copy = { ...u, datasheet: dsSlug, _base: ds.base, _formation: unitFormation(role, _instanceId) };
+        enriched.push({ u: copy, ds, _instanceId });
       }
       const placed = autoPlaceUnits(enriched.map(e => e.u), zonePolygon);
-      return placed.map((p) => ({
-        unit: p.unit,
-        datasheet: enriched.find(e => e.u === p.unit).ds,
-        centerIn: p.centerIn,
-        role,
-      }));
+      return placed.map((p) => {
+        const e = enriched.find(x => x.u === p.unit);
+        return {
+          unit: p.unit,
+          datasheet: e.ds,
+          centerIn: p.centerIn,
+          role,
+          _instanceId: e._instanceId,
+        };
+      });
     }
 
     const attPolys = mission.deployment.attacker.polygons.map(p => p.vertices);
@@ -1425,32 +1480,33 @@ function applyDestroyedVisual(circle, destroyed) {
 
 // Compute live model count = roster.totalModels − destroyed + (attached
 // leader's totalModels − leader's destroyed). Mirrors defaultModelCountFor.
-async function liveModelCountFor(unitSlug, side, rosterSlug) {
+// Lookups key on instanceId so duplicate units track distinct live counts.
+async function liveModelCountFor(instanceId, side, rosterSlug) {
   const cached = await ensureRosterCached(rosterSlug);
-  const u = cached?.unitsBySlug?.get(unitSlug);
+  const u = cached?.unitsByInstanceId?.get(instanceId);
   if (!u) return 1;
-  let live = Math.max(0, (u.totalModels ?? 1) - destroyedCountFor(unitSlug));
-  const leaderSlug = attachedLeaderSlug(side, unitSlug);
-  if (leaderSlug) {
-    const leaderInfo = cached?.unitsBySlug?.get(leaderSlug);
+  let live = Math.max(0, (u.totalModels ?? 1) - destroyedCountFor(instanceId));
+  const leaderInstanceId = attachedLeaderSlug(side, instanceId);
+  if (leaderInstanceId) {
+    const leaderInfo = cached?.unitsByInstanceId?.get(leaderInstanceId);
     if (leaderInfo?.totalModels) {
-      live += Math.max(0, leaderInfo.totalModels - destroyedCountFor(leaderSlug));
+      live += Math.max(0, leaderInfo.totalModels - destroyedCountFor(leaderInstanceId));
     }
   }
   return Math.max(1, live);
 }
 
-async function refreshSimModelCountsFor(unitSlug) {
+async function refreshSimModelCountsFor(instanceId) {
   const simAttacker = document.getElementById('sim-attacker');
   const simDefender = document.getElementById('sim-defender');
-  if (simAttacker?.value === unitSlug) {
-    const live = await liveModelCountFor(unitSlug, simAttackerSide(), simAttackerRosterSlug());
+  if (simAttacker?.value === instanceId) {
+    const live = await liveModelCountFor(instanceId, simAttackerSide(), simAttackerRosterSlug());
     document.getElementById('sim-attacker-models').value = live;
     syncModelReadout('sim-attacker-models', live);
   }
-  if (simDefender?.value === unitSlug) {
+  if (simDefender?.value === instanceId) {
     const defenderSide = simRolesSwapped ? 'defender' : 'attacker';
-    const live = await liveModelCountFor(unitSlug, defenderSide, simDefenderRosterSlug());
+    const live = await liveModelCountFor(instanceId, defenderSide, simDefenderRosterSlug());
     document.getElementById('sim-models').value = live;
     syncModelReadout('sim-models', live);
   }
@@ -1461,24 +1517,16 @@ let simPairLine = null; // SVG <line> drawn between current attacker + defender 
 function refreshSimPairLine() {
   const boardEl = document.getElementById('board');
   if (!boardEl) return;
-  const attackerSlug = document.getElementById('sim-attacker')?.value;
-  const defenderSlug = document.getElementById('sim-defender')?.value;
+  const attackerInstanceId = document.getElementById('sim-attacker')?.value;
+  const defenderInstanceId = document.getElementById('sim-defender')?.value;
   // Clear existing line.
   if (simPairLine) { simPairLine.remove(); simPairLine = null; }
-  if (!attackerSlug || !defenderSlug || attackerSlug === defenderSlug) return;
+  if (!attackerInstanceId || !defenderInstanceId || attackerInstanceId === defenderInstanceId) return;
   // Compute centroid of a unit's model circles accounting for group translate.
-  // Queries by both slug AND deployment side so that when both rosters are the
-  // same list, we resolve to the correct physical group rather than the first
-  // DOM match. Falls back to slug-only if no side-tagged group is found.
-  //
-  // Side mapping (intentional, matches roster-population convention):
-  //   sim ATTACKER (the shooting unit)  → drawn on the DEFENDER deployment zone
-  //   sim DEFENDER (the target unit)    → drawn on the ATTACKER deployment zone
-  function clusterCenter(slug, side) {
-    const g = side
-      ? (boardEl.querySelector(`g[data-unit-slug="${CSS.escape(slug)}"][data-side="${side}"]`)
-         ?? boardEl.querySelector(`g[data-unit-slug="${CSS.escape(slug)}"]`))
-      : boardEl.querySelector(`g[data-unit-slug="${CSS.escape(slug)}"]`);
+  // Queries by per-instance ID so duplicate units (5× Hormagaunts) resolve
+  // to the specific clicked instance, not just the first matching slug.
+  function clusterCenter(instanceId) {
+    const g = boardEl.querySelector(`g[data-instance-id="${CSS.escape(instanceId)}"]`);
     if (!g) return null;
     const circles = g.querySelectorAll('circle.model-circle');
     if (circles.length === 0) return null;
@@ -1493,9 +1541,8 @@ function refreshSimPairLine() {
     const mat = transform ? transform.matrix : null;
     return mat ? { x: localX + mat.e, y: localY + mat.f } : { x: localX, y: localY };
   }
-  // sim attacker is drawn on the defender-deployment side; sim defender on attacker side.
-  const a = clusterCenter(attackerSlug, 'defender');
-  const d = clusterCenter(defenderSlug, 'attacker');
+  const a = clusterCenter(attackerInstanceId);
+  const d = clusterCenter(defenderInstanceId);
   if (!a || !d) return;
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const line = document.createElementNS(SVG_NS, 'line');
@@ -1516,9 +1563,14 @@ function refreshSimPairLine() {
 function restoreDestroyedVisuals() {
   const el = document.getElementById('board');
   if (!el) return;
-  for (const [unitSlug, set] of destroyedModels.entries()) {
+  // destroyedModels is keyed by instanceId so duplicates (5× Hormagaunts)
+  // each track their own destroyed model set. Query by data-instance-id.
+  // Fall back to slug for legacy entries (pre-refactor scenarios).
+  for (const [key, set] of destroyedModels.entries()) {
     for (const idx of set) {
-      const circle = el.querySelector(`circle.model-circle[data-unit-slug="${CSS.escape(unitSlug)}"][data-model-idx="${idx}"]`);
+      const byInstance = el.querySelector(`circle.model-circle[data-instance-id="${CSS.escape(key)}"][data-model-idx="${idx}"]`);
+      const circle = byInstance
+        ?? el.querySelector(`circle.model-circle[data-unit-slug="${CSS.escape(slugOf(key))}"][data-model-idx="${idx}"]`);
       if (circle) applyDestroyedVisual(circle, true);
     }
   }
@@ -1527,36 +1579,36 @@ function restoreDestroyedVisuals() {
 // Pre-processing step: fold attached leaders into their target squad's model
 // list before renderUnits. The standalone leader entry is removed so only the
 // merged cluster appears on the board.
-// Operates on a placements array: [{unit, datasheet, centerIn, role}, ...].
-// Returns a new placements array where attached leaders are folded into their
-// target squad's unit.models, and the leader's own placement is removed.
+// Operates on a placements array: [{unit, datasheet, centerIn, role, _instanceId}, ...].
+// Lookups key on placement._instanceId so duplicate units (5× Hormagaunts)
+// each track their own attached leader independently.
 function applyAttachmentsToPlacements(placements) {
-  // Build a fast lookup: unitSlug → placement, per side.
-  const bySlugAndSide = new Map(); // `${side}:${slug}` → placement
+  // Build a fast lookup: instanceId → placement, per side.
+  const byInstanceAndSide = new Map(); // `${side}:${instanceId}` → placement
   for (const p of placements) {
-    const slug = String(p.unit.datasheet ?? '').split('/').pop();
-    bySlugAndSide.set(`${p.role}:${slug}`, p);
+    if (!p._instanceId) continue;
+    byInstanceAndSide.set(`${p.role}:${p._instanceId}`, p);
   }
   const removedKeys = new Set();
   const merged = [];
   for (const p of placements) {
-    const slug = String(p.unit.datasheet ?? '').split('/').pop();
-    const leaderSlugs = attachedLeaderSlugsAll(p.role, slug);
-    if (leaderSlugs.length > 0) {
+    if (!p._instanceId) { merged.push(p); continue; }
+    const leaderInstanceIds = attachedLeaderSlugsAll(p.role, p._instanceId);
+    if (leaderInstanceIds.length > 0) {
       // Resolve every attached leader (primary + optional secondary). Any
       // resolvable leader gets folded in; unresolved entries silently skip.
-      const leaderPlacements = leaderSlugs
-        .map(ls => ({ ls, lp: bySlugAndSide.get(`${p.role}:${ls}`) }))
+      const leaderPlacements = leaderInstanceIds
+        .map(li => ({ li, lp: byInstanceAndSide.get(`${p.role}:${li}`) }))
         .filter(x => x.lp);
       if (leaderPlacements.length > 0) {
         const extraModels = [];
-        for (const { ls, lp } of leaderPlacements) {
+        for (const { li, lp } of leaderPlacements) {
           const leaderModels = (lp.unit.models ?? []).map(m => ({
             ...m,
             _sourceDatasheet: lp.datasheet,
           }));
           extraModels.push(...leaderModels);
-          removedKeys.add(`${p.role}:${ls}`);
+          removedKeys.add(`${p.role}:${li}`);
         }
         const newUnit = {
           ...p.unit,
@@ -1571,10 +1623,7 @@ function applyAttachmentsToPlacements(placements) {
     merged.push(p);
   }
   // Remove any standalone leader placements that were folded in.
-  return merged.filter(p => {
-    const slug = String(p.unit.datasheet ?? '').split('/').pop();
-    return !removedKeys.has(`${p.role}:${slug}`);
-  });
+  return merged.filter(p => !removedKeys.has(`${p.role}:${p._instanceId}`));
 }
 
 // Re-render the board in-place using the last known placements + current
@@ -1589,28 +1638,38 @@ function rerenderBoard() {
 }
 
 // Delegated click on the board: intercept model-circle clicks for destroy toggle.
+// Per-instance keying so destroying a model on Hormagaunts(1) doesn't also
+// flag the same modelIdx on Hormagaunts(2). instanceId comes from the
+// rendered group; falls back to slug for legacy circles that lack it.
 boardEl.addEventListener('click', (e) => {
   const target = e.target;
   if (!(target instanceof SVGElement) || !target.classList.contains('model-circle')) return;
-  const unitSlug = target.dataset.unitSlug;
+  const instanceId = target.dataset.instanceId ?? target.dataset.unitSlug;
   const modelIdx = parseInt(target.dataset.modelIdx, 10);
-  if (!unitSlug || Number.isNaN(modelIdx)) return;
+  if (!instanceId || Number.isNaN(modelIdx)) return;
   // If the parent group was dragged, skip the toggle — pointer moved, not a tap.
   const group = target.closest('.unit');
   if (group?.__dragged) return;
   e.stopPropagation();
-  toggleDestroyed(unitSlug, modelIdx);
-  applyDestroyedVisual(target, isDestroyed(unitSlug, modelIdx));
-  refreshSimModelCountsFor(unitSlug);
+  toggleDestroyed(instanceId, modelIdx);
+  applyDestroyedVisual(target, isDestroyed(instanceId, modelIdx));
+  refreshSimModelCountsFor(instanceId);
 });
 
 boardEl.addEventListener('click', (e) => {
   const group = e.target.closest('.unit');
   if (!group) return;
   const unitName = group.dataset.unitName;
-  const unit = findUnitByName(unitName);
-  const ds = lastDatasheets.get(unitName);
-  renderDetailPanel(unit, ds);
+  const instanceId = group.dataset.instanceId ?? null;
+  // Per-instance lookup when an instanceId is present (post-refactor),
+  // falls back to name-based lookup for legacy paths.
+  let placement = null;
+  if (instanceId && lastPlacements) {
+    placement = lastPlacements.find(p => p._instanceId === instanceId) ?? null;
+  }
+  const unit = placement?.unit ?? findUnitByName(unitName);
+  const ds = placement?.datasheet ?? lastDatasheets.get(unitName);
+  renderDetailPanel(unit, ds, { instanceId });
 });
 
 function escapeHtml(s) {
@@ -1743,7 +1802,7 @@ function buildRosterMarkdown(roster, rawFilename) {
   return out;
 }
 
-function renderDetailPanel(unit, ds) {
+function renderDetailPanel(unit, ds, opts = {}) {
   if (!unit) return;
   const base = ds?.base
     ? (ds.base.shape === 'oval'
@@ -1755,25 +1814,30 @@ function renderDetailPanel(unit, ds) {
     : '';
   const detailEl = document.getElementById('detail-panel');
   if (!detailEl) return;
-  // Resolve which side this unit belongs to (for the formation map lookup).
+  // Resolve the SPECIFIC placement clicked when an instanceId is supplied
+  // (post-refactor); otherwise fall back to the first slug match (legacy
+  // path — only correct when there are no duplicate units).
   const dsSlug = String(unit.datasheet ?? '').split('/').pop();
-  const placement = lastPlacements.find(p => String(p.unit.datasheet ?? '').split('/').pop() === dsSlug);
+  const placement = opts.instanceId
+    ? lastPlacements.find(p => p._instanceId === opts.instanceId)
+    : lastPlacements.find(p => String(p.unit.datasheet ?? '').split('/').pop() === dsSlug);
   const side = placement?.role ?? 'defender';
+  const instanceId = placement?._instanceId ?? makeInstanceId(dsSlug, 0);
 
   // Build a wargear listing that includes the squad's own models PLUS each
-  // attached leader's models, with a labelled divider per leader. Rosters
-  // store leader models on a separate placement that we resolve via slug.
+  // attached leader's models, with a labelled divider per leader. Leaders
+  // resolved by their _instanceId on the same side.
   const renderModelGroup = (m) => `
     <div style="margin:4px 0;">
       <strong>${m.count}× ${escapeHtml(m.submodel)}</strong>
       <ul style="margin-left:18px;font-size:10px;">${(m.wargear ?? []).map(w => `<li>${w.count}× ${escapeHtml(w.item)}</li>`).join('')}</ul>
     </div>`;
   const squadModelsHtml = unit.models.map(renderModelGroup).join('');
-  const attachedSlugs = attachedLeaderSlugsAll(side, dsSlug);
+  const attachedInstanceIds = attachedLeaderSlugsAll(side, instanceId);
   const attachedSections = [];
-  for (let i = 0; i < attachedSlugs.length; i++) {
-    const ls = attachedSlugs[i];
-    const lp = lastPlacements.find(p => p.role === side && String(p.unit.datasheet ?? '').split('/').pop() === ls);
+  for (let i = 0; i < attachedInstanceIds.length; i++) {
+    const li = attachedInstanceIds[i];
+    const lp = lastPlacements.find(p => p.role === side && p._instanceId === li);
     if (!lp) continue;
     const labelText = i === 0 ? 'LEADER' : 'CO-LEADER';
     attachedSections.push(`
@@ -1782,7 +1846,7 @@ function renderDetailPanel(unit, ds) {
     `);
   }
   const wargearList = squadModelsHtml + attachedSections.join('');
-  const currentFormation = unitFormation(side, dsSlug);
+  const currentFormation = unitFormation(side, instanceId);
   const formationOpts = FORMATIONS.map(f =>
     `<option value="${f.id}"${f.id === currentFormation ? ' selected' : ''}>${escapeHtml(f.label)}</option>`
   ).join('');
@@ -1794,18 +1858,17 @@ function renderDetailPanel(unit, ds) {
     <hr style="border:none;border-top:1px dashed var(--phosphor-dim);margin:10px 0;">
     <div style="margin-bottom:8px;">
       <label style="font-size:10px;letter-spacing:1.5px;color:var(--dim);">FORMATION</label>
-      <select id="formation-select" class="select" data-side="${side}" data-slug="${escapeHtml(dsSlug)}" style="margin-left:0;margin-top:4px;width:100%;">${formationOpts}</select>
+      <select id="formation-select" class="select" data-side="${side}" data-instance="${escapeHtml(instanceId)}" style="margin-left:0;margin-top:4px;width:100%;">${formationOpts}</select>
     </div>
     <div style="font-size:11px;">${wargearList}</div>
   `;
   const formSel = document.getElementById('formation-select');
   if (formSel) {
     formSel.addEventListener('change', () => {
-      setUnitFormation(formSel.dataset.side, formSel.dataset.slug, formSel.value);
+      setUnitFormation(formSel.dataset.side, formSel.dataset.instance, formSel.value);
       // Update the live placement copy so rerenderBoard picks up the new layout.
       for (const p of lastPlacements) {
-        const pSlug = String(p.unit.datasheet ?? '').split('/').pop();
-        if (p.role === formSel.dataset.side && pSlug === formSel.dataset.slug) {
+        if (p.role === formSel.dataset.side && p._instanceId === formSel.dataset.instance) {
           p.unit._formation = formSel.value;
         }
       }
@@ -1814,7 +1877,7 @@ function renderDetailPanel(unit, ds) {
     });
   }
   // Append ATTACH LEADER dropdown after wargear list (async — awaits roster cache).
-  renderLeaderControl(unit, ds);
+  renderLeaderControl(unit, ds, { instanceId, side });
 }
 
 // ATTACH LEADER + (optional) CO-LEADER selectors. Appended to the detail
@@ -1828,7 +1891,7 @@ function renderDetailPanel(unit, ds) {
 //
 // Co-leader appears only when the currently-selected primary leader has
 // `enables_co_leader` set on its datasheet (Wardens → Captain Titus).
-async function renderLeaderControl(unit, ds) {
+async function renderLeaderControl(unit, ds, opts = {}) {
   const detailEl = document.getElementById('detail-panel');
   if (!detailEl) return;
   const unitDsField = unit.datasheet ?? '';
@@ -1837,67 +1900,91 @@ async function renderLeaderControl(unit, ds) {
   let catalogueUnit = null;
   try { catalogueUnit = await getUnit(slug); } catch { return; }
   if (!catalogueUnit) return;
-  const placement = lastPlacements.find(p => String(p.unit.datasheet ?? '').split('/').pop() === slug);
-  const side = placement?.role ?? 'defender';
+  // Per-instance routing: opts.instanceId is the clicked unit's stable
+  // instance ID. If absent (legacy callers), fall back to the first
+  // matching placement (correct only without duplicates).
+  const placement = opts.instanceId
+    ? lastPlacements.find(p => p._instanceId === opts.instanceId)
+    : lastPlacements.find(p => String(p.unit.datasheet ?? '').split('/').pop() === slug);
+  const side = opts.side ?? placement?.role ?? 'defender';
+  const instanceId = opts.instanceId ?? placement?._instanceId ?? makeInstanceId(slug, 0);
   const sideRosterSlug = side === 'defender' ? friendlyRosterSlug : hostileRosterSlug;
   const cached = await ensureRosterCached(sideRosterSlug);
   if (!cached) return;
 
   const ledBy = new Set((catalogueUnit.led_by ?? []).map(s => String(s).toLowerCase().split('/').pop()));
 
-  // Walk same-side roster, find candidate primary attachers. A unit qualifies
-  // if it's in led_by OR if its own `can_join` declares this squad as a target.
+  // Walk same-side roster by INSTANCE so duplicate Captains (rare but
+  // possible) are listed separately. A roster entry qualifies as a primary
+  // candidate if its slug is in led_by OR its catalogue can_join declares
+  // this squad as a target.
   const candidates = [];
-  for (const [candSlug, info] of cached.unitsBySlug.entries()) {
-    let isCandidate = ledBy.has(candSlug);
+  for (const [candInstanceId, info] of cached.unitsByInstanceId.entries()) {
+    let isCandidate = ledBy.has(info.slug);
     if (!isCandidate) {
       try {
-        const candUnit = await getUnit(candSlug);
+        const candUnit = await getUnit(info.slug);
         const canJoin = (candUnit?.can_join ?? []).map(s => String(s).toLowerCase().split('/').pop());
         if (canJoin.includes(slug)) isCandidate = true;
       } catch { /* best effort */ }
     }
-    if (isCandidate) candidates.push({ slug: candSlug, name: info.name });
+    if (isCandidate) candidates.push({ instanceId: candInstanceId, slug: info.slug, name: info.name });
   }
   if (candidates.length === 0) return;
 
-  const current = attachedLeaderSlug(side, slug);
-  const currentSecondary = attachedSecondaryLeaderSlug(side, slug);
+  const current = attachedLeaderSlug(side, instanceId);
+  const currentSecondary = attachedSecondaryLeaderSlug(side, instanceId);
+
+  // Disambiguate duplicate-name candidates ("Captain (1)", "Captain (2)").
+  const nameCounts = new Map();
+  for (const c of candidates) nameCounts.set(c.name, (nameCounts.get(c.name) ?? 0) + 1);
+  const seenNames = new Map();
+  const labelFor = (c) => {
+    if ((nameCounts.get(c.name) ?? 0) <= 1) return c.name;
+    const k = (seenNames.get(c.name) ?? 0) + 1;
+    seenNames.set(c.name, k);
+    return `${c.name} (${k})`;
+  };
 
   const primaryHtml = `
     <hr style="border:none;border-top:1px dashed var(--phosphor-dim);margin:10px 0;">
     <div style="font-size:10px;letter-spacing:1.5px;color:var(--dim);">ATTACH LEADER</div>
     <select id="attach-leader" class="select" style="margin-left:0;margin-top:4px;width:100%;">
       <option value="">(none)</option>
-      ${candidates.map(c => `<option value="${c.slug}"${c.slug === current ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+      ${candidates.map(c => `<option value="${escapeHtml(c.instanceId)}"${c.instanceId === current ? ' selected' : ''}>${escapeHtml(labelFor(c))}</option>`).join('')}
     </select>
   `;
   detailEl.insertAdjacentHTML('beforeend', primaryHtml);
 
   // Compute SECONDARY (co-leader) candidates given the current primary.
-  // Bidirectional rule:
-  //   (A) primary.enables_co_leader == X.slug                           — primary invites X.
-  //   (B) X.enables_co_leader == primary.slug AND X.can_join.has(squad) — X allows joining over this primary on this squad.
-  // Either condition makes X a valid secondary. Wardens-of-Ultramar +
-  // Captain Titus is the canonical case: works in both attachment orders.
+  // Bidirectional rule (slug-level since enables_co_leader / can_join are
+  // catalogue-keyed): primary.enables_co_leader matches X.slug, OR
+  // X.enables_co_leader matches primary.slug AND X.can_join includes
+  // this squad's slug. Wardens-of-Ultramar + Captain Titus is canonical.
   let secondaryCandidates = [];
   if (current) {
+    const currentSlug = slugOf(current);
     let primaryUnit = null;
-    try { primaryUnit = await getUnit(current); } catch {}
+    try { primaryUnit = await getUnit(currentSlug); } catch {}
     if (primaryUnit) {
       const inviteSlug = primaryUnit.enables_co_leader ?? null;
-      if (inviteSlug && cached.unitsBySlug.has(inviteSlug)) {
-        secondaryCandidates.push({ slug: inviteSlug, name: cached.unitsBySlug.get(inviteSlug).name });
+      // Find every roster instance whose slug == inviteSlug.
+      if (inviteSlug) {
+        for (const [candInstanceId, info] of cached.unitsByInstanceId.entries()) {
+          if (info.slug === inviteSlug) {
+            secondaryCandidates.push({ instanceId: candInstanceId, slug: info.slug, name: info.name });
+          }
+        }
       }
-      for (const [candSlug, info] of cached.unitsBySlug.entries()) {
-        if (candSlug === current) continue;
-        if (secondaryCandidates.some(c => c.slug === candSlug)) continue;
+      for (const [candInstanceId, info] of cached.unitsByInstanceId.entries()) {
+        if (candInstanceId === current) continue;
+        if (secondaryCandidates.some(c => c.instanceId === candInstanceId)) continue;
         let candUnit = null;
-        try { candUnit = await getUnit(candSlug); } catch {}
+        try { candUnit = await getUnit(info.slug); } catch {}
         if (!candUnit) continue;
         const canJoin = (candUnit.can_join ?? []).map(s => String(s).toLowerCase().split('/').pop());
-        if (canJoin.includes(slug) && candUnit.enables_co_leader === current) {
-          secondaryCandidates.push({ slug: candSlug, name: info.name });
+        if (canJoin.includes(slug) && candUnit.enables_co_leader === currentSlug) {
+          secondaryCandidates.push({ instanceId: candInstanceId, slug: info.slug, name: info.name });
         }
       }
     }
@@ -1905,11 +1992,20 @@ async function renderLeaderControl(unit, ds) {
 
   let coLeaderRendered = false;
   if (secondaryCandidates.length > 0) {
+    const secNameCounts = new Map();
+    for (const c of secondaryCandidates) secNameCounts.set(c.name, (secNameCounts.get(c.name) ?? 0) + 1);
+    const secSeen = new Map();
+    const secLabelFor = (c) => {
+      if ((secNameCounts.get(c.name) ?? 0) <= 1) return c.name;
+      const k = (secSeen.get(c.name) ?? 0) + 1;
+      secSeen.set(c.name, k);
+      return `${c.name} (${k})`;
+    };
     const coHtml = `
       <div style="font-size:10px;letter-spacing:1.5px;color:var(--dim);margin-top:8px;">CO-LEADER</div>
       <select id="attach-co-leader" class="select" style="margin-left:0;margin-top:4px;width:100%;">
         <option value="">(none)</option>
-        ${secondaryCandidates.map(c => `<option value="${escapeHtml(c.slug)}"${c.slug === currentSecondary ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+        ${secondaryCandidates.map(c => `<option value="${escapeHtml(c.instanceId)}"${c.instanceId === currentSecondary ? ' selected' : ''}>${escapeHtml(secLabelFor(c))}</option>`).join('')}
       </select>
     `;
     detailEl.insertAdjacentHTML('beforeend', coHtml);
@@ -1919,21 +2015,21 @@ async function renderLeaderControl(unit, ds) {
   const refreshSimAfterAttachChange = async () => {
     const simAttackerEl = document.getElementById('sim-attacker');
     const simDefenderEl = document.getElementById('sim-defender');
-    if (simAttackerEl?.value === slug) {
+    if (simAttackerEl?.value === instanceId) {
       await defaultModelCountFor(simAttackerEl, simAttackerRosterSlug(), 'sim-attacker-models', simAttackerSide());
       await refreshWeaponDetail();
     }
-    if (simDefenderEl?.value === slug) {
+    if (simDefenderEl?.value === instanceId) {
       await defaultModelCountFor(simDefenderEl, simDefenderRosterSlug(), 'sim-models', simRolesSwapped ? 'defender' : 'attacker');
     }
   };
 
   const sel = document.getElementById('attach-leader');
   sel.addEventListener('change', async () => {
-    setAttachedLeader(side, slug, sel.value || null);
+    setAttachedLeader(side, instanceId, sel.value || null);
     // Re-render the panel so the CO-LEADER row appears/disappears with the
     // new primary selection.
-    renderDetailPanel(unit, ds);
+    renderDetailPanel(unit, ds, { instanceId });
     rerenderBoard();
     await refreshSimAfterAttachChange();
   });
@@ -1941,7 +2037,7 @@ async function renderLeaderControl(unit, ds) {
   if (coLeaderRendered) {
     const coSel = document.getElementById('attach-co-leader');
     coSel.addEventListener('change', async () => {
-      setAttachedSecondaryLeader(side, slug, coSel.value || null);
+      setAttachedSecondaryLeader(side, instanceId, coSel.value || null);
       rerenderBoard();
       await refreshSimAfterAttachChange();
     });
@@ -1952,12 +2048,16 @@ async function renderLeaderControl(unit, ds) {
 document.getElementById('sim-run').addEventListener('click', async () => {
   const resultEl = document.getElementById('sim-result');
   try {
-    const attackerSlug = document.getElementById('sim-attacker').value;
-    const defenderSlug = document.getElementById('sim-defender').value;
-    if (!attackerSlug || !defenderSlug) {
+    // Dropdowns now emit per-unit-instance IDs (`<slug>:<n>`) so duplicate
+    // units (5× Hormagaunts) don't share state. Slugs derived via slugOf().
+    const attackerInstanceId = document.getElementById('sim-attacker').value;
+    const defenderInstanceId = document.getElementById('sim-defender').value;
+    if (!attackerInstanceId || !defenderInstanceId) {
       resultEl.textContent = 'SELECT BOTH UNITS';
       return;
     }
+    const attackerSlug = slugOf(attackerInstanceId);
+    const defenderSlug = slugOf(defenderInstanceId);
     const modelCount = Math.max(1, parseInt(document.getElementById('sim-models').value, 10) || 1);
     const kind = document.getElementById('sim-kind').value;
 
@@ -1979,8 +2079,8 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     // defender depends on the SWAP ROLES toggle.
     const attackerCached = await ensureRosterCached(simAttackerRosterSlug());
     const defenderCached = await ensureRosterCached(simDefenderRosterSlug());
-    const attackerInRoster = attackerCached?.unitsBySlug?.get(attackerSlug);
-    const defenderInRoster = defenderCached?.unitsBySlug?.get(defenderSlug);
+    const attackerInRoster = attackerCached?.unitsByInstanceId?.get(attackerInstanceId);
+    const defenderInRoster = defenderCached?.unitsByInstanceId?.get(defenderInstanceId);
 
     const filterEquipped = (unit, equippedSet) => {
       if (!equippedSet || equippedSet.size === 0) return unit;
@@ -1998,42 +2098,33 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       ? filterEquipped(defenderUnit, defenderInRoster.equippedWeapons)
       : defenderUnit;
     // Apply unified weapon-profile picks — keeps only the chosen profile
-    // from each multi-profile group (plasma std/oc, melee strike/sweep,
-    // witchfire/focused, etc.) so the simulator never rolls every profile
-    // at once. Then apply the per-model melee-pick filter so a model with
-    // multiple distinct melee weapons fights with only the chosen one,
-    // with [EXTRA ATTACKS] weapons always stacking.
+    // from each multi-profile group. Then apply the per-model melee-pick
+    // filter. Both keyed on instanceId so duplicate units keep distinct
+    // pick state.
     const ocSide = simAttackerSide();
     const filteredAttacker = {
       ...filteredAttackerEquipped,
       weapons: applyMeleeSelection(
-        applyProfileSelection(filteredAttackerEquipped.weapons, ocSide, attackerSlug),
-        meleeChoice(ocSide, attackerSlug),
+        applyProfileSelection(filteredAttackerEquipped.weapons, ocSide, attackerInstanceId),
+        meleeChoice(ocSide, attackerInstanceId),
       ),
     };
     const filteredDefender = filteredDefenderEquipped;
 
     const attackerModels = Math.max(1, parseInt(document.getElementById('sim-attacker-models').value, 10) || 1);
     // Check whether the sim attacker has an attached leader on the board.
-    // The attachment map to consult depends on which battlefield side the
-    // sim's attacker is drawn from — see SWAP ROLES.
     const attackerSideForAttachment = simAttackerSide();
-    const attackerLeaderSlugs = attachedLeaderSlugsAll(attackerSideForAttachment, attackerSlug);
-    // Resolve every attached leader (primary + optional secondary) and
-    // apply their own overcharge + melee selections, then wrap each with
-    // its roster equippedCounts so buildSimInputs replicates each weapon
-    // by the actual count of leader-side submodels carrying it (rather
-    // than loadouts[0].model_count, which over-counts fixed-loadout
-    // hero squads like Wardens of Ultramar).
+    const attackerLeaderInstanceIds = attachedLeaderSlugsAll(attackerSideForAttachment, attackerInstanceId);
     const attachedLeaderUnits = [];
-    for (const leaderSlug of attackerLeaderSlugs) {
+    for (const leaderInstanceId of attackerLeaderInstanceIds) {
+      const leaderSlug = slugOf(leaderInstanceId);
       const raw = await getUnit(leaderSlug);
       if (!raw) continue;
       const filteredWeapons = applyMeleeSelection(
-        applyProfileSelection(raw.weapons, attackerSideForAttachment, leaderSlug),
-        meleeChoice(attackerSideForAttachment, leaderSlug),
+        applyProfileSelection(raw.weapons, attackerSideForAttachment, leaderInstanceId),
+        meleeChoice(attackerSideForAttachment, leaderInstanceId),
       );
-      const leaderInRoster = attackerCached?.unitsBySlug?.get(leaderSlug);
+      const leaderInRoster = attackerCached?.unitsByInstanceId?.get(leaderInstanceId);
       attachedLeaderUnits.push({
         unit: { ...raw, weapons: filteredWeapons },
         equippedCounts: leaderInRoster?.equippedCounts ?? null,
@@ -2053,8 +2144,10 @@ document.getElementById('sim-run').addEventListener('click', async () => {
     // a SINGLE defender-side leader for now — the rare Wardens+Titus
     // double-leader stack is an attacker-side construct.
     const defenderSideForAttachment = simDefenderSide();
-    const defenderLeaderSlug = attachedLeaderSlug(defenderSideForAttachment, defenderSlug);
-    const defenderLeaderUnit = defenderLeaderSlug ? await getUnit(defenderLeaderSlug) : null;
+    const defenderLeaderInstanceId = attachedLeaderSlug(defenderSideForAttachment, defenderInstanceId);
+    const defenderLeaderUnit = defenderLeaderInstanceId
+      ? await getUnit(slugOf(defenderLeaderInstanceId))
+      : null;
     const { defender } = buildSimInputs(filteredDefender, {
       kind: 'all',
       model_count: modelCount,
