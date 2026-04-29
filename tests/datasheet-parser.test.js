@@ -80,6 +80,21 @@ test('parseDatasheet ignores YAML # comments in frontmatter when reading title',
   assert.strictEqual(ds.name, 'Wardens of Ultramar');
 });
 
+test('parseDatasheet extracts Invulnerable Save from below profile table', () => {
+  // Captain Titus prints "**Invulnerable Save:** 4+" below the M/T/Sv/W
+  // table; the parser must surface it as profile.InvSv. Without this,
+  // the catalogue silently drops every unit's invulnerable save.
+  const ds = parseDatasheet(load('captain-demetrian-titus'));
+  assert.strictEqual(ds.profile.InvSv, '4+');
+});
+
+test('parseDatasheet leaves InvSv undefined for units without an invulnerable save', () => {
+  // Intercessor Squad has no invulnerable save. Confirm we do not pick
+  // up unrelated tokens (e.g. armour saves, weapon saves).
+  const ds = parseDatasheet(load('intercessor-squad'));
+  assert.strictEqual(ds.profile.InvSv, undefined);
+});
+
 test('parseDatasheet extracts per-model bases from Wardens of Ultramar', () => {
   const ds = parseDatasheet(load('wardens-of-ultramar'));
   assert.ok(Array.isArray(ds.base.per_model), 'per_model should be an array');

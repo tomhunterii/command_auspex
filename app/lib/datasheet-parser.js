@@ -79,6 +79,11 @@ function parseProfile(body) {
     const n = parseInt(value, 10);
     profile[key] = Number.isNaN(n) ? value : (String(n) === value ? n : value);
   }
+  // Invulnerable Save lives BELOW the M T Sv W Ld OC table as a
+  // **Invulnerable Save:** N+ line. Datasheets that lack one print
+  // 'None' or '—' instead — keep InvSv null in those cases.
+  const invMatch = /\*\*Invulnerable Save:\*\*\s*(\d\+)/i.exec(body);
+  if (invMatch) profile.InvSv = invMatch[1];
   return profile;
 }
 
