@@ -212,6 +212,59 @@ test('Anti-INFANTRY 4+: ineffective vs non-INFANTRY targets', () => {
   within(result.expected_wounds_dealt, 1.67, 0.20);
 });
 
+test('Anti-X: best matching anti wins when multiple entries match the defender', () => {
+  // Weapon carries BOTH [ANTI-INFANTRY 5+] and [ANTI-CHARACTER 3+]. Defender
+  // is INFANTRY + CHARACTER (a typical character-led model). The 3+ entry
+  // should win (lower threshold = easier wound).
+  // S=3, T=8 → table 6+. Best matching anti = 3+. P(wound) = 4/6 ≈ 0.667.
+  // Save 7+ fails 5/6. Per attack ≈ 0.556. 12 attacks → ~6.67.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'multi-anti', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: { anti: [
+          { target_keyword: 'INFANTRY',  threshold: 5 },
+          { target_keyword: 'CHARACTER', threshold: 3 },
+        ] },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 8, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['INFANTRY', 'CHARACTER'],
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 6.67, 0.30);
+});
+
+test('Anti-X: only the matching anti entries are considered', () => {
+  // Same weapon as above; defender is INFANTRY but NOT CHARACTER. The 3+
+  // entry must NOT apply — only the 5+ does.
+  // S=3, T=8 → table 6+. Matching anti = 5+. P(wound) = 2/6 ≈ 0.333.
+  // Save 7+ fails 5/6. Per attack ≈ 0.278. 12 attacks → ~3.33.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'multi-anti', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: { anti: [
+          { target_keyword: 'INFANTRY',  threshold: 5 },
+          { target_keyword: 'CHARACTER', threshold: 3 },
+        ] },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 8, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['INFANTRY'], // CHARACTER absent → 3+ entry must not fire
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 3.33, 0.30);
+});
+
 test('Anti-X uses min(table, anti_threshold) — anti only helps when better', () => {
   // S=10 vs T=1 → 2+ wound (already easy). Anti-INFANTRY 4+ should NOT make it worse.
   // Per attack: 5/6 * 5/6 = 25/36 ≈ 0.694. 12 attacks → 8.33.
