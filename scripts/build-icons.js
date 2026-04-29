@@ -24,6 +24,11 @@ const ICONS = [
   'shield',      // Vehicle (non-walker)
   'robot',       // Walker (Dreadnoughts, etc.)
   'star',        // Sergeant
+  // Tyranid role markers
+  'bug',         // Monster
+  'bugs',        // Tyranid Battleline
+  'mosquito',    // Tyranid Fly
+  'spider',      // Tyranid Infiltrators
   // Veterans use unicode ✠ rendered as <text> — no SVG icon needed.
 ];
 

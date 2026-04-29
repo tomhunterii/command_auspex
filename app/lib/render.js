@@ -29,6 +29,27 @@ function hasKeyword(keywords, ...wanted) {
   return wanted.some(w => set.has(w.toUpperCase()));
 }
 
+function isTyranid(keywords) {
+  for (const k of keywords) {
+    if (String(k).toUpperCase() === 'TYRANIDS') return true;
+  }
+  return false;
+}
+
+function tyranidRoleSymbol(unit) {
+  if (!unit) return null;
+  const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
+  if (!isTyranid(kws)) return null;
+  // Priority: MONSTER (creature class) > INFILTRATORS (deployment role) > FLY
+  // (movement type) > BATTLELINE (rank-and-file). A flying monster reads as
+  // monster; a Genestealer-style infiltrator beats Battleline default.
+  if (hasKeyword(kws, 'MONSTER')) return 'icon:bug';
+  if (hasKeyword(kws, 'INFILTRATORS')) return 'icon:spider';
+  if (hasKeyword(kws, 'FLY')) return 'icon:mosquito';
+  if (hasKeyword(kws, 'BATTLELINE')) return 'icon:bugs';
+  return null;
+}
+
 function spaceMarineRoleSymbol(unit) {
   if (!unit) return null;
   // unit.keywords may be an array of {keyword, ...} or strings — normalize.
@@ -124,7 +145,7 @@ export function modelLabel(submodel, unitMeta) {
   // Space Marine role symbol — applies to single-model units (vehicles,
   // characters) too, so a lone Ballistus Dreadnought reads as ▣ and a
   // standalone Captain reads as ✠.
-  const roleSymbol = spaceMarineRoleSymbol(unitMeta.unit);
+  const roleSymbol = spaceMarineRoleSymbol(unitMeta.unit) ?? tyranidRoleSymbol(unitMeta.unit);
   if (roleSymbol) return roleSymbol;
   // Single-model units without a role symbol stay clean (no clutter on a
   // lone vehicle / character / monster from a faction we don't classify).

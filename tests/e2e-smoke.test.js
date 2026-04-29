@@ -238,6 +238,15 @@ test('smoke: Space Marine role symbols wired in renderer', () => {
   assert.match(RENDER, /SM_ROLE_VETERAN_SLUGS/);
 });
 
+test('smoke: Tyranid role symbols wired in renderer', () => {
+  const RENDER = readFileSync(new URL('../app/lib/render.js', import.meta.url), 'utf8');
+  assert.match(RENDER, /tyranidRoleSymbol/);
+  assert.match(RENDER, /icon:bug/);
+  assert.match(RENDER, /icon:bugs/);
+  assert.match(RENDER, /icon:mosquito/);
+  assert.match(RENDER, /icon:spider/);
+});
+
 test('smoke: zoom/pan + FIT button wired', () => {
   assert.match(HTML, /id="fit-view"/);
   assert.match(HTML, /wireZoomPan/);
