@@ -11,13 +11,14 @@ function yamlString(s) {
   return `"${escaped}"`;
 }
 
-export function buildScenario({ id, name, missionPath, defender, attacker, placements }) {
+export function buildScenario({ id, name, missionPath, defender, attacker, placements, attachments }) {
   const now = new Date().toISOString();
   const state = { defender: [], attacker: [] };
 
   for (const p of placements) {
     state[p.role].push({
       unit_ref: p.unit_name,
+      instance_id: p._instanceId ?? null,
       placement: p.placement ?? 'on_board',
       position: p.centerIn,
       orientation_deg: p.orientation_deg ?? 0,
@@ -25,12 +26,29 @@ export function buildScenario({ id, name, missionPath, defender, attacker, place
     });
   }
 
+  // attachments: { defender: Map|object<squadInstanceId, leaderInstanceId[]>, ... }
+  // Normalise to plain objects with array values for serialization.
+  const norm = (m) => {
+    const out = {};
+    if (!m) return out;
+    if (m instanceof Map) {
+      for (const [k, v] of m) out[k] = Array.isArray(v) ? v : [v];
+    } else {
+      for (const [k, v] of Object.entries(m)) out[k] = Array.isArray(v) ? v : [v];
+    }
+    return out;
+  };
+
   return {
     id, name,
     created: now, last_modified: now,
     mission: missionPath,
     defender: { roster: defender.rosterPath, owner: defender.owner },
     attacker: { roster: attacker.rosterPath, owner: attacker.owner },
+    attachments: {
+      defender: norm(attachments?.defender),
+      attacker: norm(attachments?.attacker),
+    },
     board_state: state,
   };
 }
@@ -44,11 +62,26 @@ export function serializeScenario(s) {
   out += `mission: ${yamlString(s.mission)}\n`;
   out += `defender:\n  roster: ${yamlString(s.defender.roster)}\n  owner: ${yamlString(s.defender.owner)}\n`;
   out += `attacker:\n  roster: ${yamlString(s.attacker.roster)}\n  owner: ${yamlString(s.attacker.owner)}\n`;
+  out += `attachments:\n`;
+  for (const role of ['defender', 'attacker']) {
+    const map = s.attachments?.[role] ?? {};
+    const keys = Object.keys(map);
+    if (keys.length === 0) {
+      out += `  ${role}: {}\n`;
+      continue;
+    }
+    out += `  ${role}:\n`;
+    for (const k of keys) {
+      const leaders = (map[k] ?? []).map(l => yamlString(l)).join(', ');
+      out += `    ${yamlString(k)}: [${leaders}]\n`;
+    }
+  }
   out += `board_state:\n`;
   for (const role of ['defender', 'attacker']) {
     out += `  ${role}:\n`;
     for (const u of s.board_state[role]) {
       out += `    - unit_ref: ${yamlString(u.unit_ref)}\n`;
+      out += `      instance_id: ${yamlString(u.instance_id)}\n`;
       out += `      placement: ${yamlString(u.placement)}\n`;
       out += `      position: [${u.position[0]}, ${u.position[1]}]\n`;
       out += `      orientation_deg: ${u.orientation_deg}\n`;

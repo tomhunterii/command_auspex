@@ -317,7 +317,7 @@
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
     <div id="controls" style="display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;">
       <button id="pick-repo" class="btn">CONNECT REPO</button>
-      <label class="status-msg">ENGAGEMENT <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">MISSION <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
       <label class="status-msg">DEFENDER FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
       <label class="status-msg">ATTACKER FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
       <button id="load-scenario" class="btn" disabled>ENGAGE</button>
@@ -396,7 +396,7 @@
 
 <script type="module">
 import { parseFrontmatter } from './lib/yaml-frontmatter.js';
-import { parseRoster, resolveSlug } from './lib/roster-parser.js';
+import { parseRoster, resolveSlug, slugify } from './lib/roster-parser.js';
 import { isTauri } from './lib/runtime.js';
 import { openCatalogue, listMissions, getMission, listRosters, getRoster, getUnit, listUnits, catalogueMeta, buildSimInputs } from './lib/catalogue.js';
 import { simulate } from './lib/sim/combat.js';
@@ -412,6 +412,12 @@ import {
 import { findMeleeChoices, applyMeleeSelection } from './lib/melee-selection.js';
 import { mergeLeaderGrants } from './lib/leader-grants.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
+import {
+  writeFilesystemRoster,
+  writeFilesystemScenario,
+  readFilesystemScenario,
+  listFilesystemScenarios,
+} from './lib/fs-tauri.js';
 
 const statusEl = document.getElementById('status');
 const missionSel = document.getElementById('mission-select');
@@ -429,6 +435,22 @@ let lastAttackerPath = null;
 let currentScenarioPath = null;
 let currentScenarioName = null;
 let autoSaveTimer = null;
+let rosterDropdownsLoaded = false;
+
+// Re-fetch the roster list (catalogue + filesystem-pasted) and rebuild both
+// dropdowns. Preserves whatever the user had selected on each side.
+async function refreshRosterDropdowns({ selectDefender = null, selectAttacker = null } = {}) {
+  if (!rosterDropdownsLoaded) return;
+  const rosters = await listRosters();
+  const optHtml = (items) => '<option value="">— SELECT —</option>' +
+    items.map(i => `<option value="${i.slug}">${i.name}</option>`).join('');
+  const prevDef = defenderSel.value;
+  const prevAtt = attackerSel.value;
+  defenderSel.innerHTML = optHtml(rosters);
+  attackerSel.innerHTML = optHtml(rosters);
+  defenderSel.value = selectDefender ?? prevDef ?? '';
+  attackerSel.value = selectAttacker ?? prevAtt ?? '';
+}
 
 // Cached parsed rosters for sim filtering. Populated by friendly/hostile
 // dropdown change events. Map<rosterSlug, {roster, unitsByInstanceId}|null>.
@@ -718,6 +740,7 @@ async function loadCatalogueAndPopulate() {
     missionSel.innerHTML = optHtml(missions);
     defenderSel.innerHTML = optHtml(rosters);
     attackerSel.innerHTML = optHtml(rosters);
+    rosterDropdownsLoaded = true;
     const meta = catalogue.meta;
     const tail = meta.enriched_count ? ` · ${meta.enriched_count}/${meta.unit_count} ENRICHED` : '';
     statusEl.textContent = `AUSPEX ONLINE · CATALOGUE v${meta.catalogue_version || '1'} · ${meta.unit_count} UNITS · ${rosters.length} ROSTER${rosters.length === 1 ? '' : 'S'}${tail}`;
@@ -1055,14 +1078,40 @@ async function loadFromScenario(s) {
   const svg = document.getElementById('board');
   renderBoard(svg, mission);
 
+  // Sync the topbar dropdowns so the UI matches the scenario's selections.
+  if (rosterDropdownsLoaded) {
+    if (missionSel.querySelector(`option[value="${CSS.escape(s.mission)}"]`)) missionSel.value = s.mission;
+    if (s.defender?.roster && defenderSel.querySelector(`option[value="${CSS.escape(s.defender.roster)}"]`)) {
+      defenderSel.value = s.defender.roster;
+      friendlyRosterSlug = s.defender.roster;
+    }
+    if (s.attacker?.roster && attackerSel.querySelector(`option[value="${CSS.escape(s.attacker.roster)}"]`)) {
+      attackerSel.value = s.attacker.roster;
+      hostileRosterSlug = s.attacker.roster;
+    }
+  }
+
+  // Stage attachments and formations into locals so a partial throw doesn't
+  // wipe live in-memory state. Atomic swap happens at the end of this function.
+  const stagedAttachments = { defender: new Map(), attacker: new Map() };
+  for (const role of ['defender', 'attacker']) {
+    const map = s.attachments?.[role] ?? {};
+    for (const [squadId, leaderIds] of Object.entries(map)) {
+      const arr = Array.isArray(leaderIds) ? leaderIds : [leaderIds];
+      stagedAttachments[role].set(squadId, arr);
+    }
+  }
+  const stagedFormations = { defender: new Map(), attacker: new Map() };
+
   const placements = [];
   const candidates = (await listUnits()).map(c => ({ slug: c.slug, faction: c.faction_slug }));
   for (const role of ['defender', 'attacker']) {
     const roster = role === 'defender' ? defender : attacker;
     // Per-side slug-occurrence counter so duplicate units in the scenario
-    // get distinct instance IDs. Also avoids the legacy bug where
-    // `find(u => u.name === entry.unit_ref)` returned the same first
-    // matching roster unit for every duplicate scenario entry.
+    // get distinct instance IDs when the scenario itself does not carry one
+    // (legacy or hand-edited files). When the scenario DOES include
+    // entry.instance_id, that wins — it's the stable identity the original
+    // save committed and is the only key the saved attachments resolve against.
     const slugCounts = new Map();
     const usedRosterIndices = new Set();
     for (const entry of s.board_state[role]) {
@@ -1081,9 +1130,14 @@ async function loadFromScenario(s) {
       const slug = dsSlug.split('/').pop();
       const n = slugCounts.get(slug) ?? 0;
       slugCounts.set(slug, n + 1);
-      const _instanceId = makeInstanceId(slug, n);
-      const formation = entry.formation ?? unitFormation(role, _instanceId);
-      if (entry.formation) setUnitFormation(role, _instanceId, entry.formation);
+      // Prefer the scenario's saved instance_id so attachments and formations
+      // (keyed at save-time on the original instanceId) re-bind correctly even
+      // if the roster's unit ordering changed since the save.
+      const _instanceId = entry.instance_id || makeInstanceId(slug, n);
+      const formation = entry.formation ?? 'cluster';
+      if (formation && formation !== 'cluster') {
+        stagedFormations[role].set(_instanceId, formation);
+      }
       placements.push({
         unit: { ...unit, datasheet: dsSlug, _base: ds.base, _formation: formation },
         datasheet: ds,
@@ -1093,6 +1147,12 @@ async function loadFromScenario(s) {
       });
     }
   }
+  // Atomic swap: only after all loads succeeded do we replace live state.
+  attachments.defender.clear(); for (const [k, v] of stagedAttachments.defender) attachments.defender.set(k, v);
+  attachments.attacker.clear(); for (const [k, v] of stagedAttachments.attacker) attachments.attacker.set(k, v);
+  formations.defender.clear(); for (const [k, v] of stagedFormations.defender) formations.defender.set(k, v);
+  formations.attacker.clear(); for (const [k, v] of stagedFormations.attacker) formations.attacker.set(k, v);
+
   renderUnits(svg, applyAttachmentsToPlacements(placements), (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
   restoreDestroyedVisuals();
 
@@ -1106,6 +1166,14 @@ async function loadFromScenario(s) {
   lastDatasheets.clear();
   for (const p of placements) lastDatasheets.set(p.unit.name, p.datasheet);
   document.getElementById('save-scenario').disabled = false;
+
+  // Refresh the sim dropdowns so the COMBAT AUSPEX picks up the loaded rosters
+  // (mirrors what the side dropdowns' change handlers do during normal flow).
+  await Promise.all([
+    populateSimDropdownFromRoster(document.getElementById('sim-attacker'), simAttackerRosterSlug()),
+    populateSimDropdownFromRoster(document.getElementById('sim-defender'), simDefenderRosterSlug()),
+  ]);
+  refreshSimPairLine();
 
   const filename = (s.id || s.name.toLowerCase().replace(/[^a-z0-9-]/gi, '-')) + '.md';
   currentScenarioPath = `scenarios/${filename}`;
@@ -1693,8 +1761,13 @@ function buildCurrentScenarioMarkdown(id, name) {
     missionPath: lastMissionPath,
     defender: { rosterPath: lastDefenderPath, owner: 'Captain Hunter' },
     attacker: { rosterPath: lastAttackerPath, owner: 'Unknown' },
+    attachments: { defender: attachments.defender, attacker: attachments.attacker },
     placements: lastPlacements.map(p => {
-      const group = boardEl.querySelector(`.unit[data-unit-name="${CSS.escape(p.unit.name)}"]`);
+      // Resolve the rendered group by per-instance id when available so
+      // duplicate units (e.g. 5× Hormagaunts) report distinct positions.
+      const group = p._instanceId
+        ? boardEl.querySelector(`.unit[data-instance-id="${CSS.escape(p._instanceId)}"]`)
+        : boardEl.querySelector(`.unit[data-unit-name="${CSS.escape(p.unit.name)}"]`);
       let cx = p.centerIn[0], cy = p.centerIn[1];
       if (group) {
         const t = group.transform.baseVal.consolidate();
@@ -1705,6 +1778,7 @@ function buildCurrentScenarioMarkdown(id, name) {
       }
       return {
         unit_name: p.unit.name,
+        _instanceId: p._instanceId ?? null,
         role: p.role,
         centerIn: [cx, cy],
         orientation_deg: 0,
@@ -1720,19 +1794,81 @@ function scheduleAutoSave() {
   // Auto-save disabled while migrating to user.db (next milestone).
 }
 
-document.getElementById('save-scenario').addEventListener('click', async () => {
-  try {
-    statusEl.textContent = 'SCENARIO ARCHIVE OFFLINE · MIGRATING TO USER.DB · NEXT MILESTONE';
+// ── Save Scenario ──────────────────────────────────────────────────────────
+const saveScenarioModal = document.getElementById('save-scenario-modal');
+const saveScenarioInput = document.getElementById('save-scenario-input');
+
+document.getElementById('save-scenario').addEventListener('click', () => {
+  if (!lastMissionPath || !lastDefenderPath || !lastAttackerPath) {
+    statusEl.textContent = 'NO ENGAGEMENT TO COMMIT · ENGAGE FIRST';
     return;
+  }
+  saveScenarioInput.value = currentScenarioName ?? '';
+  saveScenarioModal.classList.add('show');
+  saveScenarioInput.focus();
+  saveScenarioInput.select();
+});
+
+document.getElementById('save-scenario-cancel').addEventListener('click', () => {
+  saveScenarioModal.classList.remove('show');
+});
+
+document.getElementById('save-scenario-confirm').addEventListener('click', async () => {
+  const name = saveScenarioInput.value.trim();
+  if (!name) {
+    statusEl.textContent = 'MACHINE-SPIRIT OBJECTS: SCENARIO NEEDS A NAME';
+    return;
+  }
+  const slug = slugify(name);
+  if (!slug) {
+    statusEl.textContent = 'MACHINE-SPIRIT OBJECTS: COULD NOT DERIVE SCENARIO SLUG';
+    return;
+  }
+  try {
+    const { scenario, md } = buildCurrentScenarioMarkdown(slug, name);
+    await writeFilesystemScenario(slug, md);
+    currentScenarioName = name;
+    currentScenarioPath = `scenarios/${slug}.md`;
+    saveScenarioModal.classList.remove('show');
+    statusEl.textContent = `SCENARIO COMMITTED · ${name.toUpperCase()}`;
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
 });
 
+// ── Open Scenario ──────────────────────────────────────────────────────────
+const openScenarioModal = document.getElementById('open-scenario-modal');
+const openScenarioSelect = document.getElementById('open-scenario-select');
+
 document.getElementById('open-scenario').addEventListener('click', async () => {
   try {
-    statusEl.textContent = 'SCENARIO ARCHIVE OFFLINE · MIGRATING TO USER.DB · NEXT MILESTONE';
-    return;
+    const scenarios = await listFilesystemScenarios();
+    if (!scenarios.length) {
+      statusEl.textContent = 'SCENARIO ARCHIVE EMPTY · COMMIT ONE FIRST';
+      return;
+    }
+    openScenarioSelect.innerHTML = scenarios
+      .map(s => `<option value="${s.slug}">${escapeHtml(s.name)}${s.last_modified ? ' · ' + s.last_modified.slice(0, 10) : ''}</option>`)
+      .join('');
+    openScenarioModal.classList.add('show');
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
+  }
+});
+
+document.getElementById('open-scenario-cancel').addEventListener('click', () => {
+  openScenarioModal.classList.remove('show');
+});
+
+document.getElementById('open-scenario-confirm').addEventListener('click', async () => {
+  const slug = openScenarioSelect.value;
+  if (!slug) return;
+  try {
+    const md = await readFilesystemScenario(slug);
+    const s = await parseScenario(md);
+    if (!s) throw new Error('scenario file has no frontmatter');
+    openScenarioModal.classList.remove('show');
+    await loadFromScenario(s);
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
@@ -1760,12 +1896,59 @@ function closePasteModal() {
 }
 
 async function handlePasteConfirm() {
-  try {
-    statusEl.textContent = 'SCENARIO ARCHIVE OFFLINE · MIGRATING TO USER.DB · NEXT MILESTONE';
-    closePasteModal();
+  const text = pasteTextarea.value;
+  if (!text.trim()) {
+    statusEl.textContent = 'VOX-SCRIBE: NO PASTED DATA';
     return;
+  }
+  let roster;
+  try {
+    roster = parseRoster(text);
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
+    return; // leave modal open with the text so the Captain can fix it
+  }
+  const slug = slugify(roster.list_name || `vox-scribe-${Date.now()}`);
+  if (!slug) {
+    statusEl.textContent = 'MACHINE-SPIRIT OBJECTS: COULD NOT DERIVE ROSTER SLUG';
+    return;
+  }
+  // Detect catalogue-shadow collision before write so the Captain knows the
+  // filesystem copy will be invisible until renamed (catalogue rosters take
+  // precedence in listRosters() merging).
+  let shadowed = false;
+  try {
+    const existing = await listRosters();
+    shadowed = existing.some(r => r.slug === slug && r.source_path && !r.source_path.startsWith('rosters/'));
+  } catch { /* best-effort warning */ }
+
+  const md = buildRosterMarkdown(roster, '<vox-scribe paste>');
+  try {
+    await writeFilesystemRoster(slug, md);
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
+    return;
+  }
+  // Invalidate any cached roster shape under this slug so subsequent loads
+  // pick up the new file.
+  rosterCache.delete(slug);
+  const opts = pasteTarget === 'defender'
+    ? { selectDefender: slug }
+    : { selectAttacker: slug };
+  await refreshRosterDropdowns(opts);
+  if (pasteTarget === 'defender') {
+    friendlyRosterSlug = slug;
+    defenderSel.dispatchEvent(new Event('change'));
+  } else {
+    hostileRosterSlug = slug;
+    attackerSel.dispatchEvent(new Event('change'));
+  }
+  closePasteModal();
+  const pts = roster.list_points ?? '?';
+  if (shadowed) {
+    statusEl.textContent = `VOX-SCRIBE STORED · CATALOGUE ROSTER WITH SAME SLUG TAKES PRECEDENCE · ${slug.toUpperCase()}`;
+  } else {
+    statusEl.textContent = `VOX-SCRIBE INTERCEPTED · ${roster.list_name?.toUpperCase() || slug.toUpperCase()} · ${pts}PT`;
   }
 }
 
@@ -2222,6 +2405,28 @@ if (window.__TAURI_INTERNALS__) {
     <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn" id="paste-cancel">CANCEL</button>
       <button class="btn" id="paste-confirm">PARSE + SAVE</button>
+    </div>
+  </div>
+</div>
+<div id="save-scenario-modal" class="paste-modal">
+  <div class="paste-dialog" style="width:480px;">
+    <div class="title" style="font-size:13px;">COMMIT SCENARIO TO ARCHIVE</div>
+    <div class="status-msg">Name this scenario.</div>
+    <input id="save-scenario-input" type="text" class="paste-textarea" style="min-height:auto;height:36px;resize:none;" placeholder="e.g. Norallus Halex Dock — Round 2"/>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" id="save-scenario-cancel">CANCEL</button>
+      <button class="btn" id="save-scenario-confirm">COMMIT</button>
+    </div>
+  </div>
+</div>
+<div id="open-scenario-modal" class="paste-modal">
+  <div class="paste-dialog" style="width:520px;">
+    <div class="title" style="font-size:13px;">RECALL SCENARIO</div>
+    <div class="status-msg">Pick a scenario from the archive.</div>
+    <select id="open-scenario-select" class="select" style="width:100%;margin-top:10px;font-size:12px;"></select>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" id="open-scenario-cancel">CANCEL</button>
+      <button class="btn" id="open-scenario-confirm">RECALL</button>
     </div>
   </div>
 </div>

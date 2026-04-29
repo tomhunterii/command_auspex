@@ -94,3 +94,48 @@ test('serializeScenario emits null for missing roster/owner rather than ""', asy
   assert.strictEqual(parsed.attacker.roster, null);
   assert.strictEqual(parsed.attacker.owner, null);
 });
+
+test('attachments round-trip from Map and from plain object', async () => {
+  const defenderMap = new Map([['intercessor-squad:0', ['captain-titus:0']]]);
+  const attackerObj = { 'aggressor-squad:0': ['captain:0', 'lieutenant:0'] };
+  const s = buildScenario({
+    id: 'att', name: 'Att', missionPath: 'm.md',
+    defender: { rosterPath: 'd.md', owner: 'A' },
+    attacker: { rosterPath: 'a.md', owner: 'B' },
+    placements: [],
+    attachments: { defender: defenderMap, attacker: attackerObj },
+  });
+  const md = serializeScenario(s);
+  const parsed = await parseScenario(md);
+  assert.deepStrictEqual(parsed.attachments.defender, { 'intercessor-squad:0': ['captain-titus:0'] });
+  assert.deepStrictEqual(parsed.attachments.attacker, { 'aggressor-squad:0': ['captain:0', 'lieutenant:0'] });
+});
+
+test('placements carry instance_id through round-trip', async () => {
+  const s = buildScenario({
+    id: 'iid', name: 'IID', missionPath: 'm.md',
+    defender: { rosterPath: 'd.md', owner: 'A' },
+    attacker: { rosterPath: 'a.md', owner: 'B' },
+    placements: [
+      { unit_name: 'Hormagaunts', _instanceId: 'hormagaunts:0', role: 'defender', centerIn: [10, 10], orientation_deg: 0, placement: 'on_board', formation: 'cluster' },
+      { unit_name: 'Hormagaunts', _instanceId: 'hormagaunts:1', role: 'defender', centerIn: [20, 10], orientation_deg: 0, placement: 'on_board', formation: 'cluster' },
+    ],
+  });
+  const md = serializeScenario(s);
+  const parsed = await parseScenario(md);
+  assert.strictEqual(parsed.board_state.defender[0].instance_id, 'hormagaunts:0');
+  assert.strictEqual(parsed.board_state.defender[1].instance_id, 'hormagaunts:1');
+});
+
+test('empty attachments serialise as empty maps', async () => {
+  const s = buildScenario({
+    id: 'empty', name: 'Empty', missionPath: 'm.md',
+    defender: { rosterPath: 'd.md', owner: 'A' },
+    attacker: { rosterPath: 'a.md', owner: 'B' },
+    placements: [],
+  });
+  const md = serializeScenario(s);
+  const parsed = await parseScenario(md);
+  assert.deepStrictEqual(parsed.attachments.defender, {});
+  assert.deepStrictEqual(parsed.attachments.attacker, {});
+});

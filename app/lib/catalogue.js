@@ -10,6 +10,12 @@
 // followed by `parseDatasheet(text)` is now `getUnit('foo')`.
 
 import { parseKeywords } from './sim/keywords.js';
+import {
+  listFilesystemRosters,
+  readFilesystemRoster,
+  filesystemRosterExists,
+} from './fs-tauri.js';
+import { parseFrontmatter } from './yaml-frontmatter.js';
 
 const BASE_DIRECTORY_RESOURCE = 11; // matches @tauri-apps/api/path BaseDirectory.Resource
 
@@ -310,8 +316,32 @@ export async function getMission(slug) {
   };
 }
 
+// Union of bundled (read-only) catalogue rosters and user-pasted filesystem
+// rosters in <app_data>/rosters/*.md. Catalogue rosters take precedence on
+// slug collision (canonical bundled data wins over user paste). Each row
+// carries a `source_path` so callers can tell origins apart for collision
+// warnings — catalogue rows expose their build-time source_path, filesystem
+// rows are tagged "rosters/<slug>.md".
 export async function listRosters() {
-  return select('SELECT slug, name, faction_slug, points_cap FROM rosters ORDER BY name');
+  const catalogueRows = await select(
+    'SELECT slug, name, source_path, faction_slug, points_cap FROM rosters ORDER BY name'
+  );
+  let fsRows = [];
+  try {
+    fsRows = await listFilesystemRosters();
+  } catch {
+    // No Tauri runtime (browser dev) — skip filesystem rosters.
+  }
+  const seen = new Set(catalogueRows.map(r => r.slug));
+  const merged = [...catalogueRows];
+  for (const r of fsRows) {
+    if (!seen.has(r.slug)) {
+      merged.push({ ...r, source_path: `rosters/${r.slug}.md` });
+      seen.add(r.slug);
+    }
+  }
+  merged.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+  return merged;
 }
 
 export async function getRoster(slug) {
@@ -319,16 +349,35 @@ export async function getRoster(slug) {
     'SELECT slug, name, source_path, body_md, frontmatter_json, faction_slug, detachment_slug, points_cap FROM rosters WHERE slug = $1 LIMIT 1',
     [slug],
   );
-  if (!rows[0]) return null;
-  const r = rows[0];
-  return {
-    slug: r.slug,
-    name: r.name,
-    source_path: r.source_path,
-    body_md: r.body_md,
-    frontmatter: r.frontmatter_json ? JSON.parse(r.frontmatter_json) : null,
-    faction_slug: r.faction_slug,
-    detachment_slug: r.detachment_slug,
-    points_cap: r.points_cap,
-  };
+  if (rows[0]) {
+    const r = rows[0];
+    return {
+      slug: r.slug,
+      name: r.name,
+      source_path: r.source_path,
+      body_md: r.body_md,
+      frontmatter: r.frontmatter_json ? JSON.parse(r.frontmatter_json) : null,
+      faction_slug: r.faction_slug,
+      detachment_slug: r.detachment_slug,
+      points_cap: r.points_cap,
+    };
+  }
+  // Fall through: user-pasted roster on the filesystem.
+  try {
+    if (!(await filesystemRosterExists(slug))) return null;
+    const md = await readFilesystemRoster(slug);
+    const fm = await parseFrontmatter(md);
+    return {
+      slug,
+      name: fm?.list_name ?? slug,
+      source_path: `rosters/${slug}.md`,
+      body_md: md,
+      frontmatter: fm,
+      faction_slug: fm?.faction ? String(fm.faction).toLowerCase().replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '') : null,
+      detachment_slug: null,
+      points_cap: fm?.list_points ?? null,
+    };
+  } catch {
+    return null;
+  }
 }

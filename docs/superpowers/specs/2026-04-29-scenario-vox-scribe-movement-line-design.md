@@ -221,8 +221,12 @@ The union surfaces both. To avoid changes rippling through every consumer of
 ## Feature 3 — Movement-distance line during drag
 
 When the user click-drags a unit, draw a live SVG line from the unit's
-pre-drag cluster center to the cursor, with the distance in inches labeled at
-the cursor end. Color the line based on the unit's `M` characteristic:
+pre-drag cluster center to the unit's *current* cluster center (the cluster
+follows the cursor with whatever offset existed at mousedown), with the
+distance in inches labeled at the moving end. The endpoint tracks the unit's
+travel rather than the bare cursor, so the readout matches what the rules
+care about — how far the unit has actually moved. Color the line based on
+the unit's `M` characteristic:
 
 - **Fixed M** (e.g. `6"`): green up to M, red past M.
 - **Variable M** (e.g. `D6+2"`): green up to the *minimum* possible roll,

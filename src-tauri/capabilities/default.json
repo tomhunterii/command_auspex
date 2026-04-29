@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities: SQL catalogue (read-only bundled) + user.db, dialogs.",
+  "description": "Default capabilities: SQL catalogue (read-only bundled) + user.db, dialogs, AppData fs for user rosters and scenarios.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -13,6 +13,9 @@
     "sql:allow-close",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-app-read-recursive",
+    "fs:allow-app-write-recursive"
   ]
 }
