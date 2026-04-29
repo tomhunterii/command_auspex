@@ -81,24 +81,23 @@ check(
 // defenders that differ ONLY in toughness + keyword set so we can isolate
 // the Anti-X effect:
 //
-//   INFANTRY target: T6, INFANTRY keyword, 100 wounds (no model deaths to
-//                    distort wound accumulation), 7+ Sv.
-//                    Table wound: 5+ (S4 vs T6). Anti 4+ kicks in. P(wound) = 3/6.
-//   MONSTER target:  T6, MONSTER keyword (no INFANTRY), 100W, 7+ Sv.
-//                    Table wound: 5+. Anti silent. P(wound) = 2/6.
-//
-// Per attack damage (no save): pistol vs heavy bolter etc. — all simplified
-// out by the 100W defender and 7+ Sv (only nat 6 saves).
-//   Anti vs Infantry:  10 × (Rapid Fire 1 → 2 attacks at 24" half range
-//                      isn't relevant here — combi has [RAPID FIRE 1] but
-//                      we simulate at_half_range=false so it stays at 1 A).
-// Combi-weapon: A=1, BS=4+. So 10 attacks total.
-//   With BS 4+: P(hit) = 3/6 = 0.5. After hit, anti vs Infantry: P(wound) = 3/6.
-//   Save 7+: 5/6 unsaved. Per attack: 0.5 * 0.5 * 5/6 ≈ 0.208. 10 attacks → 2.08 wounds.
-//   Without anti (vs Monster): 0.5 * 2/6 * 5/6 ≈ 0.139. 10 attacks → 1.39 wounds.
-//
-// (DEVASTATING WOUNDS still fires on nat-6 wound rolls, adding a ~5% kicker
-// to both — but the Infantry case still wins by ~50%.)
+//   INFANTRY target: T6 INFANTRY 7+ Sv 100W. Table wound = 5+ (S4 vs T6).
+//                    Anti-INFANTRY 4+ kicks in — wound on 4+. AND every
+//                    4+ wound roll is a Critical Wound, which triggers
+//                    [DEVASTATING WOUNDS] — mortal wounds bypassing the
+//                    save entirely. Combi-weapon A=1 BS 4+:
+//                      P(hit) = 3/6 = 0.5
+//                      P(crit wound | hit) = 3/6 = 0.5 (every 4/5/6 is crit)
+//                      Damage per crit = 1 mortal (no save reduction)
+//                      Per attack: 0.5 × 0.5 × 1 = 0.25
+//                      10 attacks → ~2.5 mortal wounds.
+//   MONSTER target:  T6 MONSTER (no INFANTRY) 7+ Sv 100W. Anti silent.
+//                      Table wound = 5+. P(wound) = 2/6.
+//                      DW only triggers on nat-6 (1/6 of all rolls).
+//                      Per attack: 0.5 × [(1/6)·mortal + (1/6)·normal·5/6 save]
+//                                  ≈ 0.5 × [1/6 + 5/36]
+//                                  ≈ 0.5 × 0.31 = 0.15
+//                      10 attacks → ~1.55 wounds (~75% of which are mortals).
 
 const tenCombis = Array.from({ length: 10 }, () => ({
   ...combiWeapon, abilities: { ...combiWeapon.abilities },
@@ -130,18 +129,18 @@ console.log(`  vs T6 MONSTER:  E[wounds] = ${rMon.expected_wounds_dealt.toFixed(
 
 check(
   'Anti-Infantry produces strictly more damage vs INFANTRY than vs MONSTER',
-  rInf.expected_wounds_dealt > rMon.expected_wounds_dealt + 0.3,
+  rInf.expected_wounds_dealt > rMon.expected_wounds_dealt + 0.5,
   `Δ=+${(rInf.expected_wounds_dealt - rMon.expected_wounds_dealt).toFixed(2)}`,
 );
 check(
-  'INFANTRY damage near analytic expectation (~2.08, with DW kicker)',
-  Math.abs(rInf.expected_wounds_dealt - 2.08) <= 0.40,
-  `${rInf.expected_wounds_dealt.toFixed(2)} vs ~2.08`,
+  'INFANTRY damage near analytic expectation (~2.50, every 4+ is a DW critical)',
+  Math.abs(rInf.expected_wounds_dealt - 2.50) <= 0.30,
+  `${rInf.expected_wounds_dealt.toFixed(2)} vs ~2.50`,
 );
 check(
-  'MONSTER damage near analytic expectation (~1.39, with DW kicker)',
-  Math.abs(rMon.expected_wounds_dealt - 1.39) <= 0.40,
-  `${rMon.expected_wounds_dealt.toFixed(2)} vs ~1.39`,
+  'MONSTER damage near analytic expectation (~1.55, only nat-6 DW)',
+  Math.abs(rMon.expected_wounds_dealt - 1.55) <= 0.30,
+  `${rMon.expected_wounds_dealt.toFixed(2)} vs ~1.55`,
 );
 
 // Cross-check: the SAME weapon stripped of its Anti-X should produce

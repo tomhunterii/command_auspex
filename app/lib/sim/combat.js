@@ -59,18 +59,29 @@ function effectiveSave(armorPlus, ap, invulnPlus, defenderMods) {
   return Math.min(...candidates);
 }
 
+// Best matching Anti-X threshold for this weapon vs this defender, or null
+// if either the weapon has no Anti-X or none of its entries match a
+// keyword on the defender. Used both to compute the effective wound
+// threshold AND to flag Critical Wounds (an unmodified roll meeting an
+// Anti-X threshold is a Critical Wound, which triggers Devastating
+// Wounds — see resolvePostHit).
+function bestMatchingAntiThreshold(weapon, defender) {
+  const anti = weapon.abilities?.anti;
+  if (!Array.isArray(anti) || anti.length === 0) return null;
+  const defKw = (defender.keywords ?? []).map(k => String(k).toUpperCase());
+  const matching = anti.filter(a =>
+    defKw.includes(String(a.target_keyword).toUpperCase())
+  );
+  if (matching.length === 0) return null;
+  return Math.min(...matching.map(a => a.threshold));
+}
+
 function chooseWoundThreshold(weapon, defender, attackerMods) {
   const tableThresh = woundThresholdFromTable(weapon.strength, defender.toughness);
-  const anti = weapon.abilities?.anti;
-  let baseThresh;
-  if (Array.isArray(anti) && anti.length > 0) {
-    const defKw = (defender.keywords ?? []).map(k => String(k).toUpperCase());
-    const matchingAnti = anti.filter(a => defKw.includes(String(a.target_keyword).toUpperCase()));
-    if (matchingAnti.length > 0) {
-      const bestAnti = Math.min(...matchingAnti.map(a => a.threshold));
-      baseThresh = Math.min(tableThresh, bestAnti);
-    } else baseThresh = tableThresh;
-  } else baseThresh = tableThresh;
+  const antiThresh = bestMatchingAntiThreshold(weapon, defender);
+  let baseThresh = antiThresh !== null
+    ? Math.min(tableThresh, antiThresh)
+    : tableThresh;
 
   if (attackerMods?.plus_one_to_wound) baseThresh -= 1;
   if (attackerMods?.plus_one_to_wound_melee && weapon.kind === 'melee') baseThresh -= 1;
@@ -103,6 +114,11 @@ function resolvePostHit(weapon, defender, rng, autoWound, attackerMods, defender
     const tl = !!ab.twin_linked;
     const dev = !!ab.devastating_wounds;
     const woundT = chooseWoundThreshold(weapon, defender, attackerMods);
+    // Anti-X criticals: an unmodified wound roll that meets a matching
+    // Anti-X threshold is a Critical Wound (10th-ed core), which triggers
+    // Devastating Wounds the same as a nat-6 does. Null when either the
+    // weapon has no Anti-X or no entry matches the defender's keywords.
+    const antiCritThresh = bestMatchingAntiThreshold(weapon, defender);
 
     let woundRoll;
     let succeeded;
@@ -125,8 +141,17 @@ function resolvePostHit(weapon, defender, rng, autoWound, attackerMods, defender
 
     if (!succeeded) return { damage: 0, mortal: 0 };
 
-    // Devastating Wounds — only on UNMODIFIED nat-6 wound roll.
-    if (dev && woundRoll === 6) {
+    // Critical Wound = unmodified nat-6 OR (Anti-X applies AND
+    // unmodified roll ≥ matching Anti-X threshold). Devastating Wounds
+    // converts every Critical Wound into mortal wounds that bypass armour
+    // and invuln. Without this branch, a Sternguard combi-weapon
+    // ([ANTI-INFANTRY 4+] + [DEVASTATING WOUNDS]) only triggered DW on a
+    // nat-6 wound roll, when the printed rule says every 4+ wound vs
+    // INFANTRY targets is a Critical and should mortal-wound.
+    const isCritical =
+      woundRoll === 6 ||
+      (antiCritThresh !== null && woundRoll >= antiCritThresh);
+    if (dev && isCritical) {
       const rawDmg = parseDice(String(weapon.damage ?? '1'))(rng);
       const mortal = applyFnp(rawDmg, defenderMods?.fnp ?? null, rng);
       return { damage: 0, mortal };

@@ -265,6 +265,89 @@ test('Anti-X: only the matching anti entries are considered', () => {
   within(result.expected_wounds_dealt, 3.33, 0.30);
 });
 
+test('Anti-X + Devastating Wounds: rolls meeting Anti-X threshold are Critical → mortal wounds', () => {
+  // S=3, T=8 → table 6+ wound. Anti-INFANTRY 4+ → 4+ wound. With DW,
+  // every 4/5/6 wound roll vs an INFANTRY target is a Critical Wound
+  // and produces D=1 mortal wound (bypasses save). Save 7+ would have
+  // been ineffective anyway, but the key signal is mortals are dealt
+  // on 4/5 in addition to nat-6.
+  //
+  // Per attack: P(crit wound) = P(roll ≥ 4 AND not nat-1) = 3/6 = 0.5.
+  // Damage = 1 mortal each (D=1, no FNP). 12 attacks → ~6.0 wounds.
+  // For comparison: WITHOUT Anti-X, only nat-6 wounds would be DW
+  // criticals, and the wound roll would be 6+ (since the table threshold
+  // is 6+ vs T8) — so per attack just 1/6, expected ~2.0.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'anti+dw', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: {
+          anti: [{ target_keyword: 'INFANTRY', threshold: 4 }],
+          devastating_wounds: true,
+        },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 8, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['INFANTRY'],
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 6.0, 0.30);
+});
+
+test('Anti-X + Devastating Wounds: silent against non-matching defender', () => {
+  // Same weapon as above, but defender lacks INFANTRY keyword. Anti
+  // doesn't fire, so the wound threshold reverts to the table (6+).
+  // DW only triggers on nat-6 (1/6). Per attack: 1/6 × 1 mortal = 0.167.
+  // 12 attacks → ~2.0 mortal wounds.
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'anti+dw', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: {
+          anti: [{ target_keyword: 'INFANTRY', threshold: 4 }],
+          devastating_wounds: true,
+        },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 8, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['VEHICLE'], // INFANTRY absent
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 2.0, 0.30);
+});
+
+test('Anti-X without DW: criticals do NOT generate mortal wounds (Anti is wound-roll only)', () => {
+  // Same weapon stripped of DW. Anti-INFANTRY 4+ still improves wound
+  // threshold but no critical-wound mortal-wound conversion happens.
+  // S=3, T=8 → 4+ wound vs INFANTRY. P(wound) = 3/6 = 0.5.
+  // Save 7+ fails 5/6. Per attack = 0.5 × 5/6 = 5/12 ≈ 0.417.
+  // 12 attacks → ~5.0 wounds. (Same as the original anti-only test.)
+  const result = simulate({
+    attacker: {
+      weapons: [{
+        name: 'anti-only', kind: 'ranged', range_in: 24,
+        attacks: '12', skill: 'N/A', strength: 3, ap: 0, damage: '1',
+        abilities: { anti: [{ target_keyword: 'INFANTRY', threshold: 4 }] },
+      }],
+      model_count: 1,
+    },
+    defender: {
+      toughness: 8, save: '7+', wounds_per_model: 100, model_count: 1,
+      keywords: ['INFANTRY'],
+    },
+    trials: 50000,
+  });
+  within(result.expected_wounds_dealt, 5.0, 0.30);
+});
+
 test('Anti-X uses min(table, anti_threshold) — anti only helps when better', () => {
   // S=10 vs T=1 → 2+ wound (already easy). Anti-INFANTRY 4+ should NOT make it worse.
   // Per attack: 5/6 * 5/6 = 25/36 ≈ 0.694. 12 attacks → 8.33.
