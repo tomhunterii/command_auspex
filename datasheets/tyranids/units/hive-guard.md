@@ -72,7 +72,7 @@ led_by: []
 None printed on datasheet.
 
 ### Faction
-**Synapse.** If your Army Faction is Tyranids, while a Tyranids unit from your army is within 6" of one or more friendly Synapse models, that Tyranids unit is said to be within Synapse Range of that model and of your army.
+*(Hive Guard do NOT have the Synapse keyword on their unit-keyword line per Wahapedia. They benefit from nearby friendly Synapse units like any other Tyranids unit, but they do not act as a Synapse source themselves. Synapse and Shadow in the Warp are army-level rules — see the Codex: Tyranids army rules for the full text.)*
 
 ### Defensive Stance
 Each time you target this unit with the Fire Overwatch Stratagem, while resolving that Stratagem, hits are scored on unmodified Hit rolls of 5+, or unmodified Hit rolls of 4+ instead if this unit is within range of an objective marker.

@@ -74,11 +74,7 @@ led_by: []
 - **Deep Strike.** May be placed in Reserves; arrives in the Reinforcements step more than 9" horizontally from all enemy models.
 
 ### Faction
-**Synapse.** While a Tyranids unit from your army is within Synapse Range of your army:
-- Each time that unit takes a Battle-shock test, take that test on 3D6 instead of 2D6.
-- Each time a model in that unit makes a melee attack, add 1 to the Strength characteristic of that attack.
-
-**Shadow in the Warp.** Army-level rule (not printed on this datasheet); applies per the Codex: Tyranids army rules.
+*(Mawloc does NOT have the Synapse keyword on its unit-keyword line per Wahapedia. It benefits from nearby friendly Synapse units like any other Tyranids unit, but it does not act as a Synapse source itself. Synapse and Shadow in the Warp are army-level rules — see the Codex: Tyranids army rules for the full text.)*
 
 ### Terror From The Deep
 Each time this model is set up on the battlefield using the Deep Strike ability, roll one D6 for each enemy unit within 12" of this model: on a 2–4, that unit suffers D3 mortal wounds; on a 5+, that unit suffers 3 mortal wounds and must take a Battle-shock test.

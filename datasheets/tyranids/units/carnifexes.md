@@ -85,11 +85,7 @@ led_by: [old-one-eye]
 **Deadly Demise 1.** When this model is destroyed, roll one D6 before removing it from play. On a 6, each unit within 6" of that model suffers 1 mortal wound.
 
 ### Faction
-**Synapse.** While a Tyranids unit from your army is within Synapse Range of your army:
-- Each time that unit takes a Battle-shock test, take that test on 3D6 instead of 2D6.
-- Each time a model in that unit makes a melee attack, add 1 to the Strength characteristic of that attack.
-
-**Shadow in the Warp.** Army-level rule (not printed on this datasheet); applies per the Codex: Tyranids army rules.
+*(Carnifexes do NOT have the Synapse keyword on their unit-keyword line per Wahapedia. They benefit from nearby friendly Synapse units like any other Tyranids unit, but they do not act as a Synapse source themselves. Synapse and Shadow in the Warp are army-level rules — see the Codex: Tyranids army rules for the full text.)*
 
 ### Blistering Assault
 *(Datasheet ability — note: the Captain's brief referred to this as "Living Battering Ram." The current 10th Edition / Wahapedia ability name is "Blistering Assault." "Living Battering Ram" was an older-edition name and does not appear on the current datasheet.)*

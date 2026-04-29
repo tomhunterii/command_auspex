@@ -73,11 +73,7 @@ led_by: []
 - **Deep Strike.** Standard core rule: may be placed in Reserves; arrives in the Reinforcements step more than 9" horizontally from all enemy models.
 
 ### Faction
-**Synapse.** If your Army Faction is Tyranids, while a Tyranids unit from your army is within 6" of one or more friendly Synapse models, that Tyranids unit is said to be within Synapse Range of that model and of your army. While a Tyranids unit from your army is within Synapse Range of your army:
-- Each time that unit takes a Battle-shock test, take that test on 3D6 instead of 2D6.
-- Each time a model in that unit makes a melee attack, add 1 to the Strength characteristic of that attack.
-
-**Shadow in the Warp.** Army-level rule (not printed on this datasheet); applies per the Codex: Tyranids army rules.
+*(Trygon does NOT have the Synapse keyword on its unit-keyword line per Wahapedia. It benefits from nearby friendly Synapse units like any other Tyranids unit, but it does not act as a Synapse source itself. Synapse and Shadow in the Warp are army-level rules — see the Codex: Tyranids army rules for the full text.)*
 
 ### Subterranean Tunnels
 *(Datasheet ability — note: the Captain's brief referred to this as "Subterranean Assault"; the actual Wahapedia/codex ability name is "Subterranean Tunnels." The Subterranean Assault Detachment is a separate, army-level concept.)*
