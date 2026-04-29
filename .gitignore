@@ -1,6 +1,10 @@
 # macOS metadata
 .DS_Store
 
+# Local tool state
+.claude/
+.playwright-mcp/
+
 # Node
 node_modules/
 
