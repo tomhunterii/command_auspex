@@ -38,7 +38,7 @@ units:
         wargear:
           - { count: 1, item: "Old One Eye's claws and talons" }
   - name: "Hormagaunts"
-    datasheet: null
+    datasheet: "tyranids/hormagaunts"
     section: "BATTLELINE"
     points: 65
     warlord: false
@@ -50,7 +50,7 @@ units:
         wargear:
           - { count: 10, item: "Hormagaunt talons" }
   - name: "Hormagaunts"
-    datasheet: null
+    datasheet: "tyranids/hormagaunts"
     section: "BATTLELINE"
     points: 65
     warlord: false
@@ -62,7 +62,7 @@ units:
         wargear:
           - { count: 10, item: "Hormagaunt talons" }
   - name: "Hormagaunts"
-    datasheet: null
+    datasheet: "tyranids/hormagaunts"
     section: "BATTLELINE"
     points: 65
     warlord: false
@@ -74,7 +74,7 @@ units:
         wargear:
           - { count: 10, item: "Hormagaunt talons" }
   - name: "Hormagaunts"
-    datasheet: null
+    datasheet: "tyranids/hormagaunts"
     section: "BATTLELINE"
     points: 65
     warlord: false
@@ -86,7 +86,7 @@ units:
         wargear:
           - { count: 10, item: "Hormagaunt talons" }
   - name: "Hormagaunts"
-    datasheet: null
+    datasheet: "tyranids/hormagaunts"
     section: "BATTLELINE"
     points: 65
     warlord: false
@@ -98,7 +98,7 @@ units:
         wargear:
           - { count: 10, item: "Hormagaunt talons" }
   - name: "Biovores"
-    datasheet: null
+    datasheet: "tyranids/biovores"
     section: "OTHER DATASHEETS"
     points: 50
     warlord: false
@@ -139,7 +139,7 @@ units:
           - { count: 1, item: "Carnifex scything talons" }
           - { count: 1, item: "Carnifex extra scything talons" }
   - name: "Harpy"
-    datasheet: null
+    datasheet: "tyranids/harpy"
     section: "OTHER DATASHEETS"
     points: 215
     warlord: false
@@ -166,7 +166,7 @@ units:
           - { count: 1, item: "Massive scything talons" }
           - { count: 1, item: "Psychic overload" }
   - name: "Screamer-killer"
-    datasheet: null
+    datasheet: "tyranids/screamer-killer"
     section: "OTHER DATASHEETS"
     points: 125
     warlord: false
@@ -179,7 +179,7 @@ units:
           - { count: 1, item: "Bio-plasmic scream" }
           - { count: 1, item: "Screamer-killer talons" }
   - name: "Toxicrene"
-    datasheet: null
+    datasheet: "tyranids/toxicrene"
     section: "OTHER DATASHEETS"
     points: 150
     warlord: false
@@ -251,20 +251,6 @@ units:
 **Battle size:** 1860 Points (1860 pts max · 1860 pts used)  
 **Faction:** Tyranids / Xenos  
 **Detachment:** Subterranean Assault (Keywords)
-
-## Unresolved Datasheet References
-
-The parser could not auto-resolve these unit names to a datasheet file. Manually set the `datasheet:` field in the frontmatter for each:
-
-- `Hormagaunts`
-- `Hormagaunts`
-- `Hormagaunts`
-- `Hormagaunts`
-- `Hormagaunts`
-- `Biovores`
-- `Harpy`
-- `Screamer-killer`
-- `Toxicrene`
 
 ## Raw Export
 
