@@ -204,7 +204,7 @@ units:
           - { count: 4, item: "Combat knife" }
           - { count: 4, item: "Special issue bolt pistol" }
   - name: "Repulsor Executioner"
-    datasheet: null
+    datasheet: "space-marines/repulsor-executioner"
     section: "OTHER DATASHEETS"
     points: 230
     warlord: false
