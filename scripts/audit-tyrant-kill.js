@@ -107,8 +107,11 @@ const titusWeapons = [
 ];
 
 // --- Apply Titus's Press the Attack to every weapon -------------------
-// weapon_abilities: { sustained_hits: 1 }  (first-wins; the Sternguard
-// heavy bolter would already have 1 if equipped — we did not equip it).
+// Press the Attack grants ONLY [SUSTAINED HITS 1] — no re-roll of any
+// kind (per the printed datasheet "Press the Attack: Weapons equipped
+// by models in this model's unit have the [SUSTAINED HITS 1] ability").
+// First-wins so the Sternguard heavy bolter's printed [SUSTAINED HITS 1]
+// is not double-applied.
 function applyTitusGrants(weapons) {
   return weapons.map(weapon => {
     const ab = { ...weapon.abilities };
@@ -116,9 +119,7 @@ function applyTitusGrants(weapons) {
     return { ...weapon, abilities: ab };
   });
 }
-// modifiers (apply at attacker level, not per weapon):
-//   reroll_hits: 'ones'  (Press the Attack)
-const titusModifiers = { reroll_hits: 'ones' };
+const titusModifiers = {};
 
 // --- Attacker assembly ------------------------------------------------
 const allRanged = [...sternguardWeapons, ...wardensWeapons, ...titusWeapons]
@@ -184,7 +185,7 @@ for (const sc of scenarios) {
 console.log('─'.repeat(74));
 console.log('Notes:');
 console.log('  • Sternguard 10-model default loadout (pistols + bolt rifles + ccw, no swaps).');
-console.log('  • Titus grants [SUSTAINED HITS 1] + re-roll hits of 1 to every weapon.');
+console.log('  • Titus\'s Press the Attack grants [SUSTAINED HITS 1] only — no re-rolls.');
 console.log('  • Oath row stacks: re-roll all hits + +1 to wound + re-roll wounds');
 console.log('    (Sternguard Focus — applies to every model in the Attached Unit per the');
 console.log('    10th-ed "this unit" rule).');

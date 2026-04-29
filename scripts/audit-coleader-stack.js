@@ -204,10 +204,12 @@ const wrappedLeaders = [
   { unit: titus,   equippedCounts: titusEc   },
 ];
 const granted = mergeLeaderGrants(attacker, wrappedLeaders);
+// Press the Attack grants ONLY [SUSTAINED HITS 1] per the printed datasheet —
+// no re-roll-1s, no other modifier. Confirm the merge does not invent one.
 check(
-  'reroll_hits=ones reached the merged attacker modifiers',
-  granted.modifiers?.reroll_hits === 'ones',
-  `modifiers.reroll_hits=${granted.modifiers?.reroll_hits ?? '(unset)'}`,
+  'no spurious reroll_hits modifier applied (Press the Attack is SH-only)',
+  granted.modifiers?.reroll_hits == null,
+  `modifiers.reroll_hits=${granted.modifiers?.reroll_hits ?? '(unset, correct)'}`,
 );
 const allGotSh = granted.weapons.every(w => w.abilities?.sustained_hits === 1);
 check(
@@ -238,20 +240,22 @@ check(
   `granted=${rGranted.expected_wounds_dealt.toFixed(2)} vs baseline=${rNoGrants.expected_wounds_dealt.toFixed(2)}, Δ=+${(rGranted.expected_wounds_dealt - rNoGrants.expected_wounds_dealt).toFixed(2)}`,
 );
 // Loose hand-built sanity comparison (audit-tyrant-kill.js, no Oath,
-// combined ½-range = 70.7% / 9.27/10). Loadouts differ — Norallus has
-// a sergeant Power fist + 2 heavy bolters that the hand-built reference
-// does not include — so we expect the catalogue path to skew higher.
+// combined ½-range — re-run after the Press-the-Attack reroll_hits fix:
+//   P(kill) ≈ 52.8%, E[wounds] ≈ 8.62/10).
+// Loadouts differ between the two scripts — Norallus has a sergeant
+// Power fist + 2 heavy bolters that the hand-built reference does not
+// include — so we expect the catalogue path to skew somewhat higher.
 // ±20pp / ±1.0 wounds is enough to catch a wiring regression without
 // flagging the legitimate loadout-fidelity uplift.
 check(
-  'P(kill) within 20pp of hand-built reference (~70.7%, loose)',
-  Math.abs(rGranted.p_target_destroyed - 0.707) <= 0.20,
-  `${(rGranted.p_target_destroyed * 100).toFixed(1)}% vs ref 70.7%, Δ=${((rGranted.p_target_destroyed - 0.707) * 100).toFixed(1)}pp`,
+  'P(kill) within 20pp of hand-built reference (~52.8%, loose)',
+  Math.abs(rGranted.p_target_destroyed - 0.528) <= 0.20,
+  `${(rGranted.p_target_destroyed * 100).toFixed(1)}% vs ref 52.8%, Δ=${((rGranted.p_target_destroyed - 0.528) * 100).toFixed(1)}pp`,
 );
 check(
-  'E[wounds] within 1.0 of hand-built reference (~9.27, loose)',
-  Math.abs(rGranted.expected_wounds_dealt - 9.27) <= 1.0,
-  `${rGranted.expected_wounds_dealt.toFixed(2)} vs ref 9.27, Δ=${(rGranted.expected_wounds_dealt - 9.27).toFixed(2)}`,
+  'E[wounds] within 1.0 of hand-built reference (~8.62, loose)',
+  Math.abs(rGranted.expected_wounds_dealt - 8.62) <= 1.0,
+  `${rGranted.expected_wounds_dealt.toFixed(2)} vs ref 8.62, Δ=${(rGranted.expected_wounds_dealt - 8.62).toFixed(2)}`,
 );
 
 // Per-submodel allocation check — assert the total merged pool matches
