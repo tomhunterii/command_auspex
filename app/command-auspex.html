@@ -384,8 +384,11 @@
           <div id="sim-result" class="status-msg" style="margin-top:10px; min-height:60px;"></div>
         </div>
       </div>
-      <div id="detail-panel">
-        <div class="status-msg">AWAITING MISSION + ROSTER DESIGNATION…</div>
+      <div id="unit-details-panel" style="border:1px solid var(--phosphor-dim); padding:12px; position:relative;">
+        <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">⊙ UNIT DETAILS</div>
+        <div id="detail-panel">
+          <div class="status-msg">SELECT A UNIT TO INSPECT</div>
+        </div>
       </div>
     </div>
   </div>
@@ -400,6 +403,11 @@ import { simulate } from './lib/sim/combat.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
 import { renderBoard, renderUnits } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
+import { FORMATIONS } from './lib/base-geometry.js';
+import {
+  isOverchargeProfile, baseWeaponName, findOverchargePairs,
+  applyOverchargeFilter as filterOverchargePairs,
+} from './lib/overcharge.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
 
 const statusEl = document.getElementById('status');
@@ -450,13 +458,73 @@ const attachments = {
   attacker: new Map(),
 };
 
+// Storage layout: each squad has up to two attached leaders — `[primary]` or
+// `[primary, secondary]`. Legacy bare-string values are coerced to arrays on
+// read for backwards compat with any in-flight session state.
+function attachedLeaderEntry(side, squadSlug) {
+  const v = attachments[side]?.get(squadSlug);
+  if (!v) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
 function attachedLeaderSlug(side, squadSlug) {
-  return attachments[side]?.get(squadSlug) ?? null;
+  return attachedLeaderEntry(side, squadSlug)[0] ?? null;
+}
+
+function attachedSecondaryLeaderSlug(side, squadSlug) {
+  return attachedLeaderEntry(side, squadSlug)[1] ?? null;
+}
+
+function attachedLeaderSlugsAll(side, squadSlug) {
+  return attachedLeaderEntry(side, squadSlug);
 }
 
 function setAttachedLeader(side, squadSlug, leaderSlug) {
-  if (leaderSlug) attachments[side].set(squadSlug, leaderSlug);
+  if (leaderSlug) attachments[side].set(squadSlug, [leaderSlug]); // clearing primary clears secondary
   else attachments[side].delete(squadSlug);
+}
+
+function setAttachedSecondaryLeader(side, squadSlug, leaderSlug) {
+  const cur = attachedLeaderEntry(side, squadSlug);
+  if (!cur[0]) return; // secondary requires primary
+  if (leaderSlug) attachments[side].set(squadSlug, [cur[0], leaderSlug]);
+  else attachments[side].set(squadSlug, [cur[0]]);
+}
+
+// Per-unit formation choice, keyed by side + squad slug. Values are formation
+// IDs from FORMATIONS in base-geometry.js. Unset = 'cluster' (default).
+const formations = {
+  defender: new Map(),
+  attacker: new Map(),
+};
+
+// Overcharge / supercharge plasma profiles. Selection is per-(side, slug,
+// base-weapon-name); pure helpers live in app/lib/overcharge.js.
+const overchargeChoices = {
+  defender: new Map(),
+  attacker: new Map(),
+};
+
+function overchargeChoice(side, slug, baseLower) {
+  return overchargeChoices[side]?.get(`${slug}:${baseLower}`) ?? 'standard';
+}
+
+function setOverchargeChoice(side, slug, baseLower, choice) {
+  if (choice === 'overcharge') overchargeChoices[side].set(`${slug}:${baseLower}`, 'overcharge');
+  else overchargeChoices[side].delete(`${slug}:${baseLower}`);
+}
+
+function applyOverchargeFilter(weapons, side, slug) {
+  return filterOverchargePairs(weapons, base => overchargeChoice(side, slug, base));
+}
+
+function unitFormation(side, squadSlug) {
+  return formations[side]?.get(squadSlug) ?? 'cluster';
+}
+
+function setUnitFormation(side, squadSlug, formationId) {
+  if (formationId && formationId !== 'cluster') formations[side].set(squadSlug, formationId);
+  else formations[side].delete(squadSlug);
 }
 
 // In-memory record of destroyed model indices, keyed by unit slug.
@@ -611,44 +679,80 @@ async function loadCatalogueAndPopulate() {
           ? { ...unit, weapons: filterByEquipped(unit.weapons, equipped) }
           : unit;
 
-        // Leader merge: if the squad has an attached leader, show the leader's
-        // weapons in their own section so the Captain sees what's hitting.
-        const leaderSlug = attachedLeaderSlug(simAttackerSide(), slug);
-        let leaderUnit = null;
-        let leaderWeapons = [];
-        if (leaderSlug) {
-          leaderUnit = await getUnit(leaderSlug);
-          if (leaderUnit) {
-            const leaderInRoster = simAttackerRosterSlug()
-              ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsBySlug?.get(leaderSlug)
-              : null;
-            const leaderEquipped = leaderInRoster?.equippedWeapons;
-            leaderWeapons = leaderEquipped && leaderEquipped.size > 0
-              ? filterByEquipped(leaderUnit.weapons, leaderEquipped)
-              : leaderUnit.weapons;
-          }
+        // Leader merge: a squad may have a primary leader and (per the
+        // Wardens of Ultramar / Titus rule) an optional secondary leader.
+        // Resolve every attached leader so the panel shows their weapons
+        // and grants in their own sections.
+        const leaderSlugs = attachedLeaderSlugsAll(simAttackerSide(), slug);
+        const leaderEntries = [];
+        for (const lSlug of leaderSlugs) {
+          const lUnit = await getUnit(lSlug);
+          if (!lUnit) continue;
+          const lInRoster = simAttackerRosterSlug()
+            ? (await ensureRosterCached(simAttackerRosterSlug()))?.unitsBySlug?.get(lSlug)
+            : null;
+          const lEquipped = lInRoster?.equippedWeapons;
+          const lWeapons = lEquipped && lEquipped.size > 0
+            ? filterByEquipped(lUnit.weapons, lEquipped)
+            : lUnit.weapons;
+          leaderEntries.push({ slug: lSlug, unit: lUnit, weapons: lWeapons });
         }
 
         const filterBadge = equipped && equipped.size > 0
           ? `<div style="color:var(--amber); font-size:9px; letter-spacing:1.5px; margin-bottom:4px;">&#9881; FROM ROSTER &middot; ${equipped.size} EQUIPPED</div>`
           : '';
-        const leaderBadge = leaderUnit
-          ? `<div style="color:var(--amber); font-size:9px; letter-spacing:1.5px; margin-bottom:4px;">+ LEADER &middot; ${leaderUnit.name.toUpperCase()}</div>`
+        const leaderBadge = leaderEntries.length > 0
+          ? leaderEntries.map((e, i) => `<div style="color:var(--amber); font-size:9px; letter-spacing:1.5px; margin-bottom:4px;">+ ${i === 0 ? 'LEADER' : 'CO-LEADER'} &middot; ${e.unit.name.toUpperCase()}</div>`).join('')
           : '';
-        const grantsBadge = leaderUnit?.grants?.description
-          ? `<div style="color:var(--phosphor); font-size:9px; letter-spacing:1.2px; margin-bottom:4px; padding:3px 6px; border:1px dashed var(--phosphor-dim);">&#9881; GRANTS &middot; ${leaderUnit.grants.description.toUpperCase()}</div>`
-          : '';
+        const grantsBadge = leaderEntries
+          .filter(e => e.unit?.grants?.description)
+          .map(e => `<div style="color:var(--phosphor); font-size:9px; letter-spacing:1.2px; margin-bottom:4px; padding:3px 6px; border:1px dashed var(--phosphor-dim);">&#9881; GRANTS (${e.unit.name.toUpperCase()}) &middot; ${e.unit.grants.description.toUpperCase()}</div>`)
+          .join('');
 
-        const ranged = displayUnit.weapons.filter(w => w.kind === 'ranged');
-        const melee = displayUnit.weapons.filter(w => w.kind === 'melee');
-        const leaderRanged = leaderWeapons.filter(w => w.kind === 'ranged');
-        const leaderMelee  = leaderWeapons.filter(w => w.kind === 'melee');
+        // Apply overcharge profile filter so each pair shows only the
+        // currently-selected profile in the weapon table. Selectors for
+        // toggling appear above the table (see overchargeBlock below).
+        const ocSide = simAttackerSide();
+        const ocSlug = slug;
+        const filteredDisplayWeapons = applyOverchargeFilter(displayUnit.weapons, ocSide, ocSlug);
+        for (const e of leaderEntries) {
+          e.filteredWeapons = applyOverchargeFilter(e.weapons, ocSide, e.slug);
+        }
+        const ranged = filteredDisplayWeapons.filter(w => w.kind === 'ranged');
+        const melee = filteredDisplayWeapons.filter(w => w.kind === 'melee');
+
+        // Overcharge selectors: one row per overcharge-capable weapon, on the
+        // squad and/or its attached leader.
+        const buildOcRows = (weapons, side, ownerSlug, ownerLabel) => {
+          const pairs = findOverchargePairs(weapons);
+          if (pairs.size === 0) return '';
+          const rows = [...pairs.entries()].map(([base, pair]) => {
+            const choice = overchargeChoice(side, ownerSlug, base);
+            const stdActive = choice !== 'overcharge';
+            const ocActive = choice === 'overcharge';
+            const display = baseWeaponName(pair.standard.name);
+            return `<div style="display:flex; align-items:center; gap:6px; margin:2px 0;">
+              <span style="flex:1; color:var(--paper); font-size:10px;">${escapeHtml(display)}</span>
+              <button type="button" class="btn oc-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-base="${escapeHtml(base)}" data-choice="standard" style="padding:1px 6px; font-size:9px; letter-spacing:1px; ${stdActive ? '' : 'opacity:0.45;'}">STD</button>
+              <button type="button" class="btn oc-toggle" data-side="${side}" data-slug="${escapeHtml(ownerSlug)}" data-base="${escapeHtml(base)}" data-choice="overcharge" style="padding:1px 6px; font-size:9px; letter-spacing:1px; color:var(--amber); ${ocActive ? '' : 'opacity:0.45;'}">OC</button>
+            </div>`;
+          }).join('');
+          const heading = ownerLabel
+            ? `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">FIRE MODE — ${ownerLabel.toUpperCase()}</div>`
+            : `<div style="font-family:'Bank Gothic',sans-serif; font-weight:700; letter-spacing:2px; color:var(--amber); font-size:10px; margin-top:4px;">FIRE MODE</div>`;
+          return heading + rows;
+        };
+        const overchargeBlock =
+          buildOcRows(displayUnit.weapons, ocSide, ocSlug, leaderEntries.length > 0 ? unit.name : null)
+          + leaderEntries.map(e => buildOcRows(e.weapons, ocSide, e.slug, e.unit.name)).join('');
         const groups = [];
         if (kind === 'ranged' || kind === 'all') groups.push(['RANGED', ranged]);
         if (kind === 'melee'  || kind === 'all') groups.push(['MELEE',  melee]);
-        if (leaderUnit) {
-          if (kind === 'ranged' || kind === 'all') groups.push([`LEADER RANGED (${leaderUnit.name.toUpperCase()})`, leaderRanged]);
-          if (kind === 'melee'  || kind === 'all') groups.push([`LEADER MELEE (${leaderUnit.name.toUpperCase()})`, leaderMelee]);
+        for (const e of leaderEntries) {
+          const lr = e.filteredWeapons.filter(w => w.kind === 'ranged');
+          const lm = e.filteredWeapons.filter(w => w.kind === 'melee');
+          if (kind === 'ranged' || kind === 'all') groups.push([`LEADER RANGED (${e.unit.name.toUpperCase()})`, lr]);
+          if (kind === 'melee'  || kind === 'all') groups.push([`LEADER MELEE (${e.unit.name.toUpperCase()})`, lm]);
         }
 
         const fmtRow = (w) => {
@@ -680,9 +784,16 @@ async function loadCatalogueAndPopulate() {
           `).join('');
 
         if (sections === '') {
-          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + `<span style="color:var(--dim);">no ${kind} weapons</span>`;
         } else {
-          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + sections;
+          detailEl.innerHTML = filterBadge + leaderBadge + grantsBadge + overchargeBlock + sections;
+        }
+        // Wire overcharge toggle clicks: update choice and re-render the panel.
+        for (const btn of detailEl.querySelectorAll('.oc-toggle')) {
+          btn.addEventListener('click', () => {
+            setOverchargeChoice(btn.dataset.side, btn.dataset.slug, btn.dataset.base, btn.dataset.choice);
+            refreshWeaponDetail();
+          });
         }
         detailEl.style.display = 'block';
       } catch (err) {
@@ -734,13 +845,11 @@ async function defaultModelCountFor(selectEl, rosterSlug, modelInputId, side = '
   const u = cached?.unitsBySlug?.get(slug);
   if (!u || !u.totalModels) return;
   let live = Math.max(1, u.totalModels - destroyedCountFor(slug));
-  // Add attached leader's model count (if any).
-  const leaderSlug = attachedLeaderSlug(side, slug);
-  if (leaderSlug) {
-    const leaderInfo = cached?.unitsBySlug?.get(leaderSlug);
+  // Add every attached leader's model count (primary + optional secondary).
+  for (const ls of attachedLeaderSlugsAll(side, slug)) {
+    const leaderInfo = cached?.unitsBySlug?.get(ls);
     if (leaderInfo?.totalModels) {
-      const leaderLive = Math.max(0, leaderInfo.totalModels - destroyedCountFor(leaderSlug));
-      live += leaderLive;
+      live += Math.max(0, leaderInfo.totalModels - destroyedCountFor(ls));
     }
   }
   document.getElementById(modelInputId).value = live;
@@ -788,6 +897,16 @@ async function loadDatasheet(slug) {
   return unit;
 }
 
+// Returns the datasheet slug ("<faction>/<unit-slug>") for a roster unit,
+// falling back to name-based resolution when the unit's `datasheet` field is
+// null/missing. Older rosters parsed before all datasheets existed often have
+// null pointers; without this fallback those units silently drop from the map.
+async function resolveUnitDatasheet(unit, candidates) {
+  if (unit?.datasheet) return unit.datasheet;
+  if (!unit?.name) return null;
+  return resolveSlug(unit.name, candidates);
+}
+
 async function loadRosterFile(slug) {
   const rosterRecord = await getRoster(slug);
   if (!rosterRecord) throw new Error(`roster not in catalogue: ${slug}`);
@@ -810,14 +929,20 @@ async function loadFromScenario(s) {
   renderBoard(svg, mission);
 
   const placements = [];
+  const candidates = (await listUnits()).map(c => ({ slug: c.slug, faction: c.faction_slug }));
   for (const role of ['defender', 'attacker']) {
     const roster = role === 'defender' ? defender : attacker;
     for (const entry of s.board_state[role]) {
       const unit = roster.units.find(u => u.name === entry.unit_ref);
-      if (!unit || !unit.datasheet) continue;
-      const ds = await loadDatasheet(unit.datasheet);
+      if (!unit) continue;
+      const dsSlug = await resolveUnitDatasheet(unit, candidates);
+      if (!dsSlug) continue;
+      const ds = await loadDatasheet(dsSlug);
+      const slug = dsSlug.split('/').pop();
+      const formation = entry.formation ?? unitFormation(role, slug);
+      if (entry.formation) setUnitFormation(role, slug, entry.formation);
       placements.push({
-        unit: { ...unit, _base: ds.base },
+        unit: { ...unit, datasheet: dsSlug, _base: ds.base, _formation: formation },
         datasheet: ds,
         centerIn: entry.position,
         role,
@@ -859,12 +984,15 @@ loadBtn.addEventListener('click', async () => {
     const svg = document.getElementById('board');
     renderBoard(svg, mission);
 
+    const candidates = (await listUnits()).map(c => ({ slug: c.slug, faction: c.faction_slug }));
     async function buildPlacements(roster, zonePolygon, role) {
       const enriched = [];
       for (const u of roster.units) {
-        if (!u.datasheet) continue;
-        const ds = await loadDatasheet(u.datasheet);
-        const copy = { ...u, _base: ds.base };
+        const dsSlug = await resolveUnitDatasheet(u, candidates);
+        if (!dsSlug) continue;
+        const ds = await loadDatasheet(dsSlug);
+        const slug = dsSlug.split('/').pop();
+        const copy = { ...u, datasheet: dsSlug, _base: ds.base, _formation: unitFormation(role, slug) };
         enriched.push({ u: copy, ds });
       }
       const placed = autoPlaceUnits(enriched.map(e => e.u), zonePolygon);
@@ -1315,19 +1443,30 @@ function applyAttachmentsToPlacements(placements) {
   const merged = [];
   for (const p of placements) {
     const slug = String(p.unit.datasheet ?? '').split('/').pop();
-    const leaderSlug = attachments[p.role]?.get(slug);
-    if (leaderSlug) {
-      const leaderKey = `${p.role}:${leaderSlug}`;
-      const leaderPlacement = bySlugAndSide.get(leaderKey);
-      if (leaderPlacement) {
-        // Merge leader models into this squad's unit.
+    const leaderSlugs = attachedLeaderSlugsAll(p.role, slug);
+    if (leaderSlugs.length > 0) {
+      // Resolve every attached leader (primary + optional secondary). Any
+      // resolvable leader gets folded in; unresolved entries silently skip.
+      const leaderPlacements = leaderSlugs
+        .map(ls => ({ ls, lp: bySlugAndSide.get(`${p.role}:${ls}`) }))
+        .filter(x => x.lp);
+      if (leaderPlacements.length > 0) {
+        const extraModels = [];
+        for (const { ls, lp } of leaderPlacements) {
+          const leaderModels = (lp.unit.models ?? []).map(m => ({
+            ...m,
+            _sourceDatasheet: lp.datasheet,
+          }));
+          extraModels.push(...leaderModels);
+          removedKeys.add(`${p.role}:${ls}`);
+        }
         const newUnit = {
           ...p.unit,
-          models: [...(p.unit.models ?? []), ...(leaderPlacement.unit.models ?? [])],
-          attachedLeader: leaderPlacement.unit,
+          models: [...(p.unit.models ?? []), ...extraModels],
+          attachedLeader: leaderPlacements[0].lp.unit,
+          attachedLeaders: leaderPlacements.map(x => x.lp.unit),
         };
         merged.push({ ...p, unit: newUnit });
-        removedKeys.add(leaderKey);
         continue;
       }
     }
@@ -1413,6 +1552,7 @@ function buildCurrentScenarioMarkdown(id, name) {
         centerIn: [cx, cy],
         orientation_deg: 0,
         placement: 'on_board',
+        formation: p.unit?._formation ?? 'cluster',
       };
     }),
   });
@@ -1515,69 +1655,170 @@ function renderDetailPanel(unit, ds) {
   const profile = ds?.profile
     ? `M ${escapeHtml(ds.profile.M)} · T ${escapeHtml(ds.profile.T)} · Sv ${escapeHtml(ds.profile.Sv)} · W ${escapeHtml(ds.profile.W)} · Ld ${escapeHtml(ds.profile.Ld)} · OC ${escapeHtml(ds.profile.OC)}`
     : '';
-  const wargearList = unit.models.map(m => `
-    <div style="margin:4px 0;">
-      <strong>${m.count}× ${escapeHtml(m.submodel)}</strong>
-      <ul style="margin-left:18px;font-size:10px;">${m.wargear.map(w => `<li>${w.count}× ${escapeHtml(w.item)}</li>`).join('')}</ul>
-    </div>`).join('');
   const detailEl = document.getElementById('detail-panel');
   if (!detailEl) return;
+  // Resolve which side this unit belongs to (for the formation map lookup).
+  const dsSlug = String(unit.datasheet ?? '').split('/').pop();
+  const placement = lastPlacements.find(p => String(p.unit.datasheet ?? '').split('/').pop() === dsSlug);
+  const side = placement?.role ?? 'defender';
+
+  // Build a wargear listing that includes the squad's own models PLUS each
+  // attached leader's models, with a labelled divider per leader. Rosters
+  // store leader models on a separate placement that we resolve via slug.
+  const renderModelGroup = (m) => `
+    <div style="margin:4px 0;">
+      <strong>${m.count}× ${escapeHtml(m.submodel)}</strong>
+      <ul style="margin-left:18px;font-size:10px;">${(m.wargear ?? []).map(w => `<li>${w.count}× ${escapeHtml(w.item)}</li>`).join('')}</ul>
+    </div>`;
+  const squadModelsHtml = unit.models.map(renderModelGroup).join('');
+  const attachedSlugs = attachedLeaderSlugsAll(side, dsSlug);
+  const attachedSections = [];
+  for (let i = 0; i < attachedSlugs.length; i++) {
+    const ls = attachedSlugs[i];
+    const lp = lastPlacements.find(p => p.role === side && String(p.unit.datasheet ?? '').split('/').pop() === ls);
+    if (!lp) continue;
+    const labelText = i === 0 ? 'LEADER' : 'CO-LEADER';
+    attachedSections.push(`
+      <div style="margin-top:8px;font-size:10px;letter-spacing:1.5px;color:var(--amber);">+ ${labelText}: ${escapeHtml(lp.unit.name).toUpperCase()}</div>
+      ${(lp.unit.models ?? []).map(renderModelGroup).join('')}
+    `);
+  }
+  const wargearList = squadModelsHtml + attachedSections.join('');
+  const currentFormation = unitFormation(side, dsSlug);
+  const formationOpts = FORMATIONS.map(f =>
+    `<option value="${f.id}"${f.id === currentFormation ? ' selected' : ''}>${escapeHtml(f.label)}</option>`
+  ).join('');
   detailEl.innerHTML = `
     <div class="title" style="font-size:13px;">${escapeHtml(unit.name)}</div>
     <div class="status-msg">${unit.points} PTS · ${unit.total_models} MODEL${unit.total_models > 1 ? 'S' : ''}${unit.warlord ? ' · WARLORD' : ''}${unit.enhancement ? ` · ENHANCEMENT: ${escapeHtml(unit.enhancement)}` : ''}</div>
     <div class="status-msg" style="color:var(--paper);">${profile}</div>
     <div class="status-msg" style="color:var(--dim);">${base}</div>
     <hr style="border:none;border-top:1px dashed var(--phosphor-dim);margin:10px 0;">
+    <div style="margin-bottom:8px;">
+      <label style="font-size:10px;letter-spacing:1.5px;color:var(--dim);">FORMATION</label>
+      <select id="formation-select" class="select" data-side="${side}" data-slug="${escapeHtml(dsSlug)}" style="margin-left:0;margin-top:4px;width:100%;">${formationOpts}</select>
+    </div>
     <div style="font-size:11px;">${wargearList}</div>
   `;
+  const formSel = document.getElementById('formation-select');
+  if (formSel) {
+    formSel.addEventListener('change', () => {
+      setUnitFormation(formSel.dataset.side, formSel.dataset.slug, formSel.value);
+      // Update the live placement copy so rerenderBoard picks up the new layout.
+      for (const p of lastPlacements) {
+        const pSlug = String(p.unit.datasheet ?? '').split('/').pop();
+        if (p.role === formSel.dataset.side && pSlug === formSel.dataset.slug) {
+          p.unit._formation = formSel.value;
+        }
+      }
+      rerenderBoard();
+      scheduleAutoSave();
+    });
+  }
   // Append ATTACH LEADER dropdown after wargear list (async — awaits roster cache).
   renderLeaderControl(unit, ds);
 }
 
-// ATTACH LEADER selector. Appended to the detail panel after the wargear list.
-// Filters to roster-units whose slug is in the squad's led_by array AND who
-// are in the same side's roster.
+// ATTACH LEADER + (optional) CO-LEADER selectors. Appended to the detail
+// panel after the wargear list.
+//
+// Primary candidates come from two sources, unioned:
+//   1. Squad's `led_by` list (the squad declares who can lead it).
+//   2. Any same-side roster unit whose `can_join` includes this squad's slug
+//      (the joiner declares which squads it can attach to — Wardens of
+//      Ultramar style).
+//
+// Co-leader appears only when the currently-selected primary leader has
+// `enables_co_leader` set on its datasheet (Wardens → Captain Titus).
 async function renderLeaderControl(unit, ds) {
   const detailEl = document.getElementById('detail-panel');
   if (!detailEl) return;
-  // Determine slug from the unit's datasheet field or fall back to name-based match.
   const unitDsField = unit.datasheet ?? '';
   const slug = unitDsField ? unitDsField.split('/').pop() : '';
   if (!slug) return;
-  // Fetch the full catalogue unit to get the led_by array.
   let catalogueUnit = null;
   try { catalogueUnit = await getUnit(slug); } catch { return; }
   if (!catalogueUnit) return;
-  const ledBy = (catalogueUnit.led_by ?? []).map(s => String(s).toLowerCase().split('/').pop());
-  if (ledBy.length === 0) return;
-  // Determine which side this squad belongs to by finding its placement.
   const placement = lastPlacements.find(p => String(p.unit.datasheet ?? '').split('/').pop() === slug);
   const side = placement?.role ?? 'defender';
   const sideRosterSlug = side === 'defender' ? friendlyRosterSlug : hostileRosterSlug;
   const cached = await ensureRosterCached(sideRosterSlug);
   if (!cached) return;
-  // Build candidate list: units in the same-side roster whose slug is in led_by.
+
+  const ledBy = new Set((catalogueUnit.led_by ?? []).map(s => String(s).toLowerCase().split('/').pop()));
+
+  // Walk same-side roster, find candidate primary attachers. A unit qualifies
+  // if it's in led_by OR if its own `can_join` declares this squad as a target.
   const candidates = [];
   for (const [candSlug, info] of cached.unitsBySlug.entries()) {
-    if (ledBy.includes(candSlug)) candidates.push({ slug: candSlug, name: info.name });
+    let isCandidate = ledBy.has(candSlug);
+    if (!isCandidate) {
+      try {
+        const candUnit = await getUnit(candSlug);
+        const canJoin = (candUnit?.can_join ?? []).map(s => String(s).toLowerCase().split('/').pop());
+        if (canJoin.includes(slug)) isCandidate = true;
+      } catch { /* best effort */ }
+    }
+    if (isCandidate) candidates.push({ slug: candSlug, name: info.name });
   }
   if (candidates.length === 0) return;
+
   const current = attachedLeaderSlug(side, slug);
-  const html = `
+  const currentSecondary = attachedSecondaryLeaderSlug(side, slug);
+
+  const primaryHtml = `
     <hr style="border:none;border-top:1px dashed var(--phosphor-dim);margin:10px 0;">
     <div style="font-size:10px;letter-spacing:1.5px;color:var(--dim);">ATTACH LEADER</div>
     <select id="attach-leader" class="select" style="margin-left:0;margin-top:4px;width:100%;">
       <option value="">(none)</option>
-      ${candidates.map(c => `<option value="${c.slug}"${c.slug === current ? ' selected' : ''}>${c.name}</option>`).join('')}
+      ${candidates.map(c => `<option value="${c.slug}"${c.slug === current ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
     </select>
   `;
-  detailEl.insertAdjacentHTML('beforeend', html);
-  const sel = document.getElementById('attach-leader');
-  sel.addEventListener('change', async () => {
-    setAttachedLeader(side, slug, sel.value || null);
-    rerenderBoard();
-    // If this squad is the active sim attacker, refresh the COMBAT AUSPEX
-    // panel so the leader's weapons + model count appear immediately.
+  detailEl.insertAdjacentHTML('beforeend', primaryHtml);
+
+  // Compute SECONDARY (co-leader) candidates given the current primary.
+  // Bidirectional rule:
+  //   (A) primary.enables_co_leader == X.slug                           — primary invites X.
+  //   (B) X.enables_co_leader == primary.slug AND X.can_join.has(squad) — X allows joining over this primary on this squad.
+  // Either condition makes X a valid secondary. Wardens-of-Ultramar +
+  // Captain Titus is the canonical case: works in both attachment orders.
+  let secondaryCandidates = [];
+  if (current) {
+    let primaryUnit = null;
+    try { primaryUnit = await getUnit(current); } catch {}
+    if (primaryUnit) {
+      const inviteSlug = primaryUnit.enables_co_leader ?? null;
+      if (inviteSlug && cached.unitsBySlug.has(inviteSlug)) {
+        secondaryCandidates.push({ slug: inviteSlug, name: cached.unitsBySlug.get(inviteSlug).name });
+      }
+      for (const [candSlug, info] of cached.unitsBySlug.entries()) {
+        if (candSlug === current) continue;
+        if (secondaryCandidates.some(c => c.slug === candSlug)) continue;
+        let candUnit = null;
+        try { candUnit = await getUnit(candSlug); } catch {}
+        if (!candUnit) continue;
+        const canJoin = (candUnit.can_join ?? []).map(s => String(s).toLowerCase().split('/').pop());
+        if (canJoin.includes(slug) && candUnit.enables_co_leader === current) {
+          secondaryCandidates.push({ slug: candSlug, name: info.name });
+        }
+      }
+    }
+  }
+
+  let coLeaderRendered = false;
+  if (secondaryCandidates.length > 0) {
+    const coHtml = `
+      <div style="font-size:10px;letter-spacing:1.5px;color:var(--dim);margin-top:8px;">CO-LEADER</div>
+      <select id="attach-co-leader" class="select" style="margin-left:0;margin-top:4px;width:100%;">
+        <option value="">(none)</option>
+        ${secondaryCandidates.map(c => `<option value="${escapeHtml(c.slug)}"${c.slug === currentSecondary ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+      </select>
+    `;
+    detailEl.insertAdjacentHTML('beforeend', coHtml);
+    coLeaderRendered = true;
+  }
+
+  const refreshSimAfterAttachChange = async () => {
     const simAttackerEl = document.getElementById('sim-attacker');
     const simDefenderEl = document.getElementById('sim-defender');
     if (simAttackerEl?.value === slug) {
@@ -1587,7 +1828,26 @@ async function renderLeaderControl(unit, ds) {
     if (simDefenderEl?.value === slug) {
       await defaultModelCountFor(simDefenderEl, simDefenderRosterSlug(), 'sim-models', simRolesSwapped ? 'defender' : 'attacker');
     }
+  };
+
+  const sel = document.getElementById('attach-leader');
+  sel.addEventListener('change', async () => {
+    setAttachedLeader(side, slug, sel.value || null);
+    // Re-render the panel so the CO-LEADER row appears/disappears with the
+    // new primary selection.
+    renderDetailPanel(unit, ds);
+    rerenderBoard();
+    await refreshSimAfterAttachChange();
   });
+
+  if (coLeaderRendered) {
+    const coSel = document.getElementById('attach-co-leader');
+    coSel.addEventListener('change', async () => {
+      setAttachedSecondaryLeader(side, slug, coSel.value || null);
+      rerenderBoard();
+      await refreshSimAfterAttachChange();
+    });
+  }
 }
 
 // ── Combat sim ────────────────────────────────────────────────────────────────
@@ -1633,40 +1893,67 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       return { ...unit, weapons: filtered };
     };
 
-    const filteredAttacker = attackerInRoster
+    const filteredAttackerEquipped = attackerInRoster
       ? filterEquipped(attackerUnit, attackerInRoster.equippedWeapons)
       : attackerUnit;
-    const filteredDefender = defenderInRoster
+    const filteredDefenderEquipped = defenderInRoster
       ? filterEquipped(defenderUnit, defenderInRoster.equippedWeapons)
       : defenderUnit;
+    // Apply overcharge profile choice — keep only the selected std/oc weapon
+    // for each pair so the simulator does not roll both at once.
+    const filteredAttacker = {
+      ...filteredAttackerEquipped,
+      weapons: applyOverchargeFilter(filteredAttackerEquipped.weapons, simAttackerSide(), attackerSlug),
+    };
+    const filteredDefender = filteredDefenderEquipped;
 
     const attackerModels = Math.max(1, parseInt(document.getElementById('sim-attacker-models').value, 10) || 1);
     // Check whether the sim attacker has an attached leader on the board.
     // The attachment map to consult depends on which battlefield side the
     // sim's attacker is drawn from — see SWAP ROLES.
     const attackerSideForAttachment = simAttackerSide();
-    const attackerLeaderSlug = attachedLeaderSlug(attackerSideForAttachment, attackerSlug);
-    const attachedLeaderUnit = attackerLeaderSlug ? await getUnit(attackerLeaderSlug) : null;
-    const { attacker: rawAttacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels, attachedLeader: attachedLeaderUnit });
+    const attackerLeaderSlugs = attachedLeaderSlugsAll(attackerSideForAttachment, attackerSlug);
+    // Resolve every attached leader (primary + optional secondary) and
+    // apply their own overcharge selections so e.g. Titus's plasma pistol
+    // honours the FIRE MODE toggle.
+    const attachedLeaderUnits = [];
+    for (const leaderSlug of attackerLeaderSlugs) {
+      const raw = await getUnit(leaderSlug);
+      if (!raw) continue;
+      attachedLeaderUnits.push({
+        ...raw,
+        weapons: applyOverchargeFilter(raw.weapons, attackerSideForAttachment, leaderSlug),
+      });
+    }
+    const { attacker: rawAttacker } = buildSimInputs(filteredAttacker, { kind, attacker_model_count: attackerModels, attachedLeaders: attachedLeaderUnits });
     const { defender } = buildSimInputs(filteredDefender, { kind: 'all', model_count: modelCount });
 
-    // Merge leader grants into attacker modifiers + every weapon's abilities.
-    function mergeLeaderGrants(attacker, leader) {
-      if (!leader || !leader.grants) return attacker;
-      const grants = leader.grants;
-      // Modifiers go on attacker.modifiers (first-wins; user-specified mods take precedence).
+    // Merge each attached leader's grants into the attacker. Grants stack
+    // across leaders by union (e.g. Wardens of Ultramar + Titus on the
+    // same squad — Titus's [SUSTAINED HITS 1] / re-roll-1s reach every
+    // weapon in the combined unit, including the Wardens' own weapons).
+    // First-wins per key, so duplicate sources don't overwrite a stronger
+    // value already present on a weapon.
+    function mergeLeaderGrants(attacker, leaders) {
+      const list = (Array.isArray(leaders) ? leaders : [leaders]).filter(l => l && l.grants);
+      if (list.length === 0) return attacker;
       const mods = { ...(attacker.modifiers ?? {}) };
-      if (grants.modifiers) {
-        for (const [k, v] of Object.entries(grants.modifiers)) {
-          if (mods[k] == null) mods[k] = v;
+      for (const leader of list) {
+        const g = leader.grants;
+        if (g.modifiers) {
+          for (const [k, v] of Object.entries(g.modifiers)) {
+            if (mods[k] == null) mods[k] = v;
+          }
         }
       }
-      // weapon_abilities OR into every weapon's abilities.
       const weapons = (attacker.weapons ?? []).map(w => {
         const merged = { ...(w.abilities ?? {}) };
-        if (grants.weapon_abilities) {
-          for (const [k, v] of Object.entries(grants.weapon_abilities)) {
-            if (merged[k] == null) merged[k] = v;
+        for (const leader of list) {
+          const g = leader.grants;
+          if (g.weapon_abilities) {
+            for (const [k, v] of Object.entries(g.weapon_abilities)) {
+              if (merged[k] == null) merged[k] = v;
+            }
           }
         }
         return { ...w, abilities: merged };
@@ -1674,7 +1961,7 @@ document.getElementById('sim-run').addEventListener('click', async () => {
       return { ...attacker, weapons, modifiers: mods };
     }
 
-    const attacker = mergeLeaderGrants(rawAttacker, attachedLeaderUnit);
+    const attacker = mergeLeaderGrants(rawAttacker, attachedLeaderUnits);
 
     if (attacker.weapons.length === 0) {
       resultEl.textContent = `${attackerUnit.name} HAS NO ${kind.toUpperCase()} WEAPONS`;
