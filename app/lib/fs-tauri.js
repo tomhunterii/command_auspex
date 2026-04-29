@@ -1,11 +1,11 @@
 // app/lib/fs-tauri.js
 //
-// Thin wrapper over tauri-plugin-fs. All paths are AppData-relative so user-
-// pasted rosters and saved scenarios live in the writable app-data directory
-// alongside the catalogue.db (see src-tauri/src/main.rs install_catalogue).
-//
-// AppData base directory. Matches @tauri-apps/api/path BaseDirectory.AppData.
-const APP_DATA = 2;
+// AppData-relative file IO via custom Tauri commands defined in
+// src-tauri/src/main.rs (user_write_text, user_read_text, user_list_dir,
+// user_file_exists, user_mkdir). Bypasses tauri-plugin-fs's request-body
+// IPC pattern (which mismatches the plain `invoke(cmd, args)` pattern this
+// app uses everywhere else). All paths are relative to app_data_dir; the
+// Rust side rejects absolute paths and traversal.
 
 import { parseFrontmatter } from './yaml-frontmatter.js';
 import { slugify } from './roster-parser.js';
@@ -18,50 +18,29 @@ function ipc() {
 }
 
 async function ensureDir(relPath) {
-  const invoke = ipc();
-  // mkdir is idempotent with recursive: true.
-  await invoke('plugin:fs|mkdir', {
-    path: relPath,
-    options: { baseDir: APP_DATA, recursive: true },
-  });
+  await ipc()('user_mkdir', { path: relPath });
 }
 
 async function readTextFile(relPath) {
-  const invoke = ipc();
-  return invoke('plugin:fs|read_text_file', {
-    path: relPath,
-    options: { baseDir: APP_DATA },
-  });
+  return ipc()('user_read_text', { path: relPath });
 }
 
 async function writeTextFile(relPath, contents) {
-  const invoke = ipc();
-  return invoke('plugin:fs|write_text_file', {
-    path: relPath,
-    contents,
-    options: { baseDir: APP_DATA },
-  });
+  return ipc()('user_write_text', { path: relPath, contents });
 }
 
 async function readDirEntries(relPath) {
-  const invoke = ipc();
   try {
-    return await invoke('plugin:fs|read_dir', {
-      path: relPath,
-      options: { baseDir: APP_DATA },
-    });
+    const names = await ipc()('user_list_dir', { path: relPath });
+    return names.map(name => ({ name }));
   } catch {
     return [];
   }
 }
 
 async function exists(relPath) {
-  const invoke = ipc();
   try {
-    return await invoke('plugin:fs|exists', {
-      path: relPath,
-      options: { baseDir: APP_DATA },
-    });
+    return await ipc()('user_file_exists', { path: relPath });
   } catch {
     return false;
   }

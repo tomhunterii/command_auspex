@@ -1,12 +1,76 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::fs;
+use std::path::{Component, Path, PathBuf};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     Emitter, Manager,
 };
 
 const CATALOGUE_FILENAME: &str = "catalogue.db";
+
+// Resolve a user-supplied relative path under the app-data directory while
+// rejecting path traversal (.. components, absolute paths). Returns the
+// absolute path on success.
+fn resolve_user_path(app: &tauri::AppHandle, rel: &str) -> Result<PathBuf, String> {
+    let rel_path = Path::new(rel);
+    if rel_path.is_absolute() {
+        return Err(format!("absolute paths not allowed: {rel}"));
+    }
+    for c in rel_path.components() {
+        match c {
+            Component::ParentDir => return Err(format!("path traversal not allowed: {rel}")),
+            Component::Prefix(_) | Component::RootDir => return Err(format!("absolute paths not allowed: {rel}")),
+            _ => {}
+        }
+    }
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(base.join(rel_path))
+}
+
+#[tauri::command]
+fn user_write_text(app: tauri::AppHandle, path: String, contents: String) -> Result<(), String> {
+    let abs = resolve_user_path(&app, &path)?;
+    if let Some(parent) = abs.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(&abs, contents).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn user_read_text(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let abs = resolve_user_path(&app, &path)?;
+    fs::read_to_string(&abs).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn user_list_dir(app: tauri::AppHandle, path: String) -> Result<Vec<String>, String> {
+    let abs = resolve_user_path(&app, &path)?;
+    if !abs.exists() { return Ok(Vec::new()); }
+    let entries = fs::read_dir(&abs).map_err(|e| e.to_string())?;
+    let mut names = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if let Some(name) = entry.file_name().to_str() {
+            names.push(name.to_string());
+        }
+    }
+    Ok(names)
+}
+
+#[tauri::command]
+fn user_file_exists(app: tauri::AppHandle, path: String) -> bool {
+    match resolve_user_path(&app, &path) {
+        Ok(abs) => abs.is_file(),
+        Err(_) => false,
+    }
+}
+
+#[tauri::command]
+fn user_mkdir(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let abs = resolve_user_path(&app, &path)?;
+    fs::create_dir_all(&abs).map_err(|e| e.to_string())
+}
 
 // Copy the bundled catalogue.db from the resource directory into the app data
 // directory on every launch so plugin-sql (which always resolves paths relative
@@ -36,6 +100,13 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .invoke_handler(tauri::generate_handler![
+            user_write_text,
+            user_read_text,
+            user_list_dir,
+            user_file_exists,
+            user_mkdir,
+        ])
         .setup(|app| {
             install_catalogue(&app.handle())?;
 

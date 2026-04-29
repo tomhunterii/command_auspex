@@ -1799,14 +1799,24 @@ const saveScenarioModal = document.getElementById('save-scenario-modal');
 const saveScenarioInput = document.getElementById('save-scenario-input');
 
 document.getElementById('save-scenario').addEventListener('click', () => {
-  if (!lastMissionPath || !lastDefenderPath || !lastAttackerPath) {
-    statusEl.textContent = 'NO ENGAGEMENT TO COMMIT · ENGAGE FIRST';
-    return;
+  try {
+    if (!saveScenarioModal || !saveScenarioInput) {
+      statusEl.textContent = 'MACHINE-SPIRIT OBJECTS: SAVE MODAL NOT FOUND IN DOM';
+      console.error('[save-scenario] missing modal:', { saveScenarioModal, saveScenarioInput });
+      return;
+    }
+    if (!lastMissionPath || !lastDefenderPath || !lastAttackerPath) {
+      statusEl.textContent = 'NO ENGAGEMENT TO COMMIT · ENGAGE FIRST';
+      return;
+    }
+    saveScenarioInput.value = currentScenarioName ?? '';
+    saveScenarioModal.classList.add('show');
+    saveScenarioInput.focus();
+    saveScenarioInput.select();
+  } catch (err) {
+    console.error('[save-scenario] click handler threw:', err);
+    statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
   }
-  saveScenarioInput.value = currentScenarioName ?? '';
-  saveScenarioModal.classList.add('show');
-  saveScenarioInput.focus();
-  saveScenarioInput.select();
 });
 
 document.getElementById('save-scenario-cancel').addEventListener('click', () => {
