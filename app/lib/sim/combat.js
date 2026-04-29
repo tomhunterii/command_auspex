@@ -47,9 +47,12 @@ function rollAndMaybeReroll(threshold, rng, rerollPolicy) {
   return { roll, passed: passesRoll(roll, threshold) };
 }
 
-function effectiveSave(armorPlus, ap, invulnPlus, defenderMods, ignoresCover = false) {
+function effectiveSave(armorPlus, ap, invulnPlus, defenderMods, ignoresCover = false, indirectCover = false) {
   let modifiedArmor = armorPlus - ap;
-  if (defenderMods?.cover && !ignoresCover) {
+  // Benefit of Cover applies if the defender is positioned in cover OR
+  // an [INDIRECT FIRE] weapon is firing without line-of-sight at this
+  // target — both gated by [IGNORES COVER] (which trumps either path).
+  if ((defenderMods?.cover || indirectCover) && !ignoresCover) {
     modifiedArmor -= 1;
     // Cover cap: cannot improve armor beyond 3+.
     if (modifiedArmor < 3) modifiedArmor = 3;
@@ -177,7 +180,10 @@ function resolvePostHit(weapon, defender, rng, context, autoWound, attackerMods,
     ? parseSkill(defender.invulnerable)
     : null;
   const ignoresCover = !!ab.ignores_cover;
-  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln, defenderMods, ignoresCover);
+  // INDIRECT FIRE without LoS grants the target Benefit of Cover for
+  // this attack only — separate from the defender's positional cover.
+  const indirectCover = !!ab.indirect_fire && !!context?.firing_indirectly;
+  const save = effectiveSave(armor ?? 7, weapon.ap ?? 0, invuln, defenderMods, ignoresCover, indirectCover);
   const saveRoll = D6(rng);
   if (passesRoll(saveRoll, save)) return { damage: 0, mortal: 0 };
 
@@ -203,6 +209,8 @@ function effectiveHitThreshold(weapon, context, attackerMods) {
   let t = base;
   if (weapon.abilities?.heavy && context?.attacker_stationary) t -= 1;
   if (attackerMods?.plus_one_to_hit) t -= 1;
+  // INDIRECT FIRE without line-of-sight: -1 to hit (raises threshold).
+  if (weapon.abilities?.indirect_fire && context?.firing_indirectly) t += 1;
   // 10th-edition modifier cap: cannot improve to better than 2+.
   if (t < 2) t = 2;
   if (t > 6) t = 6;

@@ -35,6 +35,13 @@ const FLAG_KEYWORDS = new Map([
   // apply against this weapon. Combat engine gates the +1 armor branch
   // in effectiveSave on this flag.
   ['IGNORES COVER',       'ignores_cover'],
+  // INDIRECT FIRE: weapon can target enemy units the firing unit cannot
+  // see. When firing without line-of-sight (`context.firing_indirectly`),
+  // attacks suffer -1 to hit AND the target gets Benefit of Cover.
+  // Targeting permission itself (whether the firer needs LoS) is a
+  // board-state concern outside the sim engine; only the damage-math
+  // penalties live here.
+  ['INDIRECT FIRE',       'indirect_fire'],
 ]);
 
 const SUSTAINED_HITS_RE = /^SUSTAINED HITS\s*(\d*)$/;

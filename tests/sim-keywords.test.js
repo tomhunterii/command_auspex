@@ -465,6 +465,74 @@ test('parseKeywords: IGNORES COVER parses as a flag (not unmodelled)', () => {
   assert.strictEqual(k.unmodelled, undefined);
 });
 
+test('parseKeywords: INDIRECT FIRE parses as a flag (not unmodelled)', () => {
+  const k = parseKeywords('[INDIRECT FIRE]');
+  assert.strictEqual(k.indirect_fire, true);
+  assert.strictEqual(k.unmodelled, undefined);
+});
+
+test('Indirect Fire: firing without LoS applies -1 to hit + Benefit of Cover', () => {
+  // 12 attacks, BS 4+. Without indirect: hits on 4+ (3/6).
+  // With indirect (firing_indirectly=true): -1 to hit → hits on 5+ (2/6).
+  // S=100 vs T=1: auto-wound (5/6 success accounting for nat-1 fail).
+  // Defender 4+ Sv: indirect grants cover → 4+ → 3+ (2/6 fail save).
+  // Per attack: 2/6 (hit) × 5/6 (wound) × 2/6 (fail save) ≈ 0.0926.
+  // 12 × 0.0926 ≈ 1.11 wounds.
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'mortar', kind: 'ranged', range_in: 48, attacks: '12',
+        skill: '4+', strength: 100, ap: 0, damage: '1',
+        abilities: { indirect_fire: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '4+', wounds_per_model: 100, model_count: 1 },
+    context: { firing_indirectly: true },
+    trials: 50000,
+  });
+  within(r.expected_wounds_dealt, 1.11, 0.30);
+});
+
+test('Indirect Fire: with line-of-sight (firing_indirectly=false) — no penalty', () => {
+  // Same weapon, but firing_indirectly is unset/false → no -1 to hit,
+  // no cover. Per attack: 3/6 × 5/6 × 3/6 ≈ 0.208. 12 × 0.208 ≈ 2.50.
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'mortar', kind: 'ranged', range_in: 48, attacks: '12',
+        skill: '4+', strength: 100, ap: 0, damage: '1',
+        abilities: { indirect_fire: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '4+', wounds_per_model: 100, model_count: 1 },
+    trials: 50000,
+  });
+  within(r.expected_wounds_dealt, 2.50, 0.30);
+});
+
+test('Indirect Fire + Ignores Cover: indirect grants cover, ignores_cover trumps it', () => {
+  // Hypothetical edge case: a weapon with BOTH [INDIRECT FIRE] and
+  // [IGNORES COVER]. Firing indirectly still applies the -1 to hit, but
+  // the granted cover is ignored. Per attack: 2/6 × 5/6 × 3/6 ≈ 0.139.
+  // 12 × 0.139 ≈ 1.67. (Higher than the cover-applies case 1.11 above.)
+  const r = simulate({
+    attacker: {
+      weapons: [{
+        name: 'haywire', kind: 'ranged', range_in: 48, attacks: '12',
+        skill: '4+', strength: 100, ap: 0, damage: '1',
+        abilities: { indirect_fire: true, ignores_cover: true },
+      }],
+      model_count: 1,
+    },
+    defender: { toughness: 1, save: '4+', wounds_per_model: 100, model_count: 1 },
+    context: { firing_indirectly: true },
+    trials: 50000,
+  });
+  within(r.expected_wounds_dealt, 1.67, 0.30);
+});
+
 // --- Pass B simulator effects ---
 
 test('Heavy: +1 to hit when attacker_stationary is true', () => {
