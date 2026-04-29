@@ -72,6 +72,14 @@ test('parseDatasheet extracts unit name from title', () => {
   assert.strictEqual(ds.name, 'Intercessor Squad');
 });
 
+test('parseDatasheet ignores YAML # comments in frontmatter when reading title', () => {
+  // The Wardens datasheet has YAML comments in the frontmatter that begin
+  // with `#` and would, without frontmatter stripping, be matched by the
+  // markdown H1 regex and appear as the unit name.
+  const ds = parseDatasheet(load('wardens-of-ultramar'));
+  assert.strictEqual(ds.name, 'Wardens of Ultramar');
+});
+
 test('parseDatasheet extracts per-model bases from Wardens of Ultramar', () => {
   const ds = parseDatasheet(load('wardens-of-ultramar'));
   assert.ok(Array.isArray(ds.base.per_model), 'per_model should be an array');

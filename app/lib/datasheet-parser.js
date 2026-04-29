@@ -99,12 +99,16 @@ function parseRanges(body) {
 }
 
 export function parseDatasheet(text) {
-  const titleMatch = /^#\s+(.+)$/m.exec(text);
+  // Strip YAML frontmatter before scanning for the title — otherwise a
+  // YAML `#` comment line ("# Heroes of Ultramar: …") would match the
+  // markdown H1 regex and overwrite the real unit name.
+  const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+  const titleMatch = /^#\s+(.+)$/m.exec(body);
   const name = titleMatch ? titleMatch[1].trim() : null;
 
-  const base = parseBase(extractSection(text, 'Base'));
-  const profile = parseProfile(extractSection(text, 'Profile'));
-  const ranged = extractSection(text, 'Ranged Weapons');
+  const base = parseBase(extractSection(body, 'Base'));
+  const profile = parseProfile(extractSection(body, 'Profile'));
+  const ranged = extractSection(body, 'Ranged Weapons');
   const ranges_in = parseRanges(ranged);
   const max_range_in = ranges_in.length > 0 ? ranges_in[ranges_in.length - 1] : null;
 
