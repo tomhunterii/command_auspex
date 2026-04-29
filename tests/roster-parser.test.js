@@ -153,6 +153,92 @@ test('resolveSlug: exact match takes priority over stripped fallback', () => {
   assert.strictEqual(resolveSlug('Aggressor Squad', candidates), 'space-marines/aggressor-squad');
 });
 
+// ── GW Companion App "v2" continuation-line format (Beast Slayer roster) ────
+// In this variant only the FIRST item in each wargear group keeps the bullet
+// glyph; siblings appear at indent +2 of the bullet's content column with no
+// glyph. A sergeant + body squad with multiple wargear types per submodel
+// would previously: (a) silently drop the continuation lines, AND (b) cause
+// the block-collection loop to terminate early on the first 6-space line,
+// losing the rest of the unit. Both must now parse correctly.
+
+const BEAST_SLAYER = readFileSync(
+  new URL('./fixtures/beast-slayer-roster.txt', import.meta.url),
+  'utf8'
+);
+
+test('beast-slayer: header parses (New Recruit format)', () => {
+  const r = parseRoster(BEAST_SLAYER);
+  assert.strictEqual(r.list_points, 2000);
+  assert.strictEqual(r.faction, 'Space Marines');
+  assert.strictEqual(r.subfaction, 'Space Wolves');
+  assert.strictEqual(r.detachment, 'Saga of the Beastslayer');
+});
+
+test('beast-slayer: all 15 units found', () => {
+  const r = parseRoster(BEAST_SLAYER);
+  assert.strictEqual(r.units.length, 15);
+});
+
+test('beast-slayer: single-model unit (Bjorn) gets all 3 wargear items, not just the first', () => {
+  const r = parseRoster(BEAST_SLAYER);
+  const bjorn = r.units.find(u => u.name === 'Bjorn the Fell-Handed');
+  assert.ok(bjorn, 'Bjorn unit not found');
+  assert.strictEqual(bjorn.total_models, 1);
+  const items = bjorn.models[0].wargear.map(w => w.item);
+  assert.deepStrictEqual(
+    items.sort(),
+    ['Heavy flamer', 'Helfrost cannon', 'Trueclaw'].sort()
+  );
+});
+
+test('beast-slayer: multi-model squad (Wolf Guard Terminators) parses both submodels with full wargear', () => {
+  const r = parseRoster(BEAST_SLAYER);
+  const wgt = r.units.find(u => u.name === 'Wolf Guard Terminators');
+  assert.ok(wgt, 'Wolf Guard Terminators unit not found');
+  // 1 sergeant + 9 body = 10 total models. Previously parser stopped at 1.
+  assert.strictEqual(wgt.total_models, 10);
+  assert.strictEqual(wgt.models.length, 2);
+
+  const sergeant = wgt.models.find(m => m.submodel === 'Wolf Guard Terminator Pack Leader');
+  assert.ok(sergeant);
+  assert.strictEqual(sergeant.count, 1);
+
+  const body = wgt.models.find(m => m.submodel === 'Wolf Guard Terminator');
+  assert.ok(body);
+  assert.strictEqual(body.count, 9);
+  // Body submodel had 4 wargear types (assault cannon, MC power weapon,
+  // power fist, storm shield) — previously only the first survived.
+  const bodyItems = body.wargear.map(w => w.item).sort();
+  assert.deepStrictEqual(
+    bodyItems,
+    ['Assault cannon', 'Master-crafted power weapon', 'Power fist', 'Storm Shield'].sort()
+  );
+});
+
+test('beast-slayer: 10-model squad with mixed wargear (Infernus) survives intact', () => {
+  const r = parseRoster(BEAST_SLAYER);
+  const inf = r.units.find(u => u.name === 'Infernus Squad');
+  assert.ok(inf);
+  assert.strictEqual(inf.total_models, 10);
+  const body = inf.models.find(m => m.submodel === 'Infernus Marine');
+  assert.strictEqual(body.count, 9);
+  assert.strictEqual(body.wargear.length, 3);
+});
+
+test('beast-slayer: enhancement on Wolf Guard Battle Leader captured', () => {
+  const r = parseRoster(BEAST_SLAYER);
+  const wgbl = r.units.find(u => u.name === 'Wolf Guard Battle Leader');
+  assert.ok(wgbl);
+  assert.strictEqual(wgbl.enhancement, "Elder's Guidance");
+});
+
+test('beast-slayer: warlord flag captured on Logan Grimnar', () => {
+  const r = parseRoster(BEAST_SLAYER);
+  const logan = r.units.find(u => u.name === 'Logan Grimnar');
+  assert.ok(logan);
+  assert.strictEqual(logan.warlord, true);
+});
+
 // ── Integration: parseRoster + resolveSlug against real datasheets/ ───────────
 
 test('integration: at least 10 of 16 Norallus units resolve against real datasheets/space-marines/units/', () => {

@@ -50,6 +50,16 @@ const NESTED_BULLET_RE = /^\s{5}◦ (.+?)\s*$/;
 // New Recruit format: column-0 top bullets, 4-space indented nested (same • glyph).
 const TOP_BULLET_NR_RE = /^• (.+?)\s*$/;
 const NESTED_BULLET_NR_RE = /^    • (.+?)\s*$/;
+// GW Companion App "v2" continuation lines: bulletless siblings of the most
+// recent bulleted line. The first item in a wargear group keeps its bullet;
+// subsequent siblings drop the glyph and just sit at indent +2 of the bullet's
+// content column. Top-level siblings appear at 4-space indent (siblings of a
+// 2-space-bulleted line); nested siblings at 6-space (siblings of a 4-space
+// bulleted line). Without these patterns the parser silently drops every line
+// after the first sibling and (worse) the block-collection loop terminates
+// early, losing the rest of the unit.
+const TOP_CONT_RE    = /^    (\d+x .+?)\s*$/;
+const NESTED_CONT_RE = /^      (\d+x .+?)\s*$/;
 const NX_ITEM_RE = /^(\d+)x (.+)$/;
 const ENHANCEMENT_RE = /^enhancements?:\s*(.+)$/i;
 const EXPORT_FOOTER_RE = /^Exported with App Version:\s*(.+?),\s*Data Version:\s*(.+?)\s*$/;
@@ -156,15 +166,33 @@ export function parseRoster(text) {
 
     faction = nextNonblank();
     subfaction = nextNonblank();
-    detachment = nextNonblank();
-
-    const bsLine = nextNonblank();
-    const bsMatch = UNIT_HEADER_RE.exec(bsLine);
-    if (bsMatch) {
-      battle_size_name = bsMatch[1];
-      max_points = parseInt(bsMatch[2].replace(/,/g, ''), 10);
+    // Lines 3 and 4 carry detachment + battle size, but exporters disagree on
+    // order: GW Companion writes detachment first ("Orbital Assault Force",
+    // then "Strike Force (2,000 Points)"); Beast-Slayer-style exports write
+    // battle size first ("Incursion (1000 points)", then "Saga of the
+    // Beastslayer"). Identify the battle-size line by the points pattern;
+    // whichever line doesn't match is the detachment.
+    const lineA = nextNonblank();
+    const lineB = nextNonblank();
+    const aMatch = UNIT_HEADER_RE.exec(lineA);
+    const bMatch = UNIT_HEADER_RE.exec(lineB);
+    if (aMatch && !bMatch) {
+      battle_size_name = aMatch[1];
+      max_points = parseInt(aMatch[2].replace(/,/g, ''), 10);
+      detachment = lineB;
+    } else if (bMatch && !aMatch) {
+      detachment = lineA;
+      battle_size_name = bMatch[1];
+      max_points = parseInt(bMatch[2].replace(/,/g, ''), 10);
+    } else if (bMatch) {
+      // Both look like battle-size lines (rare); keep original ordering.
+      detachment = lineA;
+      battle_size_name = bMatch[1];
+      max_points = parseInt(bMatch[2].replace(/,/g, ''), 10);
     } else {
-      battle_size_name = bsLine;
+      // Neither matches the points pattern — fall back to original ordering.
+      detachment = lineA;
+      battle_size_name = lineB;
     }
   }
 
@@ -199,9 +227,11 @@ export function parseRoster(text) {
       while (i < lines.length) {
         const nxt = lines[i];
         if (nxt.trim() === '') { i++; continue; }
-        // Companion (2-space + 5-space hollow) or New Recruit (col-0 + 4-space).
+        // Companion (2-space + 5-space hollow), New Recruit (col-0 + 4-space •),
+        // or v2 continuation (bulletless sibling at 4-space or 6-space indent).
         if (nxt.startsWith('  •') || nxt.startsWith('     ◦') ||
-            nxt.startsWith('• ') || nxt.startsWith('    • ')) {
+            nxt.startsWith('• ') || nxt.startsWith('    • ') ||
+            TOP_CONT_RE.test(nxt) || NESTED_CONT_RE.test(nxt)) {
           block.push(nxt);
           i++;
           continue;
@@ -240,8 +270,24 @@ function parseUnit(block, section) {
     if (tm) {
       current_top = { content: tm[1].trim(), children: [] };
       entries.push(current_top);
-    } else if (nm && current_top !== null) {
+      continue;
+    }
+    if (nm && current_top !== null) {
       current_top.children.push(nm[1].trim());
+      continue;
+    }
+    // Bulletless continuation (v2 format). 6-space indent = nested sibling
+    // → wargear of current_top; 4-space indent = top-level sibling → new
+    // top entry (treated as flat wargear if the unit has no submodel block).
+    const ncm = NESTED_CONT_RE.exec(raw);
+    if (ncm && current_top !== null) {
+      current_top.children.push(ncm[1].trim());
+      continue;
+    }
+    const tcm = TOP_CONT_RE.exec(raw);
+    if (tcm) {
+      current_top = { content: tcm[1].trim(), children: [] };
+      entries.push(current_top);
     }
   }
 
