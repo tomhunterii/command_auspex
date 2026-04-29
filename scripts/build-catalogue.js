@@ -376,10 +376,12 @@ async function build() {
     }
   }
 
-  // Scenarios (formerly "missions" — renamed to faction-agnostic terminology)
-  const scenariosDir = join(REPO, 'scenarios');
+  // Bundled missions — mirror the datasheets/ layout so the source folder
+  // matches the DB table name. User-saved scenarios live separately under
+  // scenarios/ and are NOT bundled into catalogue.db.
+  const missionsDir = join(REPO, 'missions');
   let missionCount = 0;
-  for (const file of listMarkdownFiles(scenariosDir)) {
+  for (const file of listMarkdownFiles(missionsDir)) {
     await processMission(db, file);
     missionCount++;
   }

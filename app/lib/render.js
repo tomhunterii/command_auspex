@@ -24,6 +24,13 @@ function isSpaceMarine(keywords) {
   return false;
 }
 
+function isUltramarines(keywords) {
+  for (const k of keywords) {
+    if (String(k).toUpperCase() === 'ULTRAMARINES') return true;
+  }
+  return false;
+}
+
 function hasKeyword(keywords, ...wanted) {
   const set = new Set(keywords.map(k => String(k).toUpperCase()));
   return wanted.some(w => set.has(w.toUpperCase()));
@@ -58,6 +65,15 @@ function spaceMarineRoleSymbol(unit) {
   // unit.keywords may be an array of {keyword, ...} or strings — normalize.
   const kws = (unit.keywords ?? []).map(k => (typeof k === 'string' ? k : k?.keyword ?? '')).filter(Boolean);
   if (!isSpaceMarine(kws)) return null;
+  // Ultramarines-locked datasheets (Calgar, Titus, Tigurius, Uriel, Wardens of
+  // Ultramar, Victrix Honour Guard, Sicarius, etc.) — inverted omega (℧,
+  // U+2127). The '^1.4' suffix horizontally stretches the glyph by 1.4× to
+  // restore its natural aspect ratio; without it, JetBrains Mono's monospace
+  // cell crushes ℧ into a narrow column.
+  // Tested first so chapter identity overrides every role-class symbol below.
+  // Warlord crown still wins because that branch lives in modelLabel above
+  // this call.
+  if (isUltramarines(kws)) return '℧^1.4#400';
   // Dreadnoughts (Ballistus, Redemptor, Brutalis, Contemptor, etc.) — Captain
   // groups them with the veteran caste, so they share the templar cross (✠).
   // Tested before VEHICLE because all dreadnoughts carry both keywords.
@@ -72,7 +88,7 @@ function spaceMarineRoleSymbol(unit) {
   // over the FA cross/plus SVGs for the veteran caste.
   if (hasKeyword(kws, 'VETERAN', 'TERMINATOR') || SM_ROLE_VETERAN_SLUGS.test(unit.slug ?? '')) return '✠';
   if (SM_ROLE_FIRE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:angle-up';
-  if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:xmark';
+  if (hasKeyword(kws, 'GRAVIS', 'JUMP PACK', 'PHOBOS') || SM_ROLE_CLOSE_SUPPORT_SLUGS.test(unit.slug ?? '')) return 'icon:arrows-up-down-left-right@45';
   if (hasKeyword(kws, 'BATTLELINE')) return 'icon:chevron-up';
   return null;
 }
@@ -149,12 +165,12 @@ export function modelLabel(submodel, unitMeta) {
   if (unitMeta.warlord && (unitMeta.isLeaderModel || unitMeta.totalUnitModels === 1)) {
     return 'icon:crown';
   }
-  // Sergeant detection by submodel name first — overrides role symbol.
+  // Sergeant detection by submodel name — overrides unit-role / chapter symbols.
+  // Captain's standing rule: the sergeant star always reads first so the
+  // squad's leader is identifiable even inside chapter-locked Ultramarines
+  // squads or class-marked Veteran/Battleline squads.
   const subName = (submodel.submodel ?? '').toLowerCase();
   if (subName.includes('sergeant') || subName.includes('sgt')) return 'icon:star';
-  // Space Marine role symbol — applies to single-model units (vehicles,
-  // characters) too, so a lone Ballistus Dreadnought reads as ▣ and a
-  // standalone Captain reads as ✠.
   const roleSymbol = spaceMarineRoleSymbol(unitMeta.unit) ?? tyranidRoleSymbol(unitMeta.unit);
   if (roleSymbol) return roleSymbol;
   // Single-model units without a role symbol stay clean (no clutter on a
@@ -334,11 +350,6 @@ export function renderBoard(svg, mission) {
   threatLayer.style.display = 'none';
   svg.appendChild(threatLayer);
 
-  // coherency layer (debug; hidden by default)
-  const coherencyLayer = document.createElementNS(SVG_NS, 'g');
-  coherencyLayer.setAttribute('id', 'layer-coherency');
-  coherencyLayer.style.display = 'none';
-  svg.appendChild(coherencyLayer);
 }
 
 function drawPolygon(parent, vertices, fill, stroke, { dashed = false } = {}) {
@@ -581,7 +592,8 @@ export function makeUnitDraggable(group, onDragEnd) {
     dragging = false;
     group.style.cursor = 'grab';
     const transform = group.transform.baseVal.consolidate();
-    onDragEnd?.(transform ? [transform.matrix.e, transform.matrix.f] : [0, 0]);
+    const offset = transform ? [transform.matrix.e, transform.matrix.f] : [0, 0];
+    onDragEnd?.(offset, { group, instanceId: group.dataset.instanceId, side: group.dataset.side });
     // Hide the movement ruler — keep the elements in the DOM for reuse.
     const svg = group.ownerSVGElement;
     if (svg) {
@@ -685,7 +697,21 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
   const maxMm = models.reduce((m, x) => Math.max(m, x.mm), defaultMm);
   const formation = unit._formation ?? 'cluster';
   const perModelPx = models.map(m => baseDiameterPx(m.mm));
-  const offsets = formationOffsets(formation, models.length, baseDiameterPx(maxMm), perModelPx);
+  // Per-unit overrides set by the right-click context menu:
+  //   _spacingGapIn — base-edge-to-base-edge gap, 0..2" (cohesion cap)
+  //   _rotationDeg  — rotates the cluster offsets about the unit center while
+  //                   leaving the per-model icons upright (they're not parented
+  //                   to a rotated <g>, so symbols stay readable)
+  const gapIn = (typeof unit._spacingGapIn === 'number') ? unit._spacingGapIn : 0.5;
+  const rotDeg = (typeof unit._rotationDeg === 'number') ? unit._rotationDeg : 0;
+  const rawOffsets = formationOffsets(formation, models.length, baseDiameterPx(maxMm), perModelPx, gapIn);
+  const offsets = rotDeg
+    ? rawOffsets.map(([x, y]) => {
+        const rad = rotDeg * Math.PI / 180;
+        const c = Math.cos(rad), s = Math.sin(rad);
+        return [x * c - y * s, x * s + y * c];
+      })
+    : rawOffsets;
 
   // Pre-compute label context values once for this unit.
   const totalUnitModels = models.length;
@@ -741,7 +767,13 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
     if (label) {
       if (label.startsWith('icon:')) {
         // SVG sprite icon — emits <use href="#icon-NAME"/> centered on circle.
-        const iconName = label.slice('icon:'.length);
+        // Optional rotation suffix: 'icon:NAME@DEG' rotates DEG degrees about
+        // the circle center (used so close-support arrows-up-down-left-right
+        // sits as an X-with-arrowheads at 45°).
+        const spec = label.slice('icon:'.length);
+        const atIdx = spec.indexOf('@');
+        const iconName = atIdx >= 0 ? spec.slice(0, atIdx) : spec;
+        const rotDeg = atIdx >= 0 ? parseFloat(spec.slice(atIdx + 1)) : 0;
         const useEl = document.createElementNS(SVG_NS, 'use');
         useEl.setAttribute('href', `#icon-${iconName}`);
         const size = Math.max(0.4, r * 1.4);
@@ -751,34 +783,67 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
         useEl.setAttribute('height', String(size));
         useEl.setAttribute('fill', labelColor);
         useEl.setAttribute('pointer-events', 'none');
+        if (rotDeg) useEl.setAttribute('transform', `rotate(${rotDeg} ${circleCx} ${circleCy})`);
         useEl.classList.add('model-label');
         useEl.dataset.unitSlug = unitSlug;
         useEl.dataset.modelIdx = String(i);
         group.appendChild(useEl);
       } else {
         // Existing <text> path for letter labels (weapon codes, fallback).
+        // Optional decorator suffixes after the glyph, any combination, any order:
+        //   '@DEG' — rotate DEG degrees about the circle center
+        //   '^SX'  — horizontally stretch by factor SX about the circle center
+        //            (so Ultramarines ℧ keeps its natural aspect ratio inside
+        //            JetBrains Mono's monospace cell)
+        //   '#W'   — font-weight W (e.g. '#400'); defaults to 700 (bold)
+        const decoratorRe = /[@^#]/;
+        const decoratorMatch = decoratorRe.exec(label);
+        const glyph = decoratorMatch ? label.slice(0, decoratorMatch.index) : label;
+        const readDecorator = (marker, fallback) => {
+          const i = label.indexOf(marker);
+          if (i < 0) return fallback;
+          const rest = label.slice(i + 1);
+          const next = decoratorRe.exec(rest);
+          return parseFloat(next ? rest.slice(0, next.index) : rest);
+        };
+        const rotDeg = readDecorator('@', 0);
+        const xScale = readDecorator('^', 1);
+        const fontWeight = readDecorator('#', 700);
         const text = document.createElementNS(SVG_NS, 'text');
         text.setAttribute('x', String(circleCx));
         text.setAttribute('y', String(circleCy));
         text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('dominant-baseline', 'central');
         text.setAttribute('font-family', "'JetBrains Mono', monospace");
-        text.setAttribute('font-weight', '700');
+        text.setAttribute('font-weight', String(fontWeight));
         // font-size in inches: single-character role glyphs (e.g. ✠) scale
         // to match FA icons; multi-character weapon codes stay tighter at
         // r * 0.55 so 2-3 letter codes still fit. Lower floor prevents
         // invisible glyphs.
-        const isSingleGlyph = [...label].length === 1;
+        const isSingleGlyph = [...glyph].length === 1;
         const fontSize = isSingleGlyph
           ? Math.max(0.4, r * 1.6)
           : Math.max(0.25, r * 0.55);
+        // Vertical centering: dominant-baseline is unreliable across SVG
+        // implementations for symbol/cap glyphs. Use the classic dy=.35em
+        // pattern instead — places the alphabetic baseline below cy so the
+        // glyph's cap/symbol-middle aligns with the circle center.
+        text.setAttribute('dy', '0.35em');
         text.setAttribute('font-size', String(fontSize));
         text.setAttribute('fill', labelColor);
         text.setAttribute('pointer-events', 'none');
+        // Compose rotation + x-stretch about the circle center. Right-to-left
+        // application order: translate to origin, scale, translate back, then
+        // rotate. NaN-safe: parseFloat() failures fall through the truthy guard.
+        const tParts = [];
+        if (rotDeg) tParts.push(`rotate(${rotDeg} ${circleCx} ${circleCy})`);
+        if (xScale && xScale !== 1) {
+          tParts.push(`translate(${circleCx} 0) scale(${xScale} 1) translate(${-circleCx} 0)`);
+        }
+        if (tParts.length) text.setAttribute('transform', tParts.join(' '));
         text.classList.add('model-label');
         text.dataset.unitSlug = unitSlug;
         text.dataset.modelIdx = String(i);
-        text.textContent = label;
+        text.textContent = glyph;
         group.appendChild(text);
       }
 

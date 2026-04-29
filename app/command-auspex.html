@@ -263,6 +263,61 @@
     stroke-dasharray: 3 2;
   }
 
+  /* Right-click unit context menu. Positioned absolute at click point.
+     Hidden by default; .show toggles visibility. */
+  #unit-ctx-menu {
+    position: fixed;
+    z-index: 1100;
+    min-width: 240px;
+    background: rgba(10, 20, 18, 0.96);
+    border: 1px solid var(--phosphor-dim);
+    box-shadow: 0 0 0 1px rgba(111, 255, 142, 0.08), 0 8px 24px rgba(0, 0, 0, 0.6);
+    font-family: 'Bank Gothic', 'JetBrains Mono', monospace;
+    color: var(--paper);
+    padding: 6px 0;
+    display: none;
+    user-select: none;
+  }
+  #unit-ctx-menu.show { display: block; }
+  #unit-ctx-menu .ctx-header {
+    padding: 6px 12px 8px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: var(--phosphor);
+    border-bottom: 1px dashed var(--phosphor-dim);
+    margin-bottom: 6px;
+  }
+  #unit-ctx-menu .ctx-item {
+    padding: 6px 12px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    color: var(--paper);
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+  }
+  #unit-ctx-menu .ctx-item:hover { background: rgba(111, 255, 142, 0.08); color: var(--phosphor); }
+  #unit-ctx-menu .ctx-slider {
+    padding: 4px 12px 8px;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--dim);
+  }
+  #unit-ctx-menu .ctx-slider label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  #unit-ctx-menu .ctx-slider label .ctx-value { color: var(--phosphor); font-family: 'JetBrains Mono', monospace; }
+  #unit-ctx-menu .ctx-slider input[type=range] {
+    width: 100%;
+    accent-color: var(--phosphor);
+  }
+  #unit-ctx-menu hr {
+    border: none;
+    border-top: 1px dashed var(--phosphor-dim);
+    margin: 4px 0;
+  }
+
   .boot-overlay {
     position: fixed;
     inset: 0;
@@ -333,7 +388,6 @@
         <button class="layer-btn active" data-layer="deployment">DEPLOYMENT</button>
         <button class="layer-btn active" data-layer="edges">EDGES</button>
         <button class="layer-btn active" data-layer="scoring">SCORING</button>
-        <button class="layer-btn" data-layer="coherency">COHERENCY (DBG)</button>
         <button class="layer-btn active" data-layer="auspex-sweep">SWEEP</button>
         <button id="fit-view" class="layer-btn" title="Reset view">FIT</button>
       </div>
@@ -528,6 +582,21 @@ const formations = {
   attacker: new Map(),
 };
 
+// Per-unit rotation (degrees) applied to the cluster offsets. Icons stay
+// upright (the rotation is in the offset math, not a parent transform).
+const unitRotations = {
+  defender: new Map(),
+  attacker: new Map(),
+};
+
+// Per-unit base-edge-to-base-edge spacing in inches. 0 = bases touching;
+// cap at 2" per 10th-Ed Unit Coherency. Default 0.5" matches the previous
+// hard-coded gap so existing scenarios render identically.
+const unitSpacings = {
+  defender: new Map(),
+  attacker: new Map(),
+};
+
 // Multi-profile weapon picks (plasma standard/supercharge, melee
 // strike/sweep, ranged witchfire/focused, Norn Tendril modes — all the
 // same feature). Selection is per-(side, slug, canonical-base) and
@@ -575,6 +644,26 @@ function unitFormation(side, squadSlug) {
 function setUnitFormation(side, squadSlug, formationId) {
   if (formationId && formationId !== 'cluster') formations[side].set(squadSlug, formationId);
   else formations[side].delete(squadSlug);
+}
+
+function unitRotation(side, squadSlug) {
+  return unitRotations[side]?.get(squadSlug) ?? 0;
+}
+
+function setUnitRotation(side, squadSlug, deg) {
+  const norm = ((Number(deg) || 0) % 360 + 360) % 360;
+  if (norm) unitRotations[side].set(squadSlug, norm);
+  else unitRotations[side].delete(squadSlug);
+}
+
+function unitSpacing(side, squadSlug) {
+  return unitSpacings[side]?.get(squadSlug) ?? 0.5;
+}
+
+function setUnitSpacing(side, squadSlug, gapIn) {
+  const v = Math.max(0, Math.min(2, Number(gapIn) || 0));
+  if (Math.abs(v - 0.5) > 1e-6) unitSpacings[side].set(squadSlug, v);
+  else unitSpacings[side].delete(squadSlug);
 }
 
 // In-memory record of destroyed model indices, keyed by unit slug.
@@ -1102,6 +1191,8 @@ async function loadFromScenario(s) {
     }
   }
   const stagedFormations = { defender: new Map(), attacker: new Map() };
+  const stagedRotations = { defender: new Map(), attacker: new Map() };
+  const stagedSpacings = { defender: new Map(), attacker: new Map() };
 
   const placements = [];
   const candidates = (await listUnits()).map(c => ({ slug: c.slug, faction: c.faction_slug }));
@@ -1138,8 +1229,19 @@ async function loadFromScenario(s) {
       if (formation && formation !== 'cluster') {
         stagedFormations[role].set(_instanceId, formation);
       }
+      const rotationDeg = ((Number(entry.orientation_deg) || 0) % 360 + 360) % 360;
+      if (rotationDeg) stagedRotations[role].set(_instanceId, rotationDeg);
+      const spacingIn = Math.max(0, Math.min(2, Number(entry.spacing_in ?? 0.5)));
+      if (Math.abs(spacingIn - 0.5) > 1e-6) stagedSpacings[role].set(_instanceId, spacingIn);
       placements.push({
-        unit: { ...unit, datasheet: dsSlug, _base: ds.base, _formation: formation },
+        unit: {
+          ...unit,
+          datasheet: dsSlug,
+          _base: ds.base,
+          _formation: formation,
+          _rotationDeg: rotationDeg,
+          _spacingGapIn: spacingIn,
+        },
         datasheet: ds,
         centerIn: entry.position,
         role,
@@ -1152,8 +1254,12 @@ async function loadFromScenario(s) {
   attachments.attacker.clear(); for (const [k, v] of stagedAttachments.attacker) attachments.attacker.set(k, v);
   formations.defender.clear(); for (const [k, v] of stagedFormations.defender) formations.defender.set(k, v);
   formations.attacker.clear(); for (const [k, v] of stagedFormations.attacker) formations.attacker.set(k, v);
+  unitRotations.defender.clear(); for (const [k, v] of stagedRotations.defender) unitRotations.defender.set(k, v);
+  unitRotations.attacker.clear(); for (const [k, v] of stagedRotations.attacker) unitRotations.attacker.set(k, v);
+  unitSpacings.defender.clear(); for (const [k, v] of stagedSpacings.defender) unitSpacings.defender.set(k, v);
+  unitSpacings.attacker.clear(); for (const [k, v] of stagedSpacings.attacker) unitSpacings.attacker.set(k, v);
 
-  renderUnits(svg, applyAttachmentsToPlacements(placements), (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
+  renderUnits(svg, applyAttachmentsToPlacements(placements), handleDragEnd);
   restoreDestroyedVisuals();
 
   // Populate the module-scope caches so hover/click/save all work.
@@ -1209,7 +1315,14 @@ loadBtn.addEventListener('click', async () => {
         const n = slugCounts.get(slug) ?? 0;
         slugCounts.set(slug, n + 1);
         const _instanceId = makeInstanceId(slug, n);
-        const copy = { ...u, datasheet: dsSlug, _base: ds.base, _formation: unitFormation(role, _instanceId) };
+        const copy = {
+          ...u,
+          datasheet: dsSlug,
+          _base: ds.base,
+          _formation: unitFormation(role, _instanceId),
+          _rotationDeg: unitRotation(role, _instanceId),
+          _spacingGapIn: unitSpacing(role, _instanceId),
+        };
         enriched.push({ u: copy, ds, _instanceId });
       }
       const placed = autoPlaceUnits(enriched.map(e => e.u), zonePolygon);
@@ -1247,7 +1360,7 @@ loadBtn.addEventListener('click', async () => {
     for (const p of placements) {
       lastDatasheets.set(p.unit.name, p.datasheet);
     }
-    renderUnits(svg, applyAttachmentsToPlacements(placements), (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
+    renderUnits(svg, applyAttachmentsToPlacements(placements), handleDragEnd);
     restoreDestroyedVisuals();
     lastPlacements = placements;
     lastMissionPath = missionSel.value;
@@ -1360,7 +1473,7 @@ setupPressHoldThreat(boardEl);
 // changes here.
 async function loadIconSprite(svgEl) {
   const ICON_NAMES = [
-    'chevron-up', 'xmark', 'angle-up', 'skull', 'shield', 'robot', 'star',
+    'chevron-up', 'arrows-up-down-left-right', 'angle-up', 'skull', 'shield', 'crown', 'star',
     // Tyranid role markers
     'bug', 'bugs', 'mosquito', 'spider', 'disease',
   ];
@@ -1704,9 +1817,26 @@ function rerenderBoard() {
   if (!lastPlacements || lastPlacements.length === 0) return;
   const svg = document.getElementById('board');
   if (!svg) return;
-  renderUnits(svg, applyAttachmentsToPlacements(lastPlacements), (pos) => { scheduleAutoSave(pos); refreshSimPairLine(); });
+  renderUnits(svg, applyAttachmentsToPlacements(lastPlacements), handleDragEnd);
   restoreDestroyedVisuals();
   refreshSimPairLine();
+}
+
+// Drag-end callback: commit the SVG-translate offset back into
+// `lastPlacements[i].centerIn` so a subsequent rerenderBoard() (e.g. from a
+// rotation/spacing slider, formation change, or attachment edit) redraws
+// the unit at its dragged position instead of teleporting it to the
+// original deployment center.
+function handleDragEnd(pos, ctx) {
+  scheduleAutoSave(pos);
+  refreshSimPairLine();
+  if (!ctx?.instanceId || !lastPlacements) return;
+  const placement = lastPlacements.find(p => p._instanceId === ctx.instanceId);
+  if (!placement) return;
+  placement.centerIn = [placement.centerIn[0] + pos[0], placement.centerIn[1] + pos[1]];
+  // Bake the offset into centerIn and zero the group's transform so the save
+  // path (which adds transform on top of centerIn) doesn't double-count.
+  if (ctx.group) ctx.group.removeAttribute('transform');
 }
 
 // Delegated click on the board: intercept model-circle clicks for destroy toggle.
@@ -1742,6 +1872,131 @@ boardEl.addEventListener('click', (e) => {
   const unit = placement?.unit ?? findUnitByName(unitName);
   const ds = placement?.datasheet ?? lastDatasheets.get(unitName);
   renderDetailPanel(unit, ds, { instanceId });
+});
+
+// ── Right-click context menu ─────────────────────────────────────────────────
+// Per-unit actions reachable directly from the model the captain right-clicked:
+//   * Kill / Revive Model — reuses existing destroyed-models state
+//   * Rotate (slider 0..359°) — rotates the cluster offset math; icons stay upright
+//   * Spacing (slider 0..2") — base-edge gap; default 0.5" matches legacy
+//   * Attach Leader — opens detail panel (existing select)
+//   * Formation — opens detail panel (existing select)
+const ctxMenuEl = document.getElementById('unit-ctx-menu');
+let ctxMenuContext = null; // { side, instanceId, modelIdx, placement }
+
+function hideContextMenu() {
+  ctxMenuEl.classList.remove('show');
+  ctxMenuContext = null;
+}
+
+function buildContextMenuHtml({ unit, modelIdx, side, instanceId }) {
+  const subName = unit.models?.[0]?.submodel ?? unit.name; // first-pass label
+  const dead = isDestroyed(instanceId, modelIdx);
+  const killLabel = dead ? 'REVIVE MODEL' : `KILL MODEL #${modelIdx + 1}`;
+  const rot = unit._rotationDeg ?? 0;
+  const gap = unit._spacingGapIn ?? 0.5;
+  return `
+    <div class="ctx-header">${escapeHtml(unit.name)}</div>
+    <button class="ctx-item" data-act="kill">${killLabel}</button>
+    <hr>
+    <div class="ctx-slider">
+      <label><span>ROTATE</span><span class="ctx-value" id="ctx-rot-val">${Math.round(rot)}°</span></label>
+      <input id="ctx-rot" type="range" min="0" max="359" step="1" value="${Math.round(rot)}">
+    </div>
+    <div class="ctx-slider">
+      <label><span>SPACING</span><span class="ctx-value" id="ctx-spacing-val">${gap.toFixed(2)}"</span></label>
+      <input id="ctx-spacing" type="range" min="0" max="2" step="0.05" value="${gap}">
+    </div>
+    <hr>
+    <button class="ctx-item" data-act="attach">ATTACH LEADER…</button>
+    <button class="ctx-item" data-act="formation">FORMATION…</button>
+  `;
+}
+
+function showContextMenu(clientX, clientY, ctx) {
+  ctxMenuContext = ctx;
+  ctxMenuEl.innerHTML = buildContextMenuHtml(ctx);
+  ctxMenuEl.classList.add('show');
+  // Position; clamp inside viewport.
+  const rect = ctxMenuEl.getBoundingClientRect();
+  const x = Math.min(clientX, window.innerWidth - rect.width - 8);
+  const y = Math.min(clientY, window.innerHeight - rect.height - 8);
+  ctxMenuEl.style.left = `${Math.max(0, x)}px`;
+  ctxMenuEl.style.top = `${Math.max(0, y)}px`;
+
+  // Wire menu items.
+  ctxMenuEl.querySelector('[data-act="kill"]').addEventListener('click', () => {
+    toggleDestroyed(ctx.instanceId, ctx.modelIdx);
+    const circle = boardEl.querySelector(
+      `circle.model-circle[data-instance-id="${CSS.escape(ctx.instanceId)}"][data-model-idx="${ctx.modelIdx}"]`,
+    );
+    if (circle) applyDestroyedVisual(circle, isDestroyed(ctx.instanceId, ctx.modelIdx));
+    refreshSimModelCountsFor(ctx.instanceId);
+    hideContextMenu();
+  });
+
+  const rotInput = ctxMenuEl.querySelector('#ctx-rot');
+  const rotVal = ctxMenuEl.querySelector('#ctx-rot-val');
+  rotInput.addEventListener('input', () => {
+    const deg = Number(rotInput.value);
+    rotVal.textContent = `${deg}°`;
+    setUnitRotation(ctx.side, ctx.instanceId, deg);
+    for (const p of lastPlacements) {
+      if (p.role === ctx.side && p._instanceId === ctx.instanceId) p.unit._rotationDeg = deg;
+    }
+    rerenderBoard();
+  });
+
+  const spacingInput = ctxMenuEl.querySelector('#ctx-spacing');
+  const spacingVal = ctxMenuEl.querySelector('#ctx-spacing-val');
+  spacingInput.addEventListener('input', () => {
+    const gap = Number(spacingInput.value);
+    spacingVal.textContent = `${gap.toFixed(2)}"`;
+    setUnitSpacing(ctx.side, ctx.instanceId, gap);
+    for (const p of lastPlacements) {
+      if (p.role === ctx.side && p._instanceId === ctx.instanceId) p.unit._spacingGapIn = gap;
+    }
+    rerenderBoard();
+  });
+
+  const openDetail = () => {
+    const placement = ctx.placement;
+    const unit = placement?.unit ?? findUnitByName(placement?.unit?.name ?? '');
+    const ds = placement?.datasheet;
+    if (unit && ds) renderDetailPanel(unit, ds, { instanceId: ctx.instanceId });
+    hideContextMenu();
+  };
+  ctxMenuEl.querySelector('[data-act="attach"]').addEventListener('click', openDetail);
+  ctxMenuEl.querySelector('[data-act="formation"]').addEventListener('click', openDetail);
+}
+
+boardEl.addEventListener('contextmenu', (e) => {
+  const target = e.target;
+  if (!(target instanceof SVGElement)) return;
+  const group = target.closest('.unit');
+  if (!group) return;
+  e.preventDefault();
+  const instanceId = group.dataset.instanceId ?? null;
+  const side = group.dataset.side;
+  if (!instanceId) return;
+  // Prefer the model circle the captain clicked on; fall back to model 0
+  // if the click landed on the bracket / label / squad name.
+  const circle = target.closest('circle.model-circle');
+  const modelIdx = circle ? parseInt(circle.dataset.modelIdx, 10) : 0;
+  const placement = lastPlacements.find(p => p._instanceId === instanceId);
+  if (!placement) return;
+  showContextMenu(e.clientX, e.clientY, {
+    side, instanceId, modelIdx: Number.isNaN(modelIdx) ? 0 : modelIdx, placement, unit: placement.unit,
+  });
+});
+
+document.addEventListener('click', (e) => {
+  if (!ctxMenuEl.classList.contains('show')) return;
+  if (ctxMenuEl.contains(e.target)) return;
+  hideContextMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && ctxMenuEl.classList.contains('show')) hideContextMenu();
 });
 
 function escapeHtml(s) {
@@ -1785,7 +2040,8 @@ function buildCurrentScenarioMarkdown(id, name) {
         _instanceId: p._instanceId ?? null,
         role: p.role,
         centerIn: [cx, cy],
-        orientation_deg: 0,
+        orientation_deg: p.unit?._rotationDeg ?? 0,
+        spacing_in: p.unit?._spacingGapIn ?? 0.5,
         placement: 'on_board',
         formation: p.unit?._formation ?? 'cluster',
       };
@@ -2445,5 +2701,6 @@ if (window.__TAURI_INTERNALS__) {
   </div>
 </div>
 <div id="tooltip" class="tooltip"></div>
+<div id="unit-ctx-menu"></div>
 </body>
 </html>

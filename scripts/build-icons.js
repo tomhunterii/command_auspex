@@ -18,11 +18,11 @@ const OUT = join(REPO, 'app', 'vendor', 'icons');
 
 const ICONS = [
   'chevron-up',  // Battleline
-  'xmark',       // Close Support
+  'arrows-up-down-left-right', // Close Support (rotated 45° at render time → an X with arrowheads)
   'angle-up',    // Fire Support
   'skull',       // Leader
   'shield',      // Vehicle (non-walker)
-  'robot',       // Walker (Dreadnoughts, etc.)
+  'crown',       // Warlord
   'star',        // Sergeant
   // Tyranid role markers
   'bug',         // Monster
@@ -30,7 +30,7 @@ const ICONS = [
   'mosquito',    // Tyranid Fly (non-infantry, non-monster)
   'spider',      // Tyranid Infiltrators
   'disease',     // Tyranid Epic Hero
-  // Veterans use unicode ✠ rendered as <text> — no SVG icon needed.
+  // Veterans (and Dreadnoughts) use unicode ✠ rendered as <text> — no SVG icon needed.
 ];
 
 mkdirSync(OUT, { recursive: true });

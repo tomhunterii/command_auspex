@@ -13,10 +13,10 @@ export function baseDiameterPx(mm) {
  * tight hex cluster around the origin. Coherency spacing: gap of
  * 0.5" between base edges (well inside 2" coherency).
  */
-export function clusterOffsets(n, baseDiameterPx) {
+export function clusterOffsets(n, baseDiameterPx, gapIn = 0.5) {
   if (n <= 0) return [];
   if (n === 1) return [[0, 0]];
-  const gap = 0.5 * INCH_PX; // 0.5" gap
+  const gap = gapIn * INCH_PX;
   const step = baseDiameterPx + gap;
   const offsets = [[0, 0]];
   // Place subsequent models in expanding hex rings
@@ -61,7 +61,7 @@ export function clusterOffsets(n, baseDiameterPx) {
  * @param {number[]} diametersPx — one entry per model in placement order
  * @returns {Array<[number, number]>} offsets, length = diametersPx.length
  */
-export function clusterOffsetsMixed(diametersPx) {
+export function clusterOffsetsMixed(diametersPx, gapIn = 0.5) {
   const n = diametersPx.length;
   if (n === 0) return [];
   if (n === 1) return [[0, 0]];
@@ -76,10 +76,10 @@ export function clusterOffsetsMixed(diametersPx) {
   }
 
   // Lay out the lattice using the modal step.
-  const offsets = clusterOffsets(n, modalDia);
+  const offsets = clusterOffsets(n, modalDia, gapIn);
 
   // Push oversize models radially outward.
-  const gap = 0.5 * INCH_PX;
+  const gap = gapIn * INCH_PX;
   for (let i = 0; i < n; i++) {
     const d = diametersPx[i];
     if (d <= modalDia + 1e-6) continue; // rank-and-file or smaller — no push
@@ -114,9 +114,9 @@ export function clusterOffsetsMixed(diametersPx) {
 
 // Center an [rows × cols] rectangular grid of points around the origin,
 // fill row-major up to `n` slots, return [dx, dy] inches per slot.
-function gridOffsetsRowMajor(n, baseDiameterPx, rows, cols) {
+function gridOffsetsRowMajor(n, baseDiameterPx, rows, cols, gapIn = 0.5) {
   if (n <= 0) return [];
-  const gap = 0.5 * INCH_PX;
+  const gap = gapIn * INCH_PX;
   const step = baseDiameterPx + gap;
   const x0 = -((cols - 1) * step) / 2;
   const y0 = -((rows - 1) * step) / 2;
@@ -130,27 +130,27 @@ function gridOffsetsRowMajor(n, baseDiameterPx, rows, cols) {
 }
 
 // Single-file line. Orientation 'horizontal' = row of n; 'vertical' = column of n.
-export function lineOffsets(n, baseDiameterPx, orientation = 'horizontal') {
+export function lineOffsets(n, baseDiameterPx, orientation = 'horizontal', gapIn = 0.5) {
   const rows = orientation === 'vertical' ? n : 1;
   const cols = orientation === 'vertical' ? 1 : n;
-  return gridOffsetsRowMajor(n, baseDiameterPx, rows, cols);
+  return gridOffsetsRowMajor(n, baseDiameterPx, rows, cols, gapIn);
 }
 
 // Fixed-width column formation, defaults to 2 wide. Fills row-major.
-export function columnOffsets(n, baseDiameterPx, cols = 2) {
+export function columnOffsets(n, baseDiameterPx, cols = 2, gapIn = 0.5) {
   if (n <= 0) return [];
   const c = Math.max(1, Math.min(cols, n));
   const rows = Math.ceil(n / c);
-  return gridOffsetsRowMajor(n, baseDiameterPx, rows, c);
+  return gridOffsetsRowMajor(n, baseDiameterPx, rows, c, gapIn);
 }
 
 // Standard rectangular block — caps row count at `maxRows` (default 4),
 // growing columns as needed. Fills row-major. n=10, maxRows=4 → 3 cols × 4 rows.
-export function standardOffsets(n, baseDiameterPx, maxRows = 4) {
+export function standardOffsets(n, baseDiameterPx, maxRows = 4, gapIn = 0.5) {
   if (n <= 0) return [];
   const cols = Math.max(1, Math.ceil(n / maxRows));
   const rows = Math.min(maxRows, Math.ceil(n / cols));
-  return gridOffsetsRowMajor(n, baseDiameterPx, rows, cols);
+  return gridOffsetsRowMajor(n, baseDiameterPx, rows, cols, gapIn);
 }
 
 // Formation dispatcher. Unknown formations fall back to 'cluster'.
@@ -160,18 +160,21 @@ export function standardOffsets(n, baseDiameterPx, maxRows = 4) {
 // which is the one that benefits (grids/lines pre-commit to a uniform step
 // because they're explicit user choices). When all entries are equal it
 // degrades to the existing uniform-step path.
-export function formationOffsets(formation, n, baseDiameterPx, perModelDiametersPx = null) {
+//
+// Optional `gapIn` overrides the 0.5" default base-edge-to-base-edge gap.
+// Range 0..2 inches (10th-Ed Unit Coherency tops out at 2" between bases).
+export function formationOffsets(formation, n, baseDiameterPx, perModelDiametersPx = null, gapIn = 0.5) {
   if (formation === 'cluster' && perModelDiametersPx && perModelDiametersPx.length === n) {
     const allEqual = perModelDiametersPx.every(d => d === perModelDiametersPx[0]);
-    if (!allEqual) return clusterOffsetsMixed(perModelDiametersPx);
+    if (!allEqual) return clusterOffsetsMixed(perModelDiametersPx, gapIn);
   }
   switch (formation) {
-    case 'line_horizontal': return lineOffsets(n, baseDiameterPx, 'horizontal');
-    case 'line_vertical':   return lineOffsets(n, baseDiameterPx, 'vertical');
-    case 'column':          return columnOffsets(n, baseDiameterPx, 2);
-    case 'standard':        return standardOffsets(n, baseDiameterPx, 4);
+    case 'line_horizontal': return lineOffsets(n, baseDiameterPx, 'horizontal', gapIn);
+    case 'line_vertical':   return lineOffsets(n, baseDiameterPx, 'vertical', gapIn);
+    case 'column':          return columnOffsets(n, baseDiameterPx, 2, gapIn);
+    case 'standard':        return standardOffsets(n, baseDiameterPx, 4, gapIn);
     case 'cluster':
-    default:                return clusterOffsets(n, baseDiameterPx);
+    default:                return clusterOffsets(n, baseDiameterPx, gapIn);
   }
 }
 

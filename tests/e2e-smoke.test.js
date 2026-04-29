@@ -68,7 +68,7 @@ test('smoke: liturgical UI strings applied', () => {
 });
 
 test('smoke: layer toggle buttons present', () => {
-  for (const layer of ['deployment', 'edges', 'scoring', 'coherency', 'auspex-sweep']) {
+  for (const layer of ['deployment', 'edges', 'scoring', 'auspex-sweep']) {
     assert.match(HTML, new RegExp(`data-layer="${layer}"`), `missing layer button ${layer}`);
   }
 });

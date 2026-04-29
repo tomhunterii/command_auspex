@@ -6,13 +6,13 @@ test('buildScenario assembles a scenario from inputs', () => {
   const s = buildScenario({
     id: 'test',
     name: 'Test',
-    missionPath: 'scenarios/purge-and-burn.md',
+    missionPath: 'missions/purge-and-burn.md',
     defender: { rosterPath: 'rosters/x.md', owner: 'Tom' },
     attacker: { rosterPath: null, owner: null },
     placements: [],
   });
   assert.strictEqual(s.id, 'test');
-  assert.strictEqual(s.mission, 'scenarios/purge-and-burn.md');
+  assert.strictEqual(s.mission, 'missions/purge-and-burn.md');
   assert.strictEqual(s.defender.roster, 'rosters/x.md');
 });
 
