@@ -14,9 +14,9 @@ keywords:
   unit: [Infantry, Character, Epic Hero, Tacticus, Grenades, Captain, Titus]
 led_by: []
 grants_to_attached_unit:
-  weapon_abilities:
+  weapon_abilities_ranged:
     sustained_hits: 1
-  description: "While leading a unit, weapons equipped by models in that unit gain [SUSTAINED HITS 1] (Press the Attack)."
+  description: "While leading a unit, RANGED weapons equipped by models in that unit gain [SUSTAINED HITS 1] (Press the Attack)."
 ---
 
 # Captain Titus (Captain Demetrian Titus)

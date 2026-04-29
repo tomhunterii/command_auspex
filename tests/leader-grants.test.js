@@ -77,3 +77,68 @@ test('mergeLeaderGrants: stacks across multiple leaders, first-wins per key', ()
   // leader2's plus_one_to_wound is new — gets in.
   assert.strictEqual(out.modifiers.plus_one_to_wound, true);
 });
+
+// --- per-kind weapon ability filtering ---
+
+const titusRangedOnly = {
+  slug: 'captain-demetrian-titus',
+  grants: {
+    weapon_abilities_ranged: { sustained_hits: 1 },
+  },
+};
+
+test('mergeLeaderGrants: weapon_abilities_ranged lands on ranged weapons only', () => {
+  const ranged = baseWeapon('Bolt rifle');
+  const melee  = { ...baseWeapon('Combat knife'), kind: 'melee' };
+  const attacker = { weapons: [ranged, melee], modifiers: {} };
+  const out = mergeLeaderGrants(attacker, [titusRangedOnly]);
+  assert.strictEqual(out.weapons[0].abilities.sustained_hits, 1, 'ranged got SH 1');
+  assert.strictEqual(out.weapons[1].abilities.sustained_hits, undefined, 'melee did NOT');
+});
+
+test('mergeLeaderGrants: weapon_abilities_melee lands on melee weapons only', () => {
+  const meleeBuff = { grants: { weapon_abilities_melee: { lethal_hits: true } } };
+  const ranged = baseWeapon('Bolt rifle');
+  const melee  = { ...baseWeapon('Power weapon'), kind: 'melee' };
+  const attacker = { weapons: [ranged, melee], modifiers: {} };
+  const out = mergeLeaderGrants(attacker, [meleeBuff]);
+  assert.strictEqual(out.weapons[0].abilities.lethal_hits, undefined, 'ranged did NOT');
+  assert.strictEqual(out.weapons[1].abilities.lethal_hits, true, 'melee got LH');
+});
+
+test('mergeLeaderGrants: weapon_abilities (all-kinds) still applies to both', () => {
+  // Back-compat: the original schema key carries grants for any kind.
+  // Used by Lieutenant Tactical Precision and Apothecary Biologis Surgical
+  // Precision, both of which print "[LETHAL HITS]" with no kind filter.
+  const liutPrecision = { grants: { weapon_abilities: { lethal_hits: true } } };
+  const ranged = baseWeapon('Bolt rifle');
+  const melee  = { ...baseWeapon('Power weapon'), kind: 'melee' };
+  const attacker = { weapons: [ranged, melee], modifiers: {} };
+  const out = mergeLeaderGrants(attacker, [liutPrecision]);
+  assert.strictEqual(out.weapons[0].abilities.lethal_hits, true, 'ranged got LH');
+  assert.strictEqual(out.weapons[1].abilities.lethal_hits, true, 'melee also got LH');
+});
+
+test('mergeLeaderGrants: ranged + melee + all-kinds blocks all stack on the same leader', () => {
+  // Hypothetical leader that grants three different abilities, one per
+  // scope. Each weapon picks up only the abilities applicable to its
+  // kind, plus the all-kinds block.
+  const triple = {
+    grants: {
+      weapon_abilities:        { devastating_wounds: true }, // all kinds
+      weapon_abilities_ranged: { sustained_hits: 1 },
+      weapon_abilities_melee:  { lethal_hits: true },
+    },
+  };
+  const ranged = baseWeapon('Bolt rifle');
+  const melee  = { ...baseWeapon('Power weapon'), kind: 'melee' };
+  const out = mergeLeaderGrants({ weapons: [ranged, melee], modifiers: {} }, [triple]);
+  // Ranged gets all-kinds + ranged-only.
+  assert.strictEqual(out.weapons[0].abilities.devastating_wounds, true);
+  assert.strictEqual(out.weapons[0].abilities.sustained_hits, 1);
+  assert.strictEqual(out.weapons[0].abilities.lethal_hits, undefined);
+  // Melee gets all-kinds + melee-only.
+  assert.strictEqual(out.weapons[1].abilities.devastating_wounds, true);
+  assert.strictEqual(out.weapons[1].abilities.lethal_hits, true);
+  assert.strictEqual(out.weapons[1].abilities.sustained_hits, undefined);
+});
