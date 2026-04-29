@@ -3,6 +3,12 @@
 // Convention: SVG user unit = 1 inch. All coordinates are in inches.
 
 import { baseDiameterPx, clusterOffsets, formationOffsets } from './base-geometry.js';
+import { parseMovement } from './movement.js';
+
+// Movement-line color thresholds.
+const MOVE_COLOR_GUARANTEED = '#6fff8e'; // green
+const MOVE_COLOR_VARIABLE   = '#ffb347'; // amber
+const MOVE_COLOR_OVER       = '#ff5d6c'; // red
 
 // Codex Astartes role markings for Space Marine model circles.
 // Per the 10th-edition unit role classification.
@@ -443,10 +449,57 @@ function clientToSvgPoint(svg, clientX, clientY) {
   return [svgPt.x, svgPt.y];
 }
 
+// Lazy-create the movement-ruler layer (a <g> sibling of #layer-units holding
+// a single <line> + <text> reused across drags). Returns the elements.
+function ensureMoveRulerLayer(svg) {
+  let layer = svg.querySelector('#layer-movement-ruler');
+  if (!layer) {
+    layer = document.createElementNS(SVG_NS, 'g');
+    layer.setAttribute('id', 'layer-movement-ruler');
+    layer.setAttribute('pointer-events', 'none');
+    svg.appendChild(layer);
+  }
+  let line = layer.querySelector('line.move-ruler');
+  let label = layer.querySelector('text.move-ruler-label');
+  if (!line) {
+    line = document.createElementNS(SVG_NS, 'line');
+    line.classList.add('move-ruler');
+    line.setAttribute('stroke-width', '0.08');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('stroke-dasharray', '0.4 0.2');
+    line.setAttribute('display', 'none');
+    layer.appendChild(line);
+  }
+  if (!label) {
+    label = document.createElementNS(SVG_NS, 'text');
+    label.classList.add('move-ruler-label');
+    label.setAttribute('font-family', "'JetBrains Mono', monospace");
+    label.setAttribute('font-weight', '700');
+    label.setAttribute('font-size', '0.6');
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('dominant-baseline', 'central');
+    label.setAttribute('paint-order', 'stroke');
+    label.setAttribute('stroke', '#0f1413');
+    label.setAttribute('stroke-width', '0.05');
+    label.setAttribute('display', 'none');
+    layer.appendChild(label);
+  }
+  return { line, label };
+}
+
+function moveColor(dist, thresholds) {
+  if (!thresholds) return MOVE_COLOR_GUARANTEED;
+  if (dist <= thresholds.min) return MOVE_COLOR_GUARANTEED;
+  if (dist <= thresholds.max) return MOVE_COLOR_VARIABLE;
+  return MOVE_COLOR_OVER;
+}
+
 export function makeUnitDraggable(group, onDragEnd) {
   let dragging = false;
   let startSvg = [0, 0]; // mouse-down position in SVG user units
   let ox = 0, oy = 0;   // group origin (translate) at mouse-down
+  let originSvg = [0, 0]; // pre-drag cluster center in SVG user units
+  let thresholds = null;
   // Track whether the pointer moved enough to be considered a drag.
   // The model-circle click handler reads group.__dragged to skip toggle on drag-end.
   group.__dragged = false;
@@ -458,6 +511,12 @@ export function makeUnitDraggable(group, onDragEnd) {
     startSvg = clientToSvgPoint(svg, e.clientX, e.clientY);
     const transform = group.transform.baseVal.consolidate();
     [ox, oy] = transform ? [transform.matrix.e, transform.matrix.f] : [0, 0];
+    // Anchor the movement line at the cluster's pre-drag CENTER. The center
+    // is captured at render time as data-center-x/y on the unit group.
+    const cx = parseFloat(group.dataset.centerX ?? '0');
+    const cy = parseFloat(group.dataset.centerY ?? '0');
+    originSvg = [cx + ox, cy + oy];
+    thresholds = parseMovement(group.dataset.movementM);
     group.style.cursor = 'grabbing';
     e.preventDefault();
   });
@@ -468,6 +527,23 @@ export function makeUnitDraggable(group, onDragEnd) {
     const dx = curX - startSvg[0], dy = curY - startSvg[1];
     if (Math.hypot(dx, dy) > 0.3) group.__dragged = true; // 0.3" threshold
     group.setAttribute('transform', `translate(${ox + dx}, ${oy + dy})`);
+    // Update the movement-distance ruler.
+    const newCx = originSvg[0] + dx;
+    const newCy = originSvg[1] + dy;
+    const dist = Math.hypot(newCx - originSvg[0], newCy - originSvg[1]);
+    const { line, label } = ensureMoveRulerLayer(svg);
+    const color = moveColor(dist, thresholds);
+    line.setAttribute('x1', originSvg[0]);
+    line.setAttribute('y1', originSvg[1]);
+    line.setAttribute('x2', newCx);
+    line.setAttribute('y2', newCy);
+    line.setAttribute('stroke', color);
+    line.setAttribute('display', '');
+    label.setAttribute('x', newCx);
+    label.setAttribute('y', newCy - 0.6);
+    label.setAttribute('fill', color);
+    label.textContent = `${dist.toFixed(1)}"`;
+    label.setAttribute('display', '');
   });
   window.addEventListener('mouseup', (e) => {
     if (!dragging) return;
@@ -475,6 +551,15 @@ export function makeUnitDraggable(group, onDragEnd) {
     group.style.cursor = 'grab';
     const transform = group.transform.baseVal.consolidate();
     onDragEnd?.(transform ? [transform.matrix.e, transform.matrix.f] : [0, 0]);
+    // Hide the movement ruler — keep the elements in the DOM for reuse.
+    const svg = group.ownerSVGElement;
+    if (svg) {
+      const layer = svg.querySelector('#layer-movement-ruler');
+      const line = layer?.querySelector('line.move-ruler');
+      const label = layer?.querySelector('text.move-ruler-label');
+      if (line) line.setAttribute('display', 'none');
+      if (label) label.setAttribute('display', 'none');
+    }
     // Reset the drag flag after a short delay so the click event (which fires
     // after mouseup) can still read it before we clear it.
     setTimeout(() => { group.__dragged = false; }, 50);
@@ -516,6 +601,10 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
   const group = document.createElementNS(SVG_NS, 'g');
   group.setAttribute('class', `unit unit-${role}`);
   group.dataset.unitName = unit.name;
+  // Datasheet M (e.g. "6\"", "D6+2\"") flows through to the drag handler so
+  // the live movement ruler can color-code distance against the unit's
+  // movement characteristic.
+  group.dataset.movementM = String(datasheet?.profile?.M ?? '');
 
   // Derive bare slug (e.g. 'aggressor-squad') from the datasheet field
   // ('space-marines/aggressor-squad') so it matches the unitsByInstanceId
@@ -534,6 +623,10 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
   const perModel = datasheet?.base?.per_model ?? null;
 
   const [cx, cy] = [centerIn[0], centerIn[1]];
+  // Anchor for the movement-distance line: the cluster center BEFORE any
+  // drag translate is applied. The drag handler reads this back on mousedown.
+  group.dataset.centerX = String(cx);
+  group.dataset.centerY = String(cy);
 
   // Flatten to per-model list. When the datasheet enumerates per-model bases
   // (e.g., Wardens of Ultramar: 2 × 40mm + 4 × 28.5mm), each submodel carries
