@@ -31,6 +31,7 @@ import { simulate } from '../app/lib/sim/combat.js';
 import { buildSimInputs } from '../app/lib/catalogue.js';
 import { parseFrontmatter } from '../app/lib/yaml-frontmatter.js';
 import { findMeleeChoices, applyMeleeSelection } from '../app/lib/melee-selection.js';
+import { mergeLeaderGrants } from '../app/lib/leader-grants.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = dirname(HERE);
@@ -197,19 +198,60 @@ check(
   `e.g. ${[...titusNames].find(n => mergedNames.has(n))}`,
 );
 
-console.log('\nCO-LEADER STACK — simulate() runs end-to-end\n');
-attacker.modifiers = { reroll_hits: 'ones' };
-const r = simulate({
-  attacker,
-  defender,
-  trials: TRIALS,
-  rng,
-  context: { at_half_range: true },
+console.log('\nCO-LEADER STACK — Titus grants flow through mergeLeaderGrants\n');
+const wrappedLeaders = [
+  { unit: wardens, equippedCounts: wardensEc },
+  { unit: titus,   equippedCounts: titusEc   },
+];
+const granted = mergeLeaderGrants(attacker, wrappedLeaders);
+check(
+  'reroll_hits=ones reached the merged attacker modifiers',
+  granted.modifiers?.reroll_hits === 'ones',
+  `modifiers.reroll_hits=${granted.modifiers?.reroll_hits ?? '(unset)'}`,
+);
+const allGotSh = granted.weapons.every(w => w.abilities?.sustained_hits === 1);
+check(
+  'sustained_hits=1 reached every weapon in the merged pool',
+  allGotSh,
+  `${granted.weapons.filter(w => w.abilities?.sustained_hits === 1).length}/${granted.weapons.length} weapons carry SH 1`,
+);
+
+console.log('\nCO-LEADER STACK — simulate() with grants applied (combined ½-range)\n');
+// Without-grants baseline first (re-using the same merged pool but no
+// Titus modifiers / weapon abilities), so the grant effect can be
+// measured directly rather than against a hand-built reference whose
+// equipped loadout differs from the Norallus roster.
+const rNoGrants = simulate({
+  attacker, defender, trials: TRIALS, rng, context: { at_half_range: true },
+});
+const rGranted = simulate({
+  attacker: granted, defender, trials: TRIALS, rng, context: { at_half_range: true },
 });
 check(
-  'simulate() returns finite kill probability',
-  Number.isFinite(r.p_target_destroyed),
-  `P(kill)=${(r.p_target_destroyed * 100).toFixed(1)}%, E[wounds]=${r.expected_wounds_dealt.toFixed(2)}/10`,
+  'simulate() with grants returns finite kill probability',
+  Number.isFinite(rGranted.p_target_destroyed),
+  `P(kill)=${(rGranted.p_target_destroyed * 100).toFixed(1)}%, E[wounds]=${rGranted.expected_wounds_dealt.toFixed(2)}/10`,
+);
+check(
+  `Titus's grants visibly increase expected damage vs ungranted baseline`,
+  rGranted.expected_wounds_dealt > rNoGrants.expected_wounds_dealt + 0.1,
+  `granted=${rGranted.expected_wounds_dealt.toFixed(2)} vs baseline=${rNoGrants.expected_wounds_dealt.toFixed(2)}, Δ=+${(rGranted.expected_wounds_dealt - rNoGrants.expected_wounds_dealt).toFixed(2)}`,
+);
+// Loose hand-built sanity comparison (audit-tyrant-kill.js, no Oath,
+// combined ½-range = 70.7% / 9.27/10). Loadouts differ — Norallus has
+// a sergeant Power fist + 2 heavy bolters that the hand-built reference
+// does not include — so we expect the catalogue path to skew higher.
+// ±20pp / ±1.0 wounds is enough to catch a wiring regression without
+// flagging the legitimate loadout-fidelity uplift.
+check(
+  'P(kill) within 20pp of hand-built reference (~70.7%, loose)',
+  Math.abs(rGranted.p_target_destroyed - 0.707) <= 0.20,
+  `${(rGranted.p_target_destroyed * 100).toFixed(1)}% vs ref 70.7%, Δ=${((rGranted.p_target_destroyed - 0.707) * 100).toFixed(1)}pp`,
+);
+check(
+  'E[wounds] within 1.0 of hand-built reference (~9.27, loose)',
+  Math.abs(rGranted.expected_wounds_dealt - 9.27) <= 1.0,
+  `${rGranted.expected_wounds_dealt.toFixed(2)} vs ref 9.27, Δ=${(rGranted.expected_wounds_dealt - 9.27).toFixed(2)}`,
 );
 
 // Per-submodel allocation check — assert the total merged pool matches
@@ -271,6 +313,13 @@ check(
   ooeMeleeAfter.length === 1 && ooeMeleeAfter[0].name.toLowerCase().includes('strike'),
   ooeMeleeAfter.map(w => w.name).join(', '),
 );
+
+console.log('\nKNOWN LIMITATION (not failing this audit):');
+console.log('  Titus\'s Press the Attack is RANGED-ONLY per the printed datasheet,');
+console.log('  but `grants_to_attached_unit.weapon_abilities` has no kind-filter so');
+console.log('  the merge applies sustained_hits to melee weapons too. Hand-built');
+console.log('  reference (audit-tyrant-kill.js applyTitusGrants) has the same gap.');
+console.log('  Real fix: extend the grants schema to support per-kind targeting.');
 
 console.log(`\n${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);
