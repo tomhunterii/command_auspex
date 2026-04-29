@@ -24,6 +24,13 @@ const FLAG_KEYWORDS = new Map([
   ['ASSAULT',             'assault'],
   ['PISTOL',              'pistol'],
   ['PSYCHIC',             'psychic'],
+  // EXTRA ATTACKS: the weapon's attacks happen IN ADDITION to whichever
+  // primary melee weapon a model fights with. Models with multiple non-
+  // EXTRA-ATTACKS melee weapons must pick ONE per turn; an [EXTRA ATTACKS]
+  // weapon stacks on top regardless of selection. Combat engine treats
+  // these weapons identically — the keyword only matters to the upstream
+  // melee-selection filter (app/lib/melee-selection.js).
+  ['EXTRA ATTACKS',       'extra_attacks'],
 ]);
 
 const SUSTAINED_HITS_RE = /^SUSTAINED HITS\s*(\d*)$/;
