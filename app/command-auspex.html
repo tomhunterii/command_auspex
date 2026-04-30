@@ -600,6 +600,7 @@ import {
   writeFilesystemScenario,
   readFilesystemScenario,
   listFilesystemScenarios,
+  deleteFilesystemScenario,
 } from './lib/fs-tauri.js';
 import {
   upsertRosterInUserSave,
@@ -3070,6 +3071,32 @@ document.getElementById('open-scenario-cancel').addEventListener('click', () => 
   openScenarioModal.classList.remove('show');
 });
 
+// PURGE — delete the currently-selected scenario from app-data. Confirms
+// before deleting; refreshes the dropdown and closes the modal if the
+// archive becomes empty.
+document.getElementById('open-scenario-delete')?.addEventListener('click', async () => {
+  const slug = openScenarioSelect.value;
+  if (!slug) return;
+  const optionText = openScenarioSelect.options[openScenarioSelect.selectedIndex]?.text ?? slug;
+  const ok = confirm(`Purge scenario "${optionText}"?\n\nThis cannot be undone.`);
+  if (!ok) return;
+  try {
+    await deleteFilesystemScenario(slug);
+    const remaining = await listFilesystemScenarios();
+    if (remaining.length === 0) {
+      openScenarioModal.classList.remove('show');
+      statusEl.textContent = 'SCENARIO ARCHIVE EMPTIED';
+      return;
+    }
+    openScenarioSelect.innerHTML = remaining
+      .map(s => `<option value="${s.slug}">${escapeHtml(s.name)}${s.last_modified ? ' · ' + s.last_modified.slice(0, 10) : ''}</option>`)
+      .join('');
+    statusEl.textContent = `SCENARIO PURGED: ${optionText}`;
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT REFUSED: ${err?.message ?? err}`;
+  }
+});
+
 document.getElementById('open-scenario-confirm').addEventListener('click', async () => {
   const slug = openScenarioSelect.value;
   if (!slug) return;
@@ -3674,9 +3701,10 @@ if (window.__TAURI_INTERNALS__) {
 <div id="open-scenario-modal" class="paste-modal">
   <div class="paste-dialog" style="width:520px;">
     <div class="title" style="font-size:13px;">RECALL SCENARIO</div>
-    <div class="status-msg">Pick a scenario from the archive.</div>
+    <div class="status-msg">Pick a scenario from the archive. PURGE removes the selected entry.</div>
     <select id="open-scenario-select" class="select" style="width:100%;margin-top:10px;font-size:12px;"></select>
     <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn delete-roster-btn" id="open-scenario-delete" type="button" style="margin-right:auto;">✕ PURGE</button>
       <button class="btn" id="open-scenario-cancel">CANCEL</button>
       <button class="btn" id="open-scenario-confirm">RECALL</button>
     </div>

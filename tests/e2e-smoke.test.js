@@ -157,6 +157,9 @@ test('smoke: delete-roster buttons present and gated by origin', () => {
   assert.match(HTML, /id="edit-unit-textarea"/);
   assert.match(HTML, /reparse_unit/);
   assert.match(HTML, /function openUnitEditor/);
+  // Scenario purge — RECALL SCENARIO modal carries a delete affordance.
+  assert.match(HTML, /id="open-scenario-delete"/);
+  assert.match(HTML, /deleteFilesystemScenario/);
 });
 
 test('smoke: mission auspex panel + tab toggle present', () => {

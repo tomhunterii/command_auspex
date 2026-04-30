@@ -112,6 +112,12 @@ export async function readFilesystemScenario(slug) {
   return readTextFile(`${SCENARIO_DIR}/${slug}.md`);
 }
 
+// Permanently remove a saved scenario from app-data. Idempotent — a
+// missing file returns success.
+export async function deleteFilesystemScenario(slug) {
+  await deleteFile(`${SCENARIO_DIR}/${slug}.md`);
+}
+
 // Returns: Array<{ slug, name, last_modified }>
 export async function listFilesystemScenarios() {
   const entries = await readDirEntries(SCENARIO_DIR);
