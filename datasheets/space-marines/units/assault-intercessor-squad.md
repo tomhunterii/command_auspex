@@ -26,6 +26,7 @@ led_by:
   - lieutenant
   - marneus-calgar
   - uriel-ventris
+  - wardens-of-ultramar
 ---
 
 # Assault Intercessor Squad

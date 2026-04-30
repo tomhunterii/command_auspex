@@ -29,6 +29,7 @@ led_by:
   - marneus-calgar
   - pedro-kantor
   - uriel-ventris
+  - wardens-of-ultramar
 ---
 
 # Sternguard Veteran Squad

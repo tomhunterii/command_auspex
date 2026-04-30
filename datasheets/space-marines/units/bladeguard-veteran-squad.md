@@ -27,6 +27,7 @@ led_by:
   - marneus-calgar
   - pedro-kantor
   - uriel-ventris
+  - wardens-of-ultramar
 ---
 
 # Bladeguard Veteran Squad
