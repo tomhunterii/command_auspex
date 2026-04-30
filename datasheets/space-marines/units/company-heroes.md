@@ -18,7 +18,7 @@ keywords:
 # (Vulkan omitted — Salamanders character, not in repo.)
 led_by:
   - captain
-  - captain-demetrian-titus
+  - captain-titus
   - kor-sarro-khan
   - lieutenant
   - marneus-calgar

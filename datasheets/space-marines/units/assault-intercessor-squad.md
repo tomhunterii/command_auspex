@@ -18,7 +18,7 @@ led_by:
   - adrax-agatone
   - apothecary
   - captain
-  - captain-demetrian-titus
+  - captain-titus
   - chaplain
   - chief-librarian-tigurius
   - judiciar

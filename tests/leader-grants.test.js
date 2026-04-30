@@ -9,7 +9,7 @@ const baseWeapon = (name, abilities = {}) => ({
 });
 
 const titus = {
-  slug: 'captain-demetrian-titus',
+  slug: 'captain-titus',
   grants: {
     modifiers: { reroll_hits: 'ones' },
     weapon_abilities: { sustained_hits: 1 },
@@ -81,7 +81,7 @@ test('mergeLeaderGrants: stacks across multiple leaders, first-wins per key', ()
 // --- per-kind weapon ability filtering ---
 
 const titusRangedOnly = {
-  slug: 'captain-demetrian-titus',
+  slug: 'captain-titus',
   grants: {
     weapon_abilities_ranged: { sustained_hits: 1 },
   },

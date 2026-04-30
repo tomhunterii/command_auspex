@@ -17,7 +17,7 @@ keywords:
 led_by:
   - adrax-agatone
   - captain
-  - captain-demetrian-titus
+  - captain-titus
   - kor-sarro-khan
   - marneus-calgar
   - uriel-ventris

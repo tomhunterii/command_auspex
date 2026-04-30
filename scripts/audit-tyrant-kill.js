@@ -9,7 +9,7 @@
 // Source datasheets (single source of truth):
 //   datasheets/space-marines/units/sternguard-veteran-squad.md
 //   datasheets/space-marines/units/wardens-of-ultramar.md
-//   datasheets/space-marines/units/captain-demetrian-titus.md
+//   datasheets/space-marines/units/captain-titus.md
 //   datasheets/tyranids/units/hive-tyrant.md
 
 import { simulate } from '../app/lib/sim/combat.js';

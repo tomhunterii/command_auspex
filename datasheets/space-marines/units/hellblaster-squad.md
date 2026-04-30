@@ -18,7 +18,7 @@ led_by:
   - ancient
   - apothecary
   - captain
-  - captain-demetrian-titus
+  - captain-titus
   - chaplain
   - librarian
   - lieutenant

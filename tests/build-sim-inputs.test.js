@@ -198,7 +198,7 @@ test('buildSimInputs: defenderLeader populates the defender.leader sub-object', 
     loadouts: [{ model_count: 10, points: 200, is_default: 1 }],
   };
   const titus = {
-    slug: 'captain-demetrian-titus',
+    slug: 'captain-titus',
     name: 'Captain Titus',
     profile: { T: 4, Sv: '3+', InvSv: '4+', W: 6 },
     keywords: [

@@ -18,7 +18,7 @@ led_by:
   - adrax-agatone
   - bladeguard-ancient
   - captain
-  - captain-demetrian-titus
+  - captain-titus
   - chaplain
   - chief-librarian-tigurius
   - judiciar

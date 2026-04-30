@@ -1,5 +1,5 @@
 ---
-slug: captain-demetrian-titus
+slug: captain-titus
 faction: space-marines
 sub_factions: [adeptus-astartes, ultramarines]
 epic_hero: true
@@ -29,7 +29,7 @@ grants_to_attached_unit:
   description: "While leading a unit, RANGED weapons equipped by models in that unit gain [SUSTAINED HITS 1] (Press the Attack)."
 ---
 
-# Captain Titus (Captain Demetrian Titus)
+# Captain Titus
 
 **Faction:** Space Marines (Ultramarines)
 **Source:** Codex: Space Marines (10th Edition) / Wahapedia — Warhammer Community release tied to Space Marine 2

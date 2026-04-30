@@ -104,7 +104,7 @@ const db = new DatabaseSync(DB_PATH, { readOnly: true });
 
 const sternguard = readUnit(db, 'sternguard-veteran-squad');
 const wardens    = readUnit(db, 'wardens-of-ultramar');
-const titus      = readUnit(db, 'captain-demetrian-titus');
+const titus      = readUnit(db, 'captain-titus');
 const tyrantUnit = readUnit(db, 'hive-tyrant');
 
 if (!sternguard || !wardens || !titus || !tyrantUnit) {
@@ -126,8 +126,8 @@ check(
   `[${wardens.can_join.join(', ')}]`,
 );
 check(
-  'Wardens.enables_co_leader === captain-demetrian-titus',
-  wardens.enables_co_leader === 'captain-demetrian-titus',
+  'Wardens.enables_co_leader === captain-titus',
+  wardens.enables_co_leader === 'captain-titus',
   String(wardens.enables_co_leader),
 );
 check(

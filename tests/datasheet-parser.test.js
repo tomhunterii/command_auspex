@@ -84,7 +84,7 @@ test('parseDatasheet extracts Invulnerable Save from below profile table', () =>
   // Captain Titus prints "**Invulnerable Save:** 4+" below the M/T/Sv/W
   // table; the parser must surface it as profile.InvSv. Without this,
   // the catalogue silently drops every unit's invulnerable save.
-  const ds = parseDatasheet(load('captain-demetrian-titus'));
+  const ds = parseDatasheet(load('captain-titus'));
   assert.strictEqual(ds.profile.InvSv, '4+');
 });
 
