@@ -333,10 +333,14 @@ export async function listRosters() {
     // No Tauri runtime (browser dev) — skip filesystem rosters.
   }
   const seen = new Set(catalogueRows.map(r => r.slug));
-  const merged = [...catalogueRows];
+  // Tag origin so the UI can decide which entries are deletable. Bundled
+  // rows are read-only canonical data baked into catalogue.db at build
+  // time; filesystem rows are user-pasted lists in <app_data>/rosters/
+  // and CAN be deleted via deleteFilesystemRoster().
+  const merged = catalogueRows.map(r => ({ ...r, origin: 'bundled' }));
   for (const r of fsRows) {
     if (!seen.has(r.slug)) {
-      merged.push({ ...r, source_path: `rosters/${r.slug}.md` });
+      merged.push({ ...r, source_path: `rosters/${r.slug}.md`, origin: 'filesystem' });
       seen.add(r.slug);
     }
   }

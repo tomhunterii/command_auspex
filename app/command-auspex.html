@@ -263,6 +263,76 @@
     stroke-dasharray: 3 2;
   }
 
+  /* Compact delete-roster button next to each force dropdown. Disabled
+     by default; enabled only when the dropdown's currently-selected
+     roster is filesystem-pasted (origin=filesystem). Bundled rosters
+     are read-only and the button stays disabled for them. */
+  .delete-roster-btn {
+    margin-left: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--hostile);
+    border-color: var(--hostile);
+  }
+  .delete-roster-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    color: var(--dim);
+    border-color: var(--phosphor-dim);
+  }
+  .delete-roster-btn:not(:disabled):hover {
+    background: rgba(255, 93, 108, 0.15);
+  }
+
+  /* Sidebar auspex-tab toggles — switches between COMBAT and MISSION
+     auspex panels. Bank Gothic for the tab labels (display typography
+     directive). The active tab gets the phosphor outline; inactive tabs
+     are dimmed. */
+  .auspex-tab {
+    background: transparent;
+    color: var(--dim);
+    border: none;
+    padding: 8px 12px;
+    font-family: 'Bank Gothic', 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 3px;
+    cursor: pointer;
+    transition: color 0.1s, background 0.1s;
+  }
+  .auspex-tab:hover { color: var(--paper); }
+  .auspex-tab.active {
+    color: var(--phosphor);
+    background: rgba(111, 255, 142, 0.06);
+  }
+  .auspex-tab + .auspex-tab { border-left: 1px solid var(--phosphor-dim); }
+
+  /* Mission rules panel — body styling. Each rule renders as a
+     name-prefixed block with description text in JetBrains Mono (data
+     typography). Long descriptions wrap; preserved newlines turn into
+     paragraph breaks. */
+  #mission-rules-body .mission-rule {
+    border-top: 1px dashed var(--phosphor-dim);
+    padding: 8px 0;
+  }
+  #mission-rules-body .mission-rule:first-child { border-top: none; padding-top: 0; }
+  #mission-rules-body .mission-rule-name {
+    font-family: 'Bank Gothic', 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--amber);
+    margin-bottom: 4px;
+  }
+  #mission-rules-body .mission-rule-desc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--paper);
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+
   /* Shift+click selection highlight for COMBAT AUSPEX pair. The unit
      group's circles get a phosphor halo so the captain can see at a
      glance which units are wired into the simulator. */
@@ -399,8 +469,8 @@
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
     <div id="controls" style="display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;">
       <label class="status-msg">MISSION <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
-      <label class="status-msg">DEFENDER FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
-      <label class="status-msg">ATTACKER FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
+      <label class="status-msg">DEFENDER FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select><button id="delete-defender" class="btn delete-roster-btn" type="button" disabled title="Delete the user-pasted list selected in this dropdown (bundled lists cannot be deleted)">✕</button></label>
+      <label class="status-msg">ATTACKER FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select><button id="delete-attacker" class="btn delete-roster-btn" type="button" disabled title="Delete the user-pasted list selected in this dropdown (bundled lists cannot be deleted)">✕</button></label>
       <button id="load-scenario" class="btn" disabled>ENGAGE</button>
       <button id="open-scenario" class="btn">RECALL SCENARIO</button>
       <button id="save-scenario" class="btn" disabled>COMMIT TO ARCHIVE</button>
@@ -426,6 +496,10 @@
       </div>
     </div>
     <div class="sidebar" id="sidebar">
+      <div id="auspex-tabs" style="display:flex; gap:0; margin-bottom:0; border:1px solid var(--phosphor-dim); border-bottom:none;">
+        <button class="auspex-tab active" data-tab="combat" type="button" style="flex:1;">⚔ COMBAT</button>
+        <button class="auspex-tab" data-tab="mission" type="button" style="flex:1;">▤ MISSION</button>
+      </div>
       <div class="sim-panel" id="sim-panel" data-ready="false" style="border:1px solid var(--phosphor-dim); padding:12px; margin-bottom:16px; position:relative;">
         <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">⚔ COMBAT AUSPEX</div>
         <div id="sim-gate" style="font-size:11px; color:var(--amber); letter-spacing:1.5px; padding:14px 8px; text-align:center;">
@@ -465,6 +539,12 @@
           <div id="sim-result" class="status-msg" style="margin-top:10px; min-height:60px;"></div>
         </div>
       </div>
+      <div id="mission-panel" style="border:1px solid var(--phosphor-dim); padding:12px; margin-bottom:16px; position:relative; display:none;">
+        <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">▤ MISSION AUSPEX</div>
+        <div id="mission-rules-body">
+          <div class="status-msg">LOAD A MISSION TO REVEAL RULES</div>
+        </div>
+      </div>
       <div id="unit-details-panel" style="border:1px solid var(--phosphor-dim); padding:12px; position:relative;">
         <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">⊙ UNIT DETAILS</div>
         <div id="detail-panel">
@@ -496,6 +576,7 @@ import { mergeLeaderGrants } from './lib/leader-grants.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
 import {
   writeFilesystemRoster,
+  deleteFilesystemRoster,
   writeFilesystemScenario,
   readFilesystemScenario,
   listFilesystemScenarios,
@@ -512,6 +593,7 @@ let lastDefender = null;
 let lastAttacker = null;
 let lastPlacements = [];
 let lastMissionPath = null;
+let lastMissionFrontmatter = null; // parsed frontmatter of currently-loaded mission, drives MISSION AUSPEX
 let lastDefenderPath = null;
 let lastAttackerPath = null;
 let currentScenarioPath = null;
@@ -519,19 +601,46 @@ let currentScenarioName = null;
 let autoSaveTimer = null;
 let rosterDropdownsLoaded = false;
 
+// Origin lookup populated by refreshRosterDropdowns — keyed on slug,
+// values are 'bundled' or 'filesystem'. Bundled rosters are baked into
+// catalogue.db at build time and are read-only; filesystem rosters live
+// in <app_data>/rosters and CAN be deleted via the per-dropdown ✕ button.
+const rosterOriginBySlug = new Map();
+
 // Re-fetch the roster list (catalogue + filesystem-pasted) and rebuild both
 // dropdowns. Preserves whatever the user had selected on each side.
 async function refreshRosterDropdowns({ selectDefender = null, selectAttacker = null } = {}) {
   if (!rosterDropdownsLoaded) return;
   const rosters = await listRosters();
+  rosterOriginBySlug.clear();
+  for (const r of rosters) rosterOriginBySlug.set(r.slug, r.origin ?? 'bundled');
   const optHtml = (items) => '<option value="">— SELECT —</option>' +
-    items.map(i => `<option value="${i.slug}">${i.name}</option>`).join('');
+    items.map(i => {
+      // Append a [USER] tag to filesystem-pasted entries so the captain
+      // can see at a glance which lists are deletable. Bundled (canonical
+      // catalogue) entries print plain.
+      const tag = i.origin === 'filesystem' ? ' [USER]' : '';
+      return `<option value="${i.slug}">${i.name}${tag}</option>`;
+    }).join('');
   const prevDef = defenderSel.value;
   const prevAtt = attackerSel.value;
   defenderSel.innerHTML = optHtml(rosters);
   attackerSel.innerHTML = optHtml(rosters);
   defenderSel.value = selectDefender ?? prevDef ?? '';
   attackerSel.value = selectAttacker ?? prevAtt ?? '';
+  refreshRosterDeleteButtons();
+}
+
+// Enable the per-dropdown ✕ button only when the currently-selected
+// roster is a user-pasted (filesystem) list. Bundled lists keep the
+// button disabled — they can't be deleted from inside the app.
+function refreshRosterDeleteButtons() {
+  const defBtn = document.getElementById('delete-defender');
+  const attBtn = document.getElementById('delete-attacker');
+  const defOrig = rosterOriginBySlug.get(defenderSel.value);
+  const attOrig = rosterOriginBySlug.get(attackerSel.value);
+  if (defBtn) defBtn.disabled = defOrig !== 'filesystem';
+  if (attBtn) attBtn.disabled = attOrig !== 'filesystem';
 }
 
 // Cached parsed rosters for sim filtering. Populated by friendly/hostile
@@ -1097,12 +1206,48 @@ defenderSel.addEventListener('change', async () => {
   friendlyRosterSlug = defenderSel.value || null;
   await ensureRosterCached(friendlyRosterSlug);
   await refreshSimGate();
+  refreshRosterDeleteButtons();
 });
 attackerSel.addEventListener('change', async () => {
   hostileRosterSlug = attackerSel.value || null;
   await ensureRosterCached(hostileRosterSlug);
   await refreshSimGate();
+  refreshRosterDeleteButtons();
 });
+
+// ── Delete-roster buttons ─────────────────────────────────────────────────
+// Each force dropdown has a ✕ button that removes the user-pasted list
+// currently selected in that dropdown. Bundled (catalogue) lists keep the
+// button disabled. Confirmation prompt before delete; rosterCache entry
+// is purged so subsequent reads don't hand back stale parsed state.
+async function handleDeleteRoster(selectEl, label) {
+  const slug = selectEl.value;
+  if (!slug) return;
+  if (rosterOriginBySlug.get(slug) !== 'filesystem') return;
+  const optionText = selectEl.options[selectEl.selectedIndex]?.text ?? slug;
+  const ok = confirm(`Delete the user-pasted list "${optionText.replace(/\s*\[USER\]\s*$/, '')}"?\n\nThis cannot be undone.`);
+  if (!ok) return;
+  try {
+    await deleteFilesystemRoster(slug);
+    rosterCache.delete(slug);
+    // Drop the slug from BOTH dropdowns if either pointed at it.
+    if (defenderSel.value === slug) {
+      defenderSel.value = '';
+      friendlyRosterSlug = null;
+    }
+    if (attackerSel.value === slug) {
+      attackerSel.value = '';
+      hostileRosterSlug = null;
+    }
+    await refreshRosterDropdowns();
+    await refreshSimGate();
+    statusEl.textContent = `LIST PURGED: ${optionText.replace(/\s*\[USER\]\s*$/, '')}`;
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT REFUSED: ${err?.message ?? err}`;
+  }
+}
+document.getElementById('delete-defender')?.addEventListener('click', () => handleDeleteRoster(defenderSel, 'DEFENDER'));
+document.getElementById('delete-attacker')?.addEventListener('click', () => handleDeleteRoster(attackerSel, 'ATTACKER'));
 
 // Auto-populate model count inputs from the roster when a sim unit is selected.
 // Subtracts any destroyed models from the live count. Lookups are per-
@@ -1299,6 +1444,8 @@ async function loadFromScenario(s) {
   lastAttacker = attacker;
   lastPlacements = placements;
   lastMissionPath = s.mission;
+  lastMissionFrontmatter = mission;
+  renderMissionRules(mission);
   lastDefenderPath = s.defender.roster;
   lastAttackerPath = s.attacker.roster;
   lastDatasheets.clear();
@@ -1414,6 +1561,8 @@ loadBtn.addEventListener('click', async () => {
     restoreDestroyedVisuals();
     lastPlacements = placements;
     lastMissionPath = missionSel.value;
+    lastMissionFrontmatter = mission;
+    renderMissionRules(mission);
     lastDefenderPath = defenderSel.value;
     lastAttackerPath = attackerSel.value;
     document.getElementById('save-scenario').disabled = false;
@@ -1748,6 +1897,60 @@ async function refreshSimModelCountsFor(instanceId) {
 }
 
 let simPairLine = null; // SVG <line> drawn between current attacker + defender cluster centroids
+
+// ── MISSION AUSPEX panel ──────────────────────────────────────────────────
+// Renders the loaded mission's `mission_rules` block (parsed YAML
+// frontmatter) into the sidebar. Each rule prints its `name` as a
+// banked-gothic header and its `description` as a wrapping body block.
+// Rules with no description fall back to a `(no description)` italic
+// stub so the captain can see the rule exists but is missing text.
+function renderMissionRules(frontmatter) {
+  const body = document.getElementById('mission-rules-body');
+  if (!body) return;
+  const rules = Array.isArray(frontmatter?.mission_rules) ? frontmatter.mission_rules : [];
+  if (rules.length === 0) {
+    body.innerHTML = `<div class="status-msg">${
+      frontmatter ? 'NO MISSION RULES DEFINED' : 'LOAD A MISSION TO REVEAL RULES'
+    }</div>`;
+    return;
+  }
+  // Mission title at the top so the panel anchors against the right
+  // mission when the captain switches scenarios. Falls back to the slug
+  // if the frontmatter omits a name field (defensive — every bundled
+  // mission has a name).
+  const heading = frontmatter?.name
+    ? `<div style="font-family:'Bank Gothic',sans-serif; font-size:10px; letter-spacing:2px; color:var(--phosphor); margin-bottom:8px;">${escapeHtml(frontmatter.name).toUpperCase()}</div>`
+    : '';
+  const ruleHtml = rules.map(r => {
+    const name = escapeHtml(r?.name ?? r?.id ?? 'Unnamed Rule');
+    const desc = r?.description
+      ? escapeHtml(String(r.description).trim())
+      : '<span style="color:var(--dim); font-style:italic;">(no description)</span>';
+    return `<div class="mission-rule">
+      <div class="mission-rule-name">${name}</div>
+      <div class="mission-rule-desc">${desc}</div>
+    </div>`;
+  }).join('');
+  body.innerHTML = heading + ruleHtml;
+}
+
+// Tab toggle — switches between COMBAT AUSPEX and MISSION AUSPEX panels.
+// One panel visible at a time; #unit-details-panel sits below both and
+// is always visible.
+function setAuspexTab(which) {
+  const combat = document.getElementById('sim-panel');
+  const mission = document.getElementById('mission-panel');
+  if (!combat || !mission) return;
+  const showCombat = (which !== 'mission');
+  combat.style.display = showCombat ? '' : 'none';
+  mission.style.display = showCombat ? 'none' : '';
+  for (const btn of document.querySelectorAll('#auspex-tabs .auspex-tab')) {
+    btn.classList.toggle('active', btn.dataset.tab === (showCombat ? 'combat' : 'mission'));
+  }
+}
+for (const btn of document.querySelectorAll('#auspex-tabs .auspex-tab')) {
+  btn.addEventListener('click', () => setAuspexTab(btn.dataset.tab));
+}
 
 // Render a defender-stat readout under the DEFENDER dropdown so the captain
 // can see what they're attacking into without opening the detail panel.

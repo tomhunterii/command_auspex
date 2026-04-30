@@ -13,7 +13,7 @@ const MOVE_COLOR_OVER       = '#ff5d6c'; // red
 // Codex Astartes role markings for Space Marine model circles.
 // Per the 10th-edition unit role classification.
 const SM_ROLE_CLOSE_SUPPORT_SLUGS = /^(assault[\-_]intercessor|inceptor|reiver|vanguard|bladeguard|jump[\-_]pack)/i;
-const SM_ROLE_FIRE_SUPPORT_SLUGS  = /^(hellblaster|eradicator|devastator|heavy[\-_]intercessor|aggressor)/i;
+const SM_ROLE_FIRE_SUPPORT_SLUGS  = /^(hellblaster|eradicator|devastator|heavy[\-_]intercessor|aggressor|infernus)/i;
 const SM_ROLE_VETERAN_SLUGS       = /^(sternguard|vanguard[\-_]veteran|bladeguard|company[\-_]heroes|victrix[\-_]honour[\-_]guard|terminator|assault[\-_]terminator)/i;
 
 function isSpaceMarine(keywords) {

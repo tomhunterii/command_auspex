@@ -242,6 +242,88 @@ test('buildSimInputs: no defenderLeader → defender.leader undefined (back-comp
   assert.strictEqual(defender.leader, undefined);
 });
 
+test('buildSimInputs: leader weapons fire alongside the squad (ranged)', () => {
+  // Aggressor Squad + Apothecary Biologis: when the captain selects RANGED,
+  // the squad's ranged weapons + the leader's ranged weapons (Absolvor bolt
+  // pistol) all enter the merged weapon pool. Leader's melee (Close combat
+  // weapon) is filtered out by the kind=ranged gate.
+  const aggressors = makeUnit({
+    slug: 'aggressor-squad',
+    weapons: [
+      W('Auto boltstorm gauntlets',     'ranged'),
+      W('Fragstorm grenade launcher',   'ranged'),
+      W('Twin power fists',             'melee'),
+    ],
+    loadouts: [{ model_count: 6, points: 190, is_default: 1 }],
+  });
+  const biologis = makeUnit({
+    slug: 'apothecary-biologis',
+    weapons: [
+      W('Absolvor bolt pistol', 'ranged'),
+      W('Close combat weapon',  'melee'),
+    ],
+    loadouts: [{ model_count: 1, points: 70, is_default: 1 }],
+  });
+  const aggrEc = new Map([
+    ['auto boltstorm gauntlets',   6],
+    ['fragstorm grenade launcher', 6],
+    ['twin power fists',           6],
+  ]);
+  const { attacker } = buildSimInputs(aggressors, {
+    kind: 'ranged',
+    attacker_model_count: 6,
+    equippedCounts: aggrEc,
+    attachedLeaders: [{ unit: biologis, equippedCounts: null }],
+  });
+  const names = attacker.weapons.map(w => w.name);
+  // Squad ranged weapons present at correct counts.
+  assert.strictEqual(names.filter(n => n === 'Auto boltstorm gauntlets').length, 6);
+  assert.strictEqual(names.filter(n => n === 'Fragstorm grenade launcher').length, 6);
+  // Leader's ranged weapon ALSO present — falls back to leader.loadouts[0]
+  // .model_count (=1) when no per-leader equippedCounts is supplied.
+  assert.strictEqual(names.filter(n => n === 'Absolvor bolt pistol').length, 1);
+  // Melee weapons (squad twin power fists, leader close combat weapon) are
+  // gated out by kind=ranged.
+  assert.strictEqual(names.filter(n => n === 'Twin power fists').length, 0);
+  assert.strictEqual(names.filter(n => n === 'Close combat weapon').length, 0);
+});
+
+test('buildSimInputs: leader weapons fire alongside the squad (melee)', () => {
+  // Same Aggressor + Biologis pair, but kind=melee — twin power fists (×6)
+  // and the leader's close combat weapon both enter the pool; ranged drops.
+  const aggressors = makeUnit({
+    slug: 'aggressor-squad',
+    weapons: [
+      W('Auto boltstorm gauntlets',     'ranged'),
+      W('Twin power fists',             'melee'),
+    ],
+    loadouts: [{ model_count: 6, points: 190, is_default: 1 }],
+  });
+  const biologis = makeUnit({
+    slug: 'apothecary-biologis',
+    weapons: [
+      W('Absolvor bolt pistol', 'ranged'),
+      W('Close combat weapon',  'melee'),
+    ],
+    loadouts: [{ model_count: 1, points: 70, is_default: 1 }],
+  });
+  const aggrEc = new Map([
+    ['auto boltstorm gauntlets', 6],
+    ['twin power fists',         6],
+  ]);
+  const { attacker } = buildSimInputs(aggressors, {
+    kind: 'melee',
+    attacker_model_count: 6,
+    equippedCounts: aggrEc,
+    attachedLeaders: [{ unit: biologis, equippedCounts: null }],
+  });
+  const names = attacker.weapons.map(w => w.name);
+  assert.strictEqual(names.filter(n => n === 'Twin power fists').length, 6);
+  assert.strictEqual(names.filter(n => n === 'Close combat weapon').length, 1);
+  assert.strictEqual(names.filter(n => n === 'Auto boltstorm gauntlets').length, 0);
+  assert.strictEqual(names.filter(n => n === 'Absolvor bolt pistol').length, 0);
+});
+
 test('buildSimInputs: defender invulnerable save flows through', () => {
   const tyrant = {
     slug: 'hive-tyrant', name: 'Hive Tyrant',

@@ -72,6 +72,19 @@ fn user_mkdir(app: tauri::AppHandle, path: String) -> Result<(), String> {
     fs::create_dir_all(&abs).map_err(|e| e.to_string())
 }
 
+// Delete a single user-pasted file (e.g. rosters/foo.md). Refuses to remove
+// directories — mass deletion has no UI surface today and a stray slash
+// shouldn't be able to wipe a tree. Idempotent: missing file returns Ok.
+#[tauri::command]
+fn user_delete(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let abs = resolve_user_path(&app, &path)?;
+    if !abs.exists() { return Ok(()); }
+    if abs.is_dir() {
+        return Err(format!("refusing to delete directory: {path}"));
+    }
+    fs::remove_file(&abs).map_err(|e| e.to_string())
+}
+
 // Copy the bundled catalogue.db from the resource directory into the app data
 // directory on every launch so plugin-sql (which always resolves paths relative
 // to BaseDirectory::App) can find it. The bundled DB is read-only canonical
@@ -106,6 +119,7 @@ fn main() {
             user_list_dir,
             user_file_exists,
             user_mkdir,
+            user_delete,
         ])
         .setup(|app| {
             install_catalogue(&app.handle())?;

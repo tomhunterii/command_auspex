@@ -46,6 +46,10 @@ async function exists(relPath) {
   }
 }
 
+async function deleteFile(relPath) {
+  await ipc()('user_delete', { path: relPath });
+}
+
 // ── Rosters (user-pasted, written by VOX-SCRIBE) ───────────────────────────
 
 const ROSTER_DIR = 'rosters';
@@ -61,6 +65,13 @@ export async function readFilesystemRoster(slug) {
 
 export async function filesystemRosterExists(slug) {
   return exists(`${ROSTER_DIR}/${slug}.md`);
+}
+
+// Permanently remove a user-pasted roster from app-data. Idempotent —
+// missing files return success. Bundled (catalogue-baked) rosters CANNOT
+// be deleted via this path; the UI is responsible for gating the affordance.
+export async function deleteFilesystemRoster(slug) {
+  await deleteFile(`${ROSTER_DIR}/${slug}.md`);
 }
 
 // Returns rows in the same shape as catalogue listRosters():

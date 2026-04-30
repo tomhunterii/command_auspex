@@ -130,6 +130,35 @@ test('smoke: combat sim panel + controls present', () => {
   assert.match(HTML, /SELECT BOTH FORCES TO ENGAGE/);
 });
 
+test('smoke: delete-roster buttons present and gated by origin', () => {
+  // ✕ button next to each force dropdown.
+  assert.match(HTML, /id="delete-defender"/);
+  assert.match(HTML, /id="delete-attacker"/);
+  // Origin map + gating helper wired up.
+  assert.match(HTML, /rosterOriginBySlug/);
+  assert.match(HTML, /function refreshRosterDeleteButtons/);
+  // Delete handler imports the filesystem-roster delete function.
+  assert.match(HTML, /deleteFilesystemRoster/);
+  // [USER] tag rendered for filesystem-pasted entries so origin is visible.
+  assert.match(HTML, /\[USER\]/);
+});
+
+test('smoke: mission auspex panel + tab toggle present', () => {
+  // Tab bar — two buttons, one per auspex panel.
+  assert.match(HTML, /id="auspex-tabs"/);
+  assert.match(HTML, /class="auspex-tab[^"]*"\s+data-tab="combat"/);
+  assert.match(HTML, /class="auspex-tab[^"]*"\s+data-tab="mission"/);
+  // Mission panel + body container the renderer writes into.
+  assert.match(HTML, /id="mission-panel"/);
+  assert.match(HTML, /id="mission-rules-body"/);
+  assert.match(HTML, /MISSION AUSPEX/);
+  // Render function + state variable wired up.
+  assert.match(HTML, /function renderMissionRules\(/);
+  assert.match(HTML, /lastMissionFrontmatter/);
+  // Tab switcher hooked up.
+  assert.match(HTML, /function setAuspexTab\(/);
+});
+
 test('smoke: combat sim gates on both rosters being selected', () => {
   assert.match(HTML, /async function refreshSimGate/);
   assert.match(HTML, /populateSimDropdownFromRoster/);
