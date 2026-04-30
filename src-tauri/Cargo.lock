@@ -438,7 +438,7 @@ dependencies = [
 
 [[package]]
 name = "command-auspex"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "once_cell",
  "regex",

@@ -17,15 +17,21 @@
 //       faction_slug: <slug>            # may be null
 //       detachment_slug: <slug>         # may be null
 //       points_cap: <int>               # may be null
+//       units:                          # may be null; VOX-SCRIBE rosters
+//         - name: ...                   # carry a structured unit array
+//           ...                         # parsed from the import frontmatter
 //       body_md: |                      # original roster markdown body
 //         ## CAPTAIN (×1) [80]
 //         - ...
 //
 // Each roster's body_md holds ONLY the markdown body, never the source
-// file's frontmatter — metadata is promoted to top-level fields. On
-// load we synthesize a virtual `frontmatter` object so callers that
-// expect the legacy { frontmatter: {...}, body_md: ... } shape keep
-// working.
+// file's frontmatter — metadata is promoted to top-level fields. The
+// structured unit list (used by VOX-SCRIBE-imported rosters) is also
+// promoted out of frontmatter into the dedicated `units` field; storing
+// it inside body_md would round-trip-strip it. On load we synthesize a
+// virtual `frontmatter` object (including `units` when present) so
+// callers that expect the legacy { frontmatter: {...}, body_md: ... }
+// shape keep working.
 //
 // Migration (one-shot, idempotent): if user-save.md is missing AND
 // <app_data>/rosters/*.md exists, read each old roster, fold its
@@ -89,6 +95,10 @@ function normalizeRoster(entry) {
     faction_slug: entry?.faction_slug ?? null,
     detachment_slug: entry?.detachment_slug ?? null,
     points_cap: entry?.points_cap ?? null,
+    // Structured unit list from VOX-SCRIBE-shaped rosters. Stored as a
+    // first-class field so the round-trip through user-save.md preserves
+    // it — the body-stripped frontmatter approach used to discard it.
+    units: Array.isArray(entry?.units) ? entry.units : null,
     body_md: entry?.body_md ?? '',
   };
 }
@@ -161,6 +171,7 @@ async function readLegacyRosters() {
       faction_slug: fm?.faction ? slugify(fm.faction) : null,
       detachment_slug: fm?.detachment ? slugify(fm.detachment) : null,
       points_cap: fm?.list_points ?? null,
+      units: Array.isArray(fm?.units) ? fm.units : null,
       body_md: body,
     });
   }
@@ -218,17 +229,22 @@ function yamlScalar(s) {
 /// know the user-save format exists.
 export function rosterToLegacyShape(entry) {
   const e = normalizeRoster(entry);
+  const frontmatter = {
+    list_name: e.name,
+    faction: e.faction_slug,
+    detachment: e.detachment_slug,
+    list_points: e.points_cap,
+  };
+  // VOX-SCRIBE rosters carry a structured units array. Surface it on the
+  // synthetic frontmatter so loadRosterFile() finds it without needing to
+  // re-parse body_md (which never held it — units lives on the entry).
+  if (Array.isArray(e.units)) frontmatter.units = e.units;
   return {
     slug: e.slug,
     name: e.name,
     source_path: `user-save.md#${e.slug}`,
     body_md: e.body_md,
-    frontmatter: {
-      list_name: e.name,
-      faction: e.faction_slug,
-      detachment: e.detachment_slug,
-      list_points: e.points_cap,
-    },
+    frontmatter,
     faction_slug: e.faction_slug,
     detachment_slug: e.detachment_slug,
     points_cap: e.points_cap,
@@ -266,15 +282,31 @@ export async function upsertRosterInUserSave(slug, md) {
   const body = stripFrontmatter(md);
   await migrateLegacyRostersIfNeeded();
   const save = await loadUserSave();
+  const idx = save.rosters.findIndex(r => r.slug === slug);
+  // Preserve previously-stored structured units when the new markdown's
+  // frontmatter doesn't carry a units: block. The editor-roster flow
+  // re-emits frontmatter via entryToRosterMarkdown which (deliberately)
+  // omits units; without this merge a hand-edit would silently strip the
+  // VOX-SCRIBE-imported unit list.
+  //
+  // Precedence: incoming wins when present (so a fresh VOX-SCRIBE paste
+  // updates the unit list); null/omitted preserves the prior. To CLEAR
+  // a units list (e.g. converting a structured roster to a hand-edited
+  // shell), the caller must pass an explicit empty array `units: []` —
+  // null/omitted is "leave alone."
+  const incomingUnits = Array.isArray(fm?.units) ? fm.units : null;
+  const priorUnits = idx >= 0 && Array.isArray(save.rosters[idx]?.units)
+    ? save.rosters[idx].units
+    : null;
   const entry = {
     slug,
     name: fm?.list_name ?? slug,
     faction_slug: fm?.faction ? slugify(fm.faction) : null,
     detachment_slug: fm?.detachment ? slugify(fm.detachment) : null,
     points_cap: fm?.list_points ?? null,
+    units: incomingUnits ?? priorUnits,
     body_md: body,
   };
-  const idx = save.rosters.findIndex(r => r.slug === slug);
   if (idx >= 0) save.rosters[idx] = entry;
   else save.rosters.push(entry);
   await saveUserSave(save);

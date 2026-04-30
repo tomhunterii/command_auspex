@@ -863,11 +863,20 @@ async function ensureRosterCached(rosterSlug) {
     rosterCache.set(rosterSlug, null);
     return null;
   }
-  // Parse the frontmatter to get units[].
-  let fm;
-  try {
-    fm = await parseFrontmatter(rosterRecord.body_md);
-  } catch { fm = null; }
+  // user-save rosters carry the structured units array on the synthetic
+  // frontmatter (rosterToLegacyShape). Legacy/catalogue rosters keep it
+  // inside body_md's YAML frontmatter — fall through to a body parse for
+  // those. Without the prefer-frontmatter branch, VOX-SCRIBE-imported
+  // rosters cache an empty unit map and every downstream consumer
+  // silently no-ops. Mirrors the loadRosterFile() resolution at line 1547.
+  let fm = rosterRecord.frontmatter && Array.isArray(rosterRecord.frontmatter.units)
+    ? rosterRecord.frontmatter
+    : null;
+  if (!fm) {
+    try {
+      fm = await parseFrontmatter(rosterRecord.body_md);
+    } catch { fm = null; }
+  }
   // Build an instanceId → unit-info map. Key on instanceId (not slug) so
   // duplicate units (5× Hormagaunts, 2× Carnifexes) get distinct entries.
   // Roster shape: units[].models[].wargear[].item.
@@ -1543,7 +1552,13 @@ async function resolveUnitDatasheet(unit, candidates) {
 async function loadRosterFile(slug) {
   const rosterRecord = await getRoster(slug);
   if (!rosterRecord) throw new Error(`roster not in catalogue: ${slug}`);
-  const fm = await parseFrontmatter(rosterRecord.body_md);
+  // user-save rosters surface their structured `units` on the synthetic
+  // frontmatter (rosterToLegacyShape). Legacy/catalogue rosters carry it
+  // inside body_md's YAML frontmatter, so fall through to a body parse.
+  let fm = rosterRecord.frontmatter && Array.isArray(rosterRecord.frontmatter.units)
+    ? rosterRecord.frontmatter
+    : null;
+  if (!fm) fm = await parseFrontmatter(rosterRecord.body_md);
   if (!fm || !Array.isArray(fm.units)) {
     const name = slug.split('/').pop();
     throw new Error(`${name} has no structured roster frontmatter — paste the GW Companion App export via VOX-SCRIBE to convert it.`);

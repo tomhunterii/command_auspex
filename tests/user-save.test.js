@@ -78,6 +78,7 @@ test('saveUserSave then loadUserSave round-trips a multi-roster save', async () 
           faction_slug: 'space-marines',
           detachment_slug: 'gladius',
           points_cap: 2000,
+          units: null,
           body_md: '## CAPTAIN (×1) [80]\n- bolt pistol\n- master-crafted power weapon',
         },
         {
@@ -86,6 +87,7 @@ test('saveUserSave then loadUserSave round-trips a multi-roster save', async () 
           faction_slug: 'tyranids',
           detachment_slug: null,
           points_cap: 1000,
+          units: null,
           body_md: '## ZOANTHROPES (×3) [110]\n- warp blast',
         },
       ],
@@ -259,6 +261,124 @@ test('entryToRosterMarkdown + upsert round-trips through editor flow', async () 
     assert.strictEqual(after.rosters[0].points_cap, 1500);
     // Body preserved through the round-trip.
     assert.match(after.rosters[0].body_md, /CAPTAIN/);
+  } finally {
+    teardownFakeTauri();
+  }
+});
+
+test('VOX-SCRIBE roster (units in frontmatter, empty body) round-trips through user-save', async () => {
+  setupFakeTauri();
+  try {
+    const { upsertRosterInUserSave, getUserSaveRoster, loadUserSave } = await freshModule();
+    // Mirrors what buildRosterMarkdown emits in command-auspex.html: structured
+    // unit list lives inside the YAML frontmatter, body is minimal markdown.
+    const md = [
+      '---',
+      'list_name: "Purge and Burn"',
+      'list_points: 1000',
+      'faction: "Space Marines"',
+      'subfaction: "Ultramarines"',
+      'detachment: "Gladius Task Force"',
+      'battle_size:',
+      '  name: "Strike Force"',
+      '  max_points: 2000',
+      'export:',
+      '  app_version: "0.0.0"',
+      '  data_version: "0.0.0"',
+      '',
+      'units:',
+      '  - name: "Captain in Terminator Armour"',
+      '    section: "CHARACTERS"',
+      '    points: 95',
+      '    warlord: true',
+      '    enhancement: null',
+      '    total_models: 1',
+      '    models:',
+      '      - submodel: "Captain in Terminator Armour"',
+      '        count: 1',
+      '        wargear:',
+      '          - count: 1',
+      '            item: "Storm bolter"',
+      '  - name: "Terminator Squad"',
+      '    section: "OTHER DATASHEETS"',
+      '    points: 185',
+      '    warlord: false',
+      '    enhancement: null',
+      '    total_models: 5',
+      '    models:',
+      '      - submodel: "Terminator Sergeant"',
+      '        count: 1',
+      '        wargear: []',
+      '      - submodel: "Terminator"',
+      '        count: 4',
+      '        wargear: []',
+      '---',
+      '',
+      '# Purge and Burn',
+    ].join('\n');
+
+    await upsertRosterInUserSave('purge-and-burn', md);
+
+    // The structured units survived the save: they live on the entry,
+    // not in body_md.
+    const save = await loadUserSave();
+    assert.strictEqual(save.rosters.length, 1);
+    const entry = save.rosters[0];
+    assert.ok(Array.isArray(entry.units), 'entry.units must be an array');
+    assert.strictEqual(entry.units.length, 2);
+    assert.strictEqual(entry.units[0].name, 'Captain in Terminator Armour');
+    assert.strictEqual(entry.units[1].total_models, 5);
+
+    // The legacy shape exposes them via synthetic frontmatter so
+    // loadRosterFile() in command-auspex.html (which reads
+    // rosterRecord.frontmatter.units) finds the list.
+    const legacy = await getUserSaveRoster('purge-and-burn');
+    assert.ok(legacy, 'getUserSaveRoster must resolve');
+    assert.ok(Array.isArray(legacy.frontmatter?.units), 'frontmatter.units must surface');
+    assert.strictEqual(legacy.frontmatter.units.length, 2);
+    assert.strictEqual(legacy.frontmatter.list_name, 'Purge and Burn');
+    assert.strictEqual(legacy.frontmatter.list_points, 1000);
+  } finally {
+    teardownFakeTauri();
+  }
+});
+
+test('editor-flow re-save preserves structured units even when text omits them', async () => {
+  setupFakeTauri();
+  try {
+    const { upsertRosterInUserSave, entryToRosterMarkdown, loadUserSave } = await freshModule();
+    // Seed a VOX-SCRIBE-shaped roster.
+    const voxScribeMd = [
+      '---',
+      'list_name: "Bravo"',
+      'list_points: 500',
+      'faction: "Adeptus Custodes"',
+      'units:',
+      '  - name: "Custodian Guard"',
+      '    section: "BATTLELINE"',
+      '    points: 215',
+      '    warlord: false',
+      '    total_models: 5',
+      '    models: []',
+      '---',
+      '',
+      '# Bravo',
+    ].join('\n');
+    await upsertRosterInUserSave('bravo', voxScribeMd);
+
+    // Editor renders the entry to text (drops the units block by design),
+    // user tweaks something unrelated, save back.
+    const save = await loadUserSave();
+    const editorText = entryToRosterMarkdown(save.rosters[0]);
+    assert.doesNotMatch(editorText, /^units:/m, 'editor text must not carry units block');
+    const edited = editorText.replace('Bravo', 'Bravo MK II');
+    await upsertRosterInUserSave('bravo', edited);
+
+    // Structured units survive the editor round-trip.
+    const after = await loadUserSave();
+    assert.strictEqual(after.rosters[0].name, 'Bravo MK II');
+    assert.ok(Array.isArray(after.rosters[0].units));
+    assert.strictEqual(after.rosters[0].units[0].name, 'Custodian Guard');
   } finally {
     teardownFakeTauri();
   }
