@@ -13,7 +13,9 @@ keywords:
   faction: [Adeptus Astartes, Salamanders]
   unit: [Infantry, Character, Epic Hero, Imperium, Tacticus, Captain, Adrax Agatone]
 leads_to:
+  - assault-intercessor-squad
   - bladeguard-veteran-squad
+  - company-heroes
   - infernus-squad
   - intercessor-squad
   - sternguard-veteran-squad

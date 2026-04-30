@@ -13,7 +13,9 @@ keywords:
   faction: [Adeptus Astartes, Ultramarines]
   unit: [Infantry, Character, Epic Hero, Psyker, Imperium, Tacticus, Chief Librarian Tigurius]
 leads_to:
+  - assault-intercessor-squad
   - bladeguard-veteran-squad
+  - desolation-squad
   - intercessor-squad
   - sternguard-veteran-squad
 ---

@@ -13,6 +13,10 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Grenades, Phobos, Captain]
 led_by: []
+leads_to:
+  - incursor-squad
+  - infiltrator-squad
+  - reiver-squad
 grants_to_attached_unit:
   description: "Rites of Battle: once per battle round, one unit from your army with this ability can use it when its unit is targeted with a Stratagem; if it does, reduce the CP cost of that use of that Stratagem by 1CP. Master of Deceit (army-wide redeploy after deployment): if your army includes one or more models with this ability, you can select up to three friendly ADEPTUS ASTARTES INFANTRY units and redeploy all of those units; any of those units can be placed into Strategic Reserves regardless of how many units are already there. While leading a unit, that unit also gains the model's Infiltrators and Stealth Core abilities (positioning, not per-attack)."
   unmodelled: "Rites of Battle is a Stratagem CP-discount, Master of Deceit is a pre-game army-wide redeploy, and Stealth/Infiltrators are positioning and to-hit modifiers tied to the attacker — none of these are per-attack hit/wound rerolls or weapon abilities the engine vocabulary supports."

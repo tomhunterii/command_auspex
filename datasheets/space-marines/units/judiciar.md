@@ -13,6 +13,12 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Tacticus, Judiciar]
 led_by: []
+leads_to:
+  - assault-intercessor-squad
+  - bladeguard-veteran-squad
+  - infernus-squad
+  - intercessor-squad
+  - sternguard-veteran-squad
 grants_to_attached_unit:
   description: "While leading a unit, that unit has the Fights First ability (Tempormortis). Silent Fury (self): each time this model destroys an enemy CHARACTER model, until the end of the battle, add 1 to the Attacks characteristic of its executioner relic blade."
   unmodelled: "Fights First is a turn-order ability the engine does not model; Silent Fury is a self-only conditional Attacks-stack the engine does not track across activations."

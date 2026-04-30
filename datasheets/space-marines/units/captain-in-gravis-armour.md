@@ -13,6 +13,10 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Grenades, Gravis, Captain]
 led_by: []
+leads_to:
+  - aggressor-squad
+  - eradicator-squad
+  - heavy-intercessor-squad
 grants_to_attached_unit:
   description: "While leading a unit, this model's Rites of Battle ability lets one unit from your army with this ability use it once per battle round when targeted with a Stratagem, reducing the CP cost of that Stratagem by 1CP (to a minimum of 0CP). Refuse to Yield: each time an attack is allocated to this model, halve the Damage characteristic of that attack."
   unmodelled: "Rites of Battle is an army-wide CP discount, not a per-attached-unit combat modifier; Refuse to Yield is a self-only damage-halving defensive buff. Engine has no CP/Stratagem economy nor allocated-attack damage modifiers."

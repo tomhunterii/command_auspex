@@ -13,7 +13,9 @@ keywords:
   faction: [Adeptus Astartes, Ultramarines]
   unit: [Infantry, Character, Epic Hero, Imperium, Tacticus, Captain, Uriel Ventris]
 leads_to:
+  - assault-intercessor-squad
   - bladeguard-veteran-squad
+  - company-heroes
   - intercessor-squad
   - sternguard-veteran-squad
   - victrix-honour-guard

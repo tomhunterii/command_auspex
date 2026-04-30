@@ -14,6 +14,7 @@ keywords:
   unit: [Infantry, Character, Epic Hero, Grenades, Imperium, Tacticus, Chapter Master, Pedro Kantor]
 leads_to:
   - bladeguard-veteran-squad
+  - company-heroes
   - sternguard-veteran-squad
 ---
 

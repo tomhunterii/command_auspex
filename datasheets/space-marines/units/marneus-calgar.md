@@ -14,8 +14,11 @@ keywords:
   unit: [Infantry, Character, Epic Hero, Imperium, Terminator, Chapter Master, Marneus Calgar]
 leads_to:
   - aggressor-squad
+  - assault-intercessor-squad
   - bladeguard-veteran-squad
+  - company-heroes
   - eradicator-squad
+  - heavy-intercessor-squad
   - infernus-squad
   - intercessor-squad
   - sternguard-veteran-squad

@@ -13,6 +13,14 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Grenades, Tacticus, Lieutenant]
 led_by: []
+leads_to:
+  - assault-intercessor-squad
+  - bladeguard-veteran-squad
+  - company-heroes
+  - hellblaster-squad
+  - infernus-squad
+  - intercessor-squad
+  - sternguard-veteran-squad
 grants_to_attached_unit:
   weapon_abilities:
     lethal_hits: true

@@ -13,6 +13,10 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Grenades, Psyker, Phobos, Librarian]
 led_by: []
+leads_to:
+  - incursor-squad
+  - infiltrator-squad
+  - reiver-squad
 grants_to_attached_unit:
   description: "Psychic Hood: while this model is leading a unit, models in that unit have the Feel No Pain 4+ ability against Psychic Attacks. Shrouding (Psychic): while this model is leading a unit, models in that unit have the Stealth ability and that unit cannot be targeted by ranged attacks unless the attacking model is within 12\"."
   unmodelled: "Psychic Hood is a conditional FNP that only applies versus Psychic Attacks (the engine has no per-attack-type FNP gate); Shrouding stacks Stealth (a to-hit modifier on the attacker) plus a 12\" line-of-sight/targeting restriction the engine vocabulary does not model."

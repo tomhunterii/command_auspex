@@ -13,6 +13,10 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Gravis, Apothecary, Biologis]
 led_by: []
+leads_to:
+  - aggressor-squad
+  - eradicator-squad
+  - heavy-intercessor-squad
 grants_to_attached_unit:
   weapon_abilities:
     lethal_hits: true

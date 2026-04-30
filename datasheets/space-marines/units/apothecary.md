@@ -13,6 +13,13 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Grenades, Tacticus, Apothecary]
 led_by: []
+leads_to:
+  - assault-intercessor-squad
+  - desolation-squad
+  - hellblaster-squad
+  - infernus-squad
+  - intercessor-squad
+  - sternguard-veteran-squad
 grants_to_attached_unit:
   description: "While leading a unit, in your Command phase, you can return 1 destroyed model (excluding CHARACTER models) to that unit (Narthecium). When this model's Bodyguard unit is destroyed, roll one D6: on a 2+, you gain 1CP (Gene-seed Recovery)."
 ---

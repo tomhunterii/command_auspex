@@ -13,6 +13,10 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Grenades, Phobos, Lieutenant]
 led_by: []
+leads_to:
+  - incursor-squad
+  - infiltrator-squad
+  - reiver-squad
 grants_to_attached_unit:
   weapon_abilities:
     lethal_hits: true

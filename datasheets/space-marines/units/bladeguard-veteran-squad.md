@@ -16,6 +16,7 @@ keywords:
   unit: [Infantry, Grenades, Tacticus, Bladeguard Veteran Squad]
 led_by:
   - adrax-agatone
+  - bladeguard-ancient
   - captain
   - captain-demetrian-titus
   - chaplain

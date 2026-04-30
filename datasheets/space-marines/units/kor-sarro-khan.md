@@ -13,7 +13,9 @@ keywords:
   faction: [Adeptus Astartes, White Scars]
   unit: [Infantry, Character, Epic Hero, Imperium, Tacticus, Captain, Kor'sarro Khan]
 leads_to:
+  - assault-intercessor-squad
   - bladeguard-veteran-squad
+  - company-heroes
   - intercessor-squad
   - sternguard-veteran-squad
   - victrix-honour-guard

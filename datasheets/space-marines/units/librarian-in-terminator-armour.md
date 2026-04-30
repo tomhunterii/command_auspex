@@ -7,7 +7,7 @@ battleline: false
 is_character: true
 loadouts:
   - models: 1
-    points: 85
+    points: 75
     default: true
 keywords:
   faction: [Adeptus Astartes, Imperium]
@@ -60,9 +60,9 @@ grants_to_attached_unit:
 | Combi-weapon                    | 24"   | 1  | 4+ | 4 | 0  | 1  | [ANTI-INFANTRY 4+], [DEVASTATING WOUNDS], [RAPID FIRE 1] |
 | Storm bolter                    | 24"   | 2  | 3+ | 4 | 0  | 1  | [RAPID FIRE 2]                              |
 | Smite – witchfire               | 24"   | D6 | 3+ | 5 | -1 | D3 | [PSYCHIC]                                   |
-| Smite – focused witchfire       | 24"   | D6 | 3+ | 6 | -2 | D3 | [PSYCHIC]                                   |
+| Smite – focused witchfire       | 24"   | D6 | 3+ | 6 | -2 | D3 | [PSYCHIC], [DEVASTATING WOUNDS], [HAZARDOUS] |
 
-> Smite is a profile-pick weapon — witchfire vs. focused witchfire. <!-- TODO: backfill exact PSYCHIC keyword wording from final codex if it differs -->
+> Smite is a profile-pick weapon — witchfire (sweep) vs. focused witchfire (single-target). The focused profile carries [DEVASTATING WOUNDS] and [HAZARDOUS] per Wahapedia / Codex.
 
 ---
 
@@ -121,16 +121,16 @@ This model can be attached to the following units:
 
 ## Points
 
-**85 points** (1 model)
+**75 points** (1 model, base datasheet cost)
 
-> **Conflict flagged:** Wahapedia currently shows 75 pts for this datasheet. Captain Hunter's rosters (2000pt-list.md, 3000pt-list.md) and MFM v3.9 are recorded at **85 pts**. Per standing MFM-skepticism directive, the Captain's roster value is preferred — the Wahapedia value is older indexing. Confirm against latest MFM v3.9 PDF before list submission.
+> The 3000pt-list.md entry shows **85 pts** because it includes the **Avenging Avatar** Enhancement (+10 pts). Datasheet base = 75; Enhancement = +10. Wahapedia and MFM v3.9 both confirm 75 base.
 
 ---
 
 ## Source
 
 - Wahapedia: https://wahapedia.ru/wh40k10ed/factions/space-marines/Librarian-in-Terminator-Armour
-- Munitorum Field Manual v3.9 (Feb 2026), Codex: Space Marines section
-- Captain Hunter rosters: 85 pts (matches MFM v3.9 per Captain).
+- Munitorum Field Manual v3.9 (Feb 2026), Codex: Space Marines section — base 75 pts
+- Captain Hunter's 3000pt-list.md (line 16): 85 pts entry = 75 base + 10 Avenging Avatar Enhancement
 
 <!-- Last verified: 2026-04-29 -->

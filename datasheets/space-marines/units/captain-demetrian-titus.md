@@ -13,6 +13,16 @@ keywords:
   faction: [Adeptus Astartes, Ultramarines]
   unit: [Infantry, Character, Epic Hero, Tacticus, Grenades, Captain, Titus]
 led_by: []
+leads_to:
+  - assault-intercessor-squad
+  - bladeguard-veteran-squad
+  - company-heroes
+  - hellblaster-squad
+  - infernus-squad
+  - intercessor-squad
+  - sternguard-veteran-squad
+  - victrix-honour-guard
+  - wardens-of-ultramar
 grants_to_attached_unit:
   weapon_abilities_ranged:
     sustained_hits: 1

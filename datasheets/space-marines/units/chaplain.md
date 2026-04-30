@@ -13,6 +13,13 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Character, Grenades, Tacticus, Chaplain]
 led_by: []
+leads_to:
+  - assault-intercessor-squad
+  - bladeguard-veteran-squad
+  - hellblaster-squad
+  - infernus-squad
+  - intercessor-squad
+  - sternguard-veteran-squad
 grants_to_attached_unit:
   modifiers:
     plus_one_to_wound_melee: true
