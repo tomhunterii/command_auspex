@@ -426,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "command-auspex"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "tauri",
  "tauri-build",

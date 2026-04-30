@@ -112,7 +112,6 @@ fn main() {
 
             let handle = app.handle();
 
-            let connect = MenuItem::with_id(handle, "connect_repo", "Connect Repo", true, None::<&str>)?;
             let save = MenuItem::with_id(handle, "save_scenario", "Save Scenario", true, Some("CmdOrCtrl+S"))?;
             let recall = MenuItem::with_id(handle, "recall_scenario", "Recall Scenario", true, Some("CmdOrCtrl+O"))?;
             let separator = PredefinedMenuItem::separator(handle)?;
@@ -122,7 +121,7 @@ fn main() {
                 handle,
                 "File",
                 true,
-                &[&connect, &save, &recall, &separator, &quit],
+                &[&save, &recall, &separator, &quit],
             )?;
 
             let menu = Menu::with_items(handle, &[&file_menu])?;

@@ -1,6 +1,6 @@
 [package]
 name = "command-auspex"
-version = "0.1.7"
+version = "0.1.8"
 description = "Command Auspex — list-building battle simulator"
 authors = ["Tom Hunter"]
 edition = "2021"

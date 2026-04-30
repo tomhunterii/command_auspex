@@ -80,6 +80,25 @@ export function clusterOffsetsMixed(diametersPx, gapIn = 0.5) {
 
   // Push oversize models radially outward.
   const gap = gapIn * INCH_PX;
+  // Closed-form push for an oversize on a hex ring: the oversize sits at a
+  // ring slot at distance `r` from origin; its tightest neighbor (the same
+  // ring, ±60° away) is at distance `step = modalDia + gap`. The line from
+  // origin to neighbor and from origin to oversize subtend 60°, so neighbor
+  // and oversize centers are at distance √((r - step/2)² + (step·√3/2)²).
+  // We need that ≥ (D_over/2 + D_modal/2 + gap). Solving for r gives:
+  //   r ≥ step/2 + √(R² - 3·step²/4)   where R = D_over/2 + D_modal/2 + gap
+  // The previous heuristic `(d - modalDia)/2 + gap/2` under-pushed at small
+  // gap values (e.g. Logan 80mm + Wolf Guard Terminators 40mm at gap=0
+  // overlapped neighbors). The closed-form form is exact for ring-1 and an
+  // upper bound for deeper rings, so it never overlaps.
+  const stepIn = modalDia + gap;
+  const requiredFor = (dOver) => dOver / 2 + modalDia / 2 + gap;
+  const minRadiusFor = (dOver) => {
+    const R = requiredFor(dOver);
+    const cornerSq = (3 * stepIn * stepIn) / 4;
+    const inside = R * R - cornerSq;
+    return stepIn / 2 + Math.sqrt(Math.max(0, inside));
+  };
   for (let i = 0; i < n; i++) {
     const d = diametersPx[i];
     if (d <= modalDia + 1e-6) continue; // rank-and-file or smaller — no push
@@ -87,26 +106,24 @@ export function clusterOffsetsMixed(diametersPx, gapIn = 0.5) {
     const r = Math.sqrt(x * x + y * y);
     if (r === 0) {
       // Oversize landed at center (i.e., placement order put the leader at
-      // index 0). Move it to a ring-1 slot at angle 0 with the pushed radius
-      // and shift whoever was at ring-1 angle 0 into the center. This keeps
-      // rank-and-file at center, where they belong.
+      // index 0). Move it to a ring-1 slot at angle 0 and shift whoever was
+      // at ring-1 angle 0 into the center. This keeps rank-and-file at
+      // center, where they belong.
       const neighborIdx = offsets.findIndex(([nx, ny], j) => j !== i &&
-        Math.abs(Math.sqrt(nx*nx + ny*ny) - (modalDia + gap)) < 1e-6);
+        Math.abs(Math.sqrt(nx*nx + ny*ny) - stepIn) < 1e-6);
       if (neighborIdx >= 0) {
         offsets[i] = [...offsets[neighborIdx]];
         offsets[neighborIdx] = [0, 0];
       }
-      // Re-read the new position for the push step below.
       const [x2, y2] = offsets[i];
       const r2 = Math.sqrt(x2 * x2 + y2 * y2);
       if (r2 === 0) continue;
-      const extra = (d - modalDia) / 2 + gap / 2;
-      const k = (r2 + extra) / r2;
+      const k = minRadiusFor(d) / r2;
       offsets[i] = [x2 * k, y2 * k];
       continue;
     }
-    const extra = (d - modalDia) / 2 + gap / 2;
-    const k = (r + extra) / r;
+    const target = Math.max(r, minRadiusFor(d));
+    const k = target / r;
     offsets[i] = [x * k, y * k];
   }
   return offsets;
@@ -163,15 +180,26 @@ export function standardOffsets(n, baseDiameterPx, maxRows = 4, gapIn = 0.5) {
 //
 // Optional `gapIn` overrides the 0.5" default base-edge-to-base-edge gap.
 // Range 0..2 inches (10th-Ed Unit Coherency tops out at 2" between bases).
+//
+// Legacy formation IDs are aliased so older saved scenarios still resolve:
+//   'line_horizontal', 'line_vertical' → 'line'
+//   'column'                            → 'rows_2'
+//   'standard'                          → 'rows_4'
+// (The unit context menu lets the captain rotate the formation, so the two
+// line orientations and the column collapsed into a single 'line' / N-rows
+// shape.)
 export function formationOffsets(formation, n, baseDiameterPx, perModelDiametersPx = null, gapIn = 0.5) {
   if (formation === 'cluster' && perModelDiametersPx && perModelDiametersPx.length === n) {
     const allEqual = perModelDiametersPx.every(d => d === perModelDiametersPx[0]);
     if (!allEqual) return clusterOffsetsMixed(perModelDiametersPx, gapIn);
   }
   switch (formation) {
-    case 'line_horizontal': return lineOffsets(n, baseDiameterPx, 'horizontal', gapIn);
-    case 'line_vertical':   return lineOffsets(n, baseDiameterPx, 'vertical', gapIn);
-    case 'column':          return columnOffsets(n, baseDiameterPx, 2, gapIn);
+    case 'line':
+    case 'line_horizontal':
+    case 'line_vertical':   return lineOffsets(n, baseDiameterPx, 'horizontal', gapIn);
+    case 'rows_2':
+    case 'column':          return standardOffsets(n, baseDiameterPx, 2, gapIn);
+    case 'rows_4':
     case 'standard':        return standardOffsets(n, baseDiameterPx, 4, gapIn);
     case 'cluster':
     default:                return clusterOffsets(n, baseDiameterPx, gapIn);
@@ -179,9 +207,8 @@ export function formationOffsets(formation, n, baseDiameterPx, perModelDiameters
 }
 
 export const FORMATIONS = [
-  { id: 'cluster',         label: 'Cluster' },
-  { id: 'line_vertical',   label: 'Vertical Line' },
-  { id: 'line_horizontal', label: 'Horizontal Line' },
-  { id: 'column',          label: 'Column (2 wide)' },
-  { id: 'standard',        label: 'Standard (max 4 rows)' },
+  { id: 'cluster', label: 'Cluster' },
+  { id: 'line',    label: 'Line' },
+  { id: 'rows_2',  label: '2 Rows' },
+  { id: 'rows_4',  label: '4 Rows' },
 ];

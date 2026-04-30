@@ -593,8 +593,9 @@ export function makeUnitDraggable(group, onDragEnd) {
     group.style.cursor = 'grab';
     const transform = group.transform.baseVal.consolidate();
     const offset = transform ? [transform.matrix.e, transform.matrix.f] : [0, 0];
-    onDragEnd?.(offset, { group, instanceId: group.dataset.instanceId, side: group.dataset.side });
-    // Hide the movement ruler — keep the elements in the DOM for reuse.
+    // Hide the movement ruler BEFORE calling onDragEnd. onDragEnd typically
+    // triggers a rerender that detaches `group` from the SVG, after which
+    // group.ownerSVGElement is null and any cleanup-after-onDragEnd no-ops.
     const svg = group.ownerSVGElement;
     if (svg) {
       const layer = svg.querySelector('#layer-movement-ruler');
@@ -602,6 +603,15 @@ export function makeUnitDraggable(group, onDragEnd) {
       const label = layer?.querySelector('text.move-ruler-label');
       if (line) line.setAttribute('display', 'none');
       if (label) label.setAttribute('display', 'none');
+    }
+    // Only fire onDragEnd if the pointer actually moved. A bare click
+    // (including shift+click for the COMBAT AUSPEX selector) shouldn't
+    // trigger a board rerender, because the rerender detaches `group`
+    // from the DOM and the subsequent click event then fires on a
+    // detached element — meaning the shift+click handler never sees
+    // the unit and selection silently fails.
+    if (group.__dragged) {
+      onDragEnd?.(offset, { group, instanceId: group.dataset.instanceId, side: group.dataset.side });
     }
     // Reset the drag flag after a short delay so the click event (which fires
     // after mouseup) can still read it before we clear it.
@@ -704,14 +714,28 @@ function renderUnit({ unit, datasheet, centerIn, role, _instanceId }) {
   //                   to a rotated <g>, so symbols stay readable)
   const gapIn = (typeof unit._spacingGapIn === 'number') ? unit._spacingGapIn : 0.5;
   const rotDeg = (typeof unit._rotationDeg === 'number') ? unit._rotationDeg : 0;
-  const rawOffsets = formationOffsets(formation, models.length, baseDiameterPx(maxMm), perModelPx, gapIn);
-  const offsets = rotDeg
-    ? rawOffsets.map(([x, y]) => {
-        const rad = rotDeg * Math.PI / 180;
-        const c = Math.cos(rad), s = Math.sin(rad);
-        return [x * c - y * s, x * s + y * c];
-      })
-    : rawOffsets;
+  // _modelPositions is an OPTIONAL absolute-position override the resolver
+  // writes when the rigid formation can't fit (near edges, in tight pockets).
+  // When present it replaces the formation lattice — each model is at
+  // (cx, cy) directly, no centerIn-relative offsets. Cleared when the captain
+  // changes formation/rotation/spacing so the cluster reverts to lattice.
+  const overridePositions = Array.isArray(unit._modelPositions)
+    && unit._modelPositions.length === models.length
+    ? unit._modelPositions
+    : null;
+  let offsets;
+  if (overridePositions) {
+    offsets = overridePositions.map(([x, y]) => [x - cx, y - cy]);
+  } else {
+    const rawOffsets = formationOffsets(formation, models.length, baseDiameterPx(maxMm), perModelPx, gapIn);
+    offsets = rotDeg
+      ? rawOffsets.map(([x, y]) => {
+          const rad = rotDeg * Math.PI / 180;
+          const c = Math.cos(rad), s = Math.sin(rad);
+          return [x * c - y * s, x * s + y * c];
+        })
+      : rawOffsets;
+  }
 
   // Pre-compute label context values once for this unit.
   const totalUnitModels = models.length;

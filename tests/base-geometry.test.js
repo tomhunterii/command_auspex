@@ -76,10 +76,23 @@ test('standardOffsets: 20 models, max 4 rows -> 5 cols × 4 rows', () => {
 
 test('formationOffsets dispatches to the right backend', () => {
   assert.strictEqual(formationOffsets('cluster', 1, 1.26).length, 1);
+  assert.strictEqual(formationOffsets('line', 4, 1.26).length, 4);
+  assert.strictEqual(formationOffsets('rows_2', 7, 1.26).length, 7);
+  assert.strictEqual(formationOffsets('rows_4', 10, 1.26).length, 10);
+});
+
+test('formationOffsets accepts legacy IDs from older saved scenarios', () => {
+  // line_horizontal / line_vertical → 'line'; column → rows_2; standard → rows_4
   assert.strictEqual(formationOffsets('line_horizontal', 4, 1.26).length, 4);
   assert.strictEqual(formationOffsets('line_vertical', 4, 1.26).length, 4);
-  assert.strictEqual(formationOffsets('column', 7, 1.26).length, 7);
-  assert.strictEqual(formationOffsets('standard', 10, 1.26).length, 10);
+  assert.deepStrictEqual(
+    formationOffsets('column', 7, 1.26),
+    formationOffsets('rows_2', 7, 1.26),
+  );
+  assert.deepStrictEqual(
+    formationOffsets('standard', 10, 1.26),
+    formationOffsets('rows_4', 10, 1.26),
+  );
 });
 
 test('formationOffsets unknown formation falls back to cluster', () => {
@@ -88,18 +101,18 @@ test('formationOffsets unknown formation falls back to cluster', () => {
   assert.deepStrictEqual(a, b);
 });
 
-test('FORMATIONS contains the five expected ids in order', () => {
+test('FORMATIONS contains the four expected ids in order', () => {
   assert.deepStrictEqual(
     FORMATIONS.map(f => f.id),
-    ['cluster', 'line_vertical', 'line_horizontal', 'column', 'standard'],
+    ['cluster', 'line', 'rows_2', 'rows_4'],
   );
 });
 
 test('formationOffsets handles n=0 gracefully', () => {
   assert.deepStrictEqual(formationOffsets('cluster', 0, 1.26), []);
-  assert.deepStrictEqual(formationOffsets('line_horizontal', 0, 1.26), []);
-  assert.deepStrictEqual(formationOffsets('column', 0, 1.26), []);
-  assert.deepStrictEqual(formationOffsets('standard', 0, 1.26), []);
+  assert.deepStrictEqual(formationOffsets('line', 0, 1.26), []);
+  assert.deepStrictEqual(formationOffsets('rows_2', 0, 1.26), []);
+  assert.deepStrictEqual(formationOffsets('rows_4', 0, 1.26), []);
 });
 
 // ── clusterOffsetsMixed (mixed-base squads) ──────────────────────────────────

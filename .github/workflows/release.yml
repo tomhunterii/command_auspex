@@ -5,9 +5,12 @@ on:
     tags:
       - 'v*'
 
-# Windows-only release workflow — produces a single NSIS .exe installer
-# for the Captain's teammates. macOS builds are produced locally on the
-# Captain's workstation (npm run tauri:build). Linux is omitted entirely.
+# Multi-OS release workflow:
+#   * Windows — NSIS .exe installer for the Captain's teammates.
+#   * macOS   — universal .dmg for the Captain's own workstation (and any
+#               servoskull operator on Apple silicon or Intel). Unsigned;
+#               first launch needs Right-Click → Open to bypass Gatekeeper.
+# Linux is omitted entirely — no operators on that platform.
 jobs:
   windows:
     runs-on: windows-latest
@@ -48,10 +51,54 @@ jobs:
           releaseName: 'Command Auspex ${{ github.ref_name }}'
           args: --bundles nsis
           releaseBody: |
-            Command Auspex — Windows desktop build.
+            Command Auspex — desktop build.
 
-            **First launch:** Windows SmartScreen will warn "Windows protected your PC" — click **More info** → **Run anyway**. The app is unsigned (no EV cert yet); this is expected.
+            **Windows (.exe):** Run the installer. Windows SmartScreen will warn "Windows protected your PC" — click **More info** → **Run anyway**. The app is unsigned (no EV cert yet); this is expected. NSIS-style setup, drops the app under `Program Files` and adds a Start Menu entry.
 
-            **Install:** Run the `.exe` — NSIS-style setup, drops the app under `Program Files` and adds a Start Menu entry.
+            **macOS (.dmg):** Open the DMG and drag the app into `/Applications`. First launch: right-click the app → **Open** (bypasses Gatekeeper since the build is unsigned).
+          releaseDraft: false
+          prerelease: false
+
+  macos:
+    # macOS DMG build — runs in parallel with the Windows job. Both upload
+    # to the same release because tauri-action keys the release on tagName.
+    runs-on: macos-latest
+    needs: windows
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build (Tauri)
+        uses: tauri-apps/tauri-action@v0.5.21
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Command Auspex ${{ github.ref_name }}'
+          # Universal DMG covers both Apple silicon and Intel Macs.
+          args: --bundles dmg --target universal-apple-darwin
           releaseDraft: false
           prerelease: false

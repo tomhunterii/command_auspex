@@ -263,6 +263,20 @@
     stroke-dasharray: 3 2;
   }
 
+  /* Shift+click selection highlight for COMBAT AUSPEX pair. The unit
+     group's circles get a phosphor halo so the captain can see at a
+     glance which units are wired into the simulator. */
+  g.unit.sim-attacker-selected circle.model-circle {
+    stroke: var(--phosphor);
+    stroke-width: 0.06;
+    filter: drop-shadow(0 0 0.18px var(--phosphor));
+  }
+  g.unit.sim-defender-selected circle.model-circle {
+    stroke: var(--amber);
+    stroke-width: 0.06;
+    filter: drop-shadow(0 0 0.18px var(--amber));
+  }
+
   /* Right-click unit context menu. Positioned absolute at click point.
      Hidden by default; .show toggles visibility. */
   #unit-ctx-menu {
@@ -308,6 +322,19 @@
   }
   #unit-ctx-menu .ctx-slider label { display: flex; justify-content: space-between; margin-bottom: 4px; }
   #unit-ctx-menu .ctx-slider label .ctx-value { color: var(--phosphor); font-family: 'JetBrains Mono', monospace; }
+  #unit-ctx-menu .ctx-slider label .ctx-reset {
+    background: transparent;
+    border: 1px solid var(--phosphor-dim);
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 0 5px;
+    margin-left: 6px;
+    cursor: pointer;
+    line-height: 14px;
+  }
+  #unit-ctx-menu .ctx-slider label .ctx-reset:hover { color: var(--phosphor); border-color: var(--phosphor); }
+  #unit-ctx-menu .ctx-slider label .ctx-row { display: inline-flex; align-items: center; gap: 0; }
   #unit-ctx-menu .ctx-slider input[type=range] {
     width: 100%;
     accent-color: var(--phosphor);
@@ -371,7 +398,6 @@
     <div class="subtitle">HOLOLITH-SIGMA · VOX-CHANNEL SIGMA-09</div>
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
     <div id="controls" style="display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;">
-      <button id="pick-repo" class="btn">CONNECT REPO</button>
       <label class="status-msg">MISSION <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
       <label class="status-msg">DEFENDER FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select></label>
       <label class="status-msg">ATTACKER FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select></label>
@@ -426,6 +452,7 @@
             <select id="sim-defender" class="select" style="margin-left:0; margin-top:3px; width:100%;"></select>
             <input id="sim-models" type="hidden" readonly value="5"/>
           </div>
+          <div id="sim-defender-stats" style="font-size:10px; color:var(--dim); border-top:1px dashed var(--phosphor-dim); padding-top:6px; margin-bottom:8px; display:none;"></div>
           <div style="margin-bottom:6px;">
             <label style="font-size:10px; letter-spacing:1.5px; color:var(--dim);">WEAPONS</label>
             <select id="sim-kind" class="select" style="margin-left:0; margin-top:3px; width:100%;">
@@ -457,6 +484,7 @@ import { simulate } from './lib/sim/combat.js';
 import { parseDatasheet } from './lib/datasheet-parser.js';
 import { renderBoard, renderUnits } from './lib/render.js';
 import { autoPlaceUnits } from './lib/auto-placement.js';
+import { resolveUnitOverlap, resolveAllOverlaps } from './lib/model-positions.js';
 import { FORMATIONS } from './lib/base-geometry.js';
 import {
   canonicalBase, profileSuffix,
@@ -909,8 +937,8 @@ async function loadCatalogueAndPopulate() {
         for (const e of leaderEntries) {
           e.filteredWeapons = applyProfileSelection(e.weapons, ocSide, e.instanceId);
         }
-        const ranged = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'ranged');
-        const melee = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'melee');
+        // ranged / melee groups are derived from filteredDisplayWeaponsAfterMelee
+        // — defined further down once the melee selection has been applied.
 
         // PROFILE PICK: one row per multi-profile group (canonical-base) with
         // a button per profile. Active button highlighted; clicking another
@@ -975,6 +1003,8 @@ async function loadCatalogueAndPopulate() {
         for (const e of leaderEntries) {
           e.filteredWeapons = applyMeleeSelection(e.filteredWeapons, meleePickedLeader(e));
         }
+        const ranged = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'ranged');
+        const melee = filteredDisplayWeaponsAfterMelee.filter(w => w.kind === 'melee');
         const groups = [];
         if (kind === 'ranged' || kind === 'all') groups.push(['RANGED', ranged]);
         if (kind === 'melee'  || kind === 'all') groups.push(['MELEE',  melee]);
@@ -1051,9 +1081,9 @@ async function loadCatalogueAndPopulate() {
   }
 }
 
-// Auto-load at boot — no button click needed. The pick-repo button is
-// retained as a manual refresh / reconnect path.
-document.getElementById('pick-repo').addEventListener('click', loadCatalogueAndPopulate);
+// Auto-load at boot. The catalogue is bundled with the app (it's the
+// repo — datasheets/missions/rosters all live in catalogue.db), so no
+// manual "Connect Repo" step is needed.
 window.addEventListener('DOMContentLoaded', () => { loadCatalogueAndPopulate(); });
 
 function updateLoadBtn() {
@@ -1125,6 +1155,8 @@ document.getElementById('sim-swap-roles').addEventListener('click', async () => 
 });
 
 // Sim-pair line: redraw whenever either selector changes.
+// refreshSimPairLine also refreshes the defender stat readout, so manual
+// dropdown picks (no shift+click) update both line and stats.
 document.getElementById('sim-attacker').addEventListener('change', refreshSimPairLine);
 document.getElementById('sim-defender').addEventListener('change', refreshSimPairLine);
 
@@ -1273,12 +1305,13 @@ async function loadFromScenario(s) {
   for (const p of placements) lastDatasheets.set(p.unit.name, p.datasheet);
   document.getElementById('save-scenario').disabled = false;
 
-  // Refresh the sim dropdowns so the COMBAT AUSPEX picks up the loaded rosters
-  // (mirrors what the side dropdowns' change handlers do during normal flow).
-  await Promise.all([
-    populateSimDropdownFromRoster(document.getElementById('sim-attacker'), simAttackerRosterSlug()),
-    populateSimDropdownFromRoster(document.getElementById('sim-defender'), simDefenderRosterSlug()),
-  ]);
+  // Refresh the COMBAT AUSPEX gate now that both rosters are loaded —
+  // setting defenderSel.value / attackerSel.value programmatically doesn't
+  // fire their change handlers, so refreshSimGate would otherwise stay at
+  // its boot-time "SELECT BOTH FORCES TO ENGAGE" state.
+  await refreshSimGate();
+  // refreshSimGate already populated the sim dropdowns when the gate
+  // opened; redraw the sim-pair line for the recalled placement.
   refreshSimPairLine();
 
   const filename = (s.id || s.name.toLowerCase().replace(/[^a-z0-9-]/gi, '-')) + '.md';
@@ -1303,10 +1336,14 @@ loadBtn.addEventListener('click', async () => {
     renderBoard(svg, mission);
 
     const candidates = (await listUnits()).map(c => ({ slug: c.slug, faction: c.faction_slug }));
+    // Per-side slug-occurrence counters live OUTSIDE buildPlacements so the
+    // attacker's two-polygon split (Purge and Burn) doesn't reset the
+    // counter and assign duplicate instanceIds (`hormagaunts:0` × 2) when
+    // identical-slug units land in different halves.
+    const slugCountsByRole = { defender: new Map(), attacker: new Map() };
     async function buildPlacements(roster, zonePolygon, role) {
       const enriched = [];
-      // Per-side slug-occurrence counter for stable per-unit-instance IDs.
-      const slugCounts = new Map();
+      const slugCounts = slugCountsByRole[role];
       for (const u of roster.units) {
         const dsSlug = await resolveUnitDatasheet(u, candidates);
         if (!dsSlug) continue;
@@ -1359,6 +1396,19 @@ loadBtn.addEventListener('click', async () => {
     lastDatasheets.clear();
     for (const p of placements) {
       lastDatasheets.set(p.unit.name, p.datasheet);
+    }
+    // Post-pass: nudge any units that landed on top of each other (autoPlace
+    // falls back to zone center when no clear grid slot fits, which can
+    // pile multiple units at the same point). Collision math runs on the
+    // merged-leader view so attached-leader bases are honoured.
+    {
+      const merged = applyAttachmentsToPlacements(placements);
+      resolveAllOverlaps(merged);
+      // Write resolved centers back to the authoritative placements array.
+      for (const m of merged) {
+        const orig = placements.find(p => p._instanceId === m._instanceId && p.role === m.role);
+        if (orig) orig.centerIn = m.centerIn;
+      }
     }
     renderUnits(svg, applyAttachmentsToPlacements(placements), handleDragEnd);
     restoreDestroyedVisuals();
@@ -1699,19 +1749,198 @@ async function refreshSimModelCountsFor(instanceId) {
 
 let simPairLine = null; // SVG <line> drawn between current attacker + defender cluster centroids
 
+// Render a defender-stat readout under the DEFENDER dropdown so the captain
+// can see what they're attacking into without opening the detail panel.
+// Pulls T / Sv / InvSv / W / M plus a curated set of keywords (the ones that
+// matter for attack decisions: Vehicle, Monster, Infantry, Character, Fly,
+// Battleline, Stealth, Lone Operative, etc.). Weapon stats are intentionally
+// omitted — the captain asked for what an ATTACKER needs to know, not the
+// defender's own offensive load.
+const DEFENDER_KEYWORDS_OF_INTEREST = new Set([
+  'VEHICLE', 'MONSTER', 'INFANTRY', 'CHARACTER', 'EPIC HERO',
+  'FLY', 'BATTLELINE', 'STEALTH', 'LONE OPERATIVE',
+  'PSYKER', 'DAEMON', 'IMPERIUM', 'CHAOS',
+]);
+
+let _simDefenderStatsToken = 0; // race guard for async unit fetch
+async function refreshSimDefenderStats() {
+  const el = document.getElementById('sim-defender-stats');
+  if (!el) return;
+  // Prefer the click-pair defender (side-aware); fall back to the dropdown
+  // so manually-picked defenders also show stats.
+  const defenderInstanceId = simClickPair[1]?.instanceId
+    ?? document.getElementById('sim-defender')?.value
+    ?? '';
+  if (!defenderInstanceId) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  const token = ++_simDefenderStatsToken;
+  let unit = null;
+  try { unit = await getUnit(slugOf(defenderInstanceId)); } catch { unit = null; }
+  // Bail if a newer call has superseded us — prevents a stale unit from
+  // overwriting a fresher one when the captain shift+clicks rapidly.
+  if (token !== _simDefenderStatsToken) return;
+  if (!unit) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  const p = unit.profile ?? {};
+  const stat = (label, val) => val == null || val === ''
+    ? ''
+    : `<span style="color:var(--dim);">${label}</span> <span style="color:var(--phosphor); font-weight:700;">${val}</span>`;
+  const cells = [
+    stat('T',  p.T),
+    stat('SV', p.Sv),
+    p.InvSv ? stat('INV', p.InvSv) : '',
+    stat('W',  p.W),
+    stat('M',  p.M),
+  ].filter(Boolean).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+  const kws = (unit.keywords ?? [])
+    .map(k => String(k.keyword ?? k).toUpperCase())
+    .filter(k => DEFENDER_KEYWORDS_OF_INTEREST.has(k));
+  const keywordLine = kws.length
+    ? `<div style="margin-top:4px; letter-spacing:1.5px; color:var(--amber); font-size:9px;">${kws.join(' · ')}</div>`
+    : '';
+  el.innerHTML = `<div style="letter-spacing:1.5px;">${cells}</div>${keywordLine}`;
+  el.style.display = '';
+}
+
+// Shift+click drives the COMBAT AUSPEX pair: index 0 = attacker (firing),
+// index 1 = defender (target). Each slot is {instanceId, side} or null.
+// A defender can only be selected on the OPPOSITE side from the attacker
+// (same-side firefights aren't a thing in 40k); a shift+click on a unit
+// that's already in the pair toggles it off.
+let simClickPair = [null, null];
+
+// Manually pin a unit to one COMBAT AUSPEX role via the right-click menu.
+// The menu can OVERRIDE the same-side restriction shift+click enforces
+// (the captain may want to manually pair same-side units for a what-if).
+async function assignToSimRole(instanceId, side, role) {
+  if (!instanceId || !side) return;
+  if (role !== 'attacker' && role !== 'defender' && role !== '') return;
+  if (role === '') {
+    // Clear this unit from whichever slot it's in.
+    if (simClickPair[0]?.instanceId === instanceId && simClickPair[0]?.side === side) simClickPair[0] = null;
+    if (simClickPair[1]?.instanceId === instanceId && simClickPair[1]?.side === side) simClickPair[1] = null;
+  } else {
+    const slot = role === 'attacker' ? 0 : 1;
+    simClickPair[slot] = { instanceId, side };
+  }
+  refreshSimPairLine();
+  await trySyncSimDropdowns();
+}
+
+// Shift+click: toggle a unit through the COMBAT AUSPEX pair.
+//   * already in pair → unselect that slot
+//   * empty pair      → set as attacker
+//   * attacker set    → set as defender, but ONLY if the unit is on the
+//                       opposite side (no same-roster firefights)
+//   * pair full       → if the new unit is opposite-side from the existing
+//                       attacker, replace the defender; otherwise reject
+function recordShiftClick(instanceId, side) {
+  if (!instanceId || !side) return;
+  // Toggle off if already selected.
+  if (simClickPair[0]?.instanceId === instanceId && simClickPair[0]?.side === side) {
+    simClickPair[0] = null;
+  } else if (simClickPair[1]?.instanceId === instanceId && simClickPair[1]?.side === side) {
+    simClickPair[1] = null;
+  } else if (!simClickPair[0]) {
+    simClickPair[0] = { instanceId, side };
+  } else if (simClickPair[0].side !== side) {
+    // Different side from attacker → defender slot.
+    simClickPair[1] = { instanceId, side };
+  } else {
+    // Same side as attacker — defender selection rejected.
+    return;
+  }
+  refreshSimPairLine();
+  trySyncSimDropdowns().catch(err => console.warn('[ctx] sim sync failed:', err));
+}
+
+// Keep the COMBAT AUSPEX dropdowns in sync with the click pair. When the
+// attacker's side doesn't match the sim-attacker dropdown's source roster
+// (driven by simRolesSwapped), this toggles the swap and repopulates so
+// the instanceId actually shows up as an option. Sparse pairs (only one
+// slot filled) sync just the slot they have.
+async function trySyncSimDropdowns() {
+  const a = simClickPair[0];
+  const d = simClickPair[1];
+  if (!a && !d) return;
+  // Flip swap if the attacker's side disagrees with the dropdown source.
+  if (a?.side && simAttackerSide() !== a.side) {
+    simRolesSwapped = !simRolesSwapped;
+    const btn = document.getElementById('sim-swap-roles');
+    if (btn) btn.textContent = simRolesSwapped ? '⇅ SWAP ROLES (DEFENDER ATTACKING)' : '⇅ SWAP ROLES';
+    await Promise.all([
+      populateSimDropdownFromRoster(document.getElementById('sim-attacker'), simAttackerRosterSlug()),
+      populateSimDropdownFromRoster(document.getElementById('sim-defender'), simDefenderRosterSlug()),
+    ]);
+  }
+  const set = (sel, instanceId) => {
+    if (!sel) return;
+    const opt = [...sel.options].find(o => o.value === instanceId);
+    if (opt && sel.value !== instanceId) {
+      sel.value = instanceId;
+      sel.dispatchEvent(new Event('change'));
+    }
+  };
+  set(document.getElementById('sim-attacker'), a?.instanceId ?? '');
+  set(document.getElementById('sim-defender'), d?.instanceId ?? '');
+  refreshSimPairLine();
+}
+
 function refreshSimPairLine() {
   const boardEl = document.getElementById('board');
   if (!boardEl) return;
-  const attackerInstanceId = document.getElementById('sim-attacker')?.value;
-  const defenderInstanceId = document.getElementById('sim-defender')?.value;
+  // Click pair takes precedence (it's side-aware, so duplicate instanceIds
+  // across sides resolve correctly). If the captain hasn't shift+clicked
+  // two units yet, fall back to the dropdown values so the existing flows
+  // (open the COMBAT AUSPEX, manually pick units) still produce a line.
+  let attackerInstanceId, attackerSide, defenderInstanceId, defenderSide;
+  if (simClickPair[0] && simClickPair[1]) {
+    attackerInstanceId = simClickPair[0].instanceId;
+    attackerSide = simClickPair[0].side;
+    defenderInstanceId = simClickPair[1].instanceId;
+    defenderSide = simClickPair[1].side;
+  } else {
+    attackerInstanceId = document.getElementById('sim-attacker')?.value;
+    defenderInstanceId = document.getElementById('sim-defender')?.value;
+  }
+  // Highlight selected units on the board so the shift+click registers
+  // visibly even before both halves of the pair are filled. Sparse pair
+  // (only one slot set) still highlights its one unit.
+  for (const g of boardEl.querySelectorAll('g.unit.sim-attacker-selected, g.unit.sim-defender-selected')) {
+    g.classList.remove('sim-attacker-selected', 'sim-defender-selected');
+  }
+  const aSel = simClickPair[0];
+  const dSel = simClickPair[1];
+  const tagSel = (sel, cls) => {
+    if (!sel) return;
+    const g = boardEl.querySelector(
+      `g.unit[data-instance-id="${CSS.escape(sel.instanceId)}"][data-side="${CSS.escape(sel.side)}"]`,
+    );
+    if (g) g.classList.add(cls);
+  };
+  tagSel(aSel, 'sim-attacker-selected');
+  tagSel(dSel, 'sim-defender-selected');
+  // Update the defender stat readout too so the captain has context on
+  // what they're attacking.
+  refreshSimDefenderStats();
   // Clear existing line.
   if (simPairLine) { simPairLine.remove(); simPairLine = null; }
-  if (!attackerInstanceId || !defenderInstanceId || attackerInstanceId === defenderInstanceId) return;
+  if (!attackerInstanceId || !defenderInstanceId) return;
+  if (attackerInstanceId === defenderInstanceId && attackerSide === defenderSide) return;
   // Compute centroid of a unit's model circles accounting for group translate.
-  // Queries by per-instance ID so duplicate units (5× Hormagaunts) resolve
-  // to the specific clicked instance, not just the first matching slug.
-  function clusterCenter(instanceId) {
-    const g = boardEl.querySelector(`g[data-instance-id="${CSS.escape(instanceId)}"]`);
+  // When `side` is supplied (click-pair path), the selector also filters on
+  // data-side so cross-side instanceId collisions resolve correctly.
+  function clusterCenter(instanceId, side) {
+    const sel = side
+      ? `g[data-instance-id="${CSS.escape(instanceId)}"][data-side="${CSS.escape(side)}"]`
+      : `g[data-instance-id="${CSS.escape(instanceId)}"]`;
+    const g = boardEl.querySelector(sel);
     if (!g) return null;
     const circles = g.querySelectorAll('circle.model-circle');
     if (circles.length === 0) return null;
@@ -1726,8 +1955,8 @@ function refreshSimPairLine() {
     const mat = transform ? transform.matrix : null;
     return mat ? { x: localX + mat.e, y: localY + mat.f } : { x: localX, y: localY };
   }
-  const a = clusterCenter(attackerInstanceId);
-  const d = clusterCenter(defenderInstanceId);
+  const a = clusterCenter(attackerInstanceId, attackerSide);
+  const d = clusterCenter(defenderInstanceId, defenderSide);
   if (!a || !d) return;
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const line = document.createElementNS(SVG_NS, 'line');
@@ -1831,43 +2060,79 @@ function handleDragEnd(pos, ctx) {
   scheduleAutoSave(pos);
   refreshSimPairLine();
   if (!ctx?.instanceId || !lastPlacements) return;
-  const placement = lastPlacements.find(p => p._instanceId === ctx.instanceId);
+  // Filter by both instanceId AND side. instanceIds (e.g. "hormagaunts:0")
+  // are generated per-side independently and CAN collide across attacker
+  // and defender — without the side filter, dragging defender hormagaunts
+  // would silently update attacker hormagaunts' centerIn (and vice versa),
+  // making the dragged unit "pop back" while the other side's same-named
+  // unit teleported across the board.
+  const placement = lastPlacements.find(
+    p => p._instanceId === ctx.instanceId && p.role === ctx.side,
+  );
   if (!placement) return;
+  // Bake the SVG translate into centerIn so subsequent rerenders draw the
+  // unit at its dropped location.
   placement.centerIn = [placement.centerIn[0] + pos[0], placement.centerIn[1] + pos[1]];
-  // Bake the offset into centerIn and zero the group's transform so the save
-  // path (which adds transform on top of centerIn) doesn't double-count.
-  if (ctx.group) ctx.group.removeAttribute('transform');
+  // If the unit had previously rearranged into per-model positions (e.g.
+  // packed near an edge), translate every model by the same drag delta so
+  // the relative arrangement is preserved during the move.
+  if (placement.unit && Array.isArray(placement.unit._modelPositions)) {
+    placement.unit._modelPositions = placement.unit._modelPositions
+      .map(([x, y]) => [x + pos[0], y + pos[1]]);
+  }
+  // Resolve any base-overlap with other units — drops never let two model
+  // circles share the same space. The unit nudges to the closest clear spot;
+  // if no whole-cluster spot fits, the resolver falls back to per-model
+  // packing, rearranging models around obstacles.
+  resolveOverlapForInstance(ctx.instanceId, ctx.side);
+  rerenderBoard();
 }
 
-// Delegated click on the board: intercept model-circle clicks for destroy toggle.
-// Per-instance keying so destroying a model on Hormagaunts(1) doesn't also
-// flag the same modelIdx on Hormagaunts(2). instanceId comes from the
-// rendered group; falls back to slug for legacy circles that lack it.
-boardEl.addEventListener('click', (e) => {
-  const target = e.target;
-  if (!(target instanceof SVGElement) || !target.classList.contains('model-circle')) return;
-  const instanceId = target.dataset.instanceId ?? target.dataset.unitSlug;
-  const modelIdx = parseInt(target.dataset.modelIdx, 10);
-  if (!instanceId || Number.isNaN(modelIdx)) return;
-  // If the parent group was dragged, skip the toggle — pointer moved, not a tap.
-  const group = target.closest('.unit');
-  if (group?.__dragged) return;
-  e.stopPropagation();
-  toggleDestroyed(instanceId, modelIdx);
-  applyDestroyedVisual(target, isDestroyed(instanceId, modelIdx));
-  refreshSimModelCountsFor(instanceId);
-});
+// Resolve cross-unit base overlap for one placement after a state change
+// (drag, spacing/rotation/formation slider). Operates on the merged unit
+// (attached leaders folded in) so the collision footprint matches what's
+// actually rendered, then writes the resolved centerIn back to the
+// authoritative entry in `lastPlacements`.
+//
+// Collision applies across BOTH sides — attacker-vs-defender model bases
+// also can't share the same physical space on the tabletop.
+function resolveOverlapForInstance(instanceId, role) {
+  if (!instanceId || !lastPlacements) return;
+  const merged = applyAttachmentsToPlacements(lastPlacements);
+  const target = merged.find(p => p._instanceId === instanceId && p.role === role);
+  if (!target) return;
+  const others = merged.filter(p => !(p._instanceId === instanceId && p.role === role));
+  resolveUnitOverlap(target, others);
+  const original = lastPlacements.find(p => p._instanceId === instanceId && p.role === role);
+  if (original) original.centerIn = target.centerIn;
+}
+
+// (Single-click model-destroy was removed — KILL is right-click-only via the
+// per-unit context menu, so a stray click during placement no longer kills
+// a model.)
 
 boardEl.addEventListener('click', (e) => {
   const group = e.target.closest('.unit');
   if (!group) return;
   const unitName = group.dataset.unitName;
   const instanceId = group.dataset.instanceId ?? null;
+  const side = group.dataset.side ?? null;
+  // If the parent group was just dragged, the click that fires after
+  // mouseup is a drag end, not a tap.
+  const wasDragged = group.__dragged;
+  // Shift+click drives the COMBAT AUSPEX pair (attacker first, then a
+  // defender on the OPPOSITE side). Plain click is just detail panel —
+  // the sim pair is no longer driven by ordinary clicks.
+  if (e.shiftKey && !wasDragged && instanceId && side) {
+    recordShiftClick(instanceId, side);
+    return;
+  }
   // Per-instance lookup when an instanceId is present (post-refactor),
-  // falls back to name-based lookup for legacy paths.
+  // falls back to name-based lookup for legacy paths. Filtered by side
+  // since instanceIds (`hormagaunts:0`) can collide across attacker/defender.
   let placement = null;
   if (instanceId && lastPlacements) {
-    placement = lastPlacements.find(p => p._instanceId === instanceId) ?? null;
+    placement = lastPlacements.find(p => p._instanceId === instanceId && p.role === side) ?? null;
   }
   const unit = placement?.unit ?? findUnitByName(unitName);
   const ds = placement?.datasheet ?? lastDatasheets.get(unitName);
@@ -1889,33 +2154,208 @@ function hideContextMenu() {
   ctxMenuContext = null;
 }
 
-function buildContextMenuHtml({ unit, modelIdx, side, instanceId }) {
-  const subName = unit.models?.[0]?.submodel ?? unit.name; // first-pass label
+// Inverse of getLeaderCandidates: given a LEADER's slug + instance, list the
+// squads on the same side it can attach to. Returns Promise<Array<{instanceId,
+// name}>>. Empty array = this isn't a leader, or no compatible squad exists.
+async function getSquadTargets(leaderSlug, side, leaderInstanceId) {
+  if (!leaderSlug) return [];
+  const sideRosterSlug = side === 'defender' ? friendlyRosterSlug : hostileRosterSlug;
+  if (!sideRosterSlug) return [];
+  const cached = await ensureRosterCached(sideRosterSlug);
+  if (!cached) return [];
+  let leaderUnit = null;
+  try { leaderUnit = await getUnit(leaderSlug); } catch { return []; }
+  if (!leaderUnit) return [];
+  const canJoin = new Set((leaderUnit.can_join ?? [])
+    .map(s => String(s).toLowerCase().split('/').pop()));
+  if (canJoin.size === 0 && !leaderUnit.led_by) {
+    // Symmetric early-out: if leader can't join anything AND no squad
+    // declares it, this isn't a leader.
+  }
+  const targets = [];
+  for (const [candInstanceId, info] of cached.unitsByInstanceId.entries()) {
+    if (candInstanceId === leaderInstanceId) continue; // skip self
+    let isTarget = canJoin.has(info.slug);
+    if (!isTarget) {
+      try {
+        const candUnit = await getUnit(info.slug);
+        const ledBy = (candUnit?.led_by ?? [])
+          .map(s => String(s).toLowerCase().split('/').pop());
+        if (ledBy.includes(leaderSlug)) isTarget = true;
+      } catch { /* best effort */ }
+    }
+    if (isTarget) targets.push({ instanceId: candInstanceId, slug: info.slug, name: info.name });
+  }
+  // Disambiguate duplicate-name squads (mirror leader-pick labelling).
+  const nameCounts = new Map();
+  for (const c of targets) nameCounts.set(c.name, (nameCounts.get(c.name) ?? 0) + 1);
+  const seenNames = new Map();
+  for (const c of targets) {
+    if ((nameCounts.get(c.name) ?? 0) <= 1) continue;
+    const k = (seenNames.get(c.name) ?? 0) + 1;
+    seenNames.set(c.name, k);
+    c.name = `${c.name} (${k})`;
+  }
+  return targets;
+}
+
+// Resolve the same primary-leader candidate set the detail panel offers,
+// scoped to one squad placement. Returns Promise<Array<{instanceId, name}>>.
+// Empty array = no leader can attach (don't render the picker).
+async function getLeaderCandidates(squadSlug, side) {
+  if (!squadSlug) return [];
+  const sideRosterSlug = side === 'defender' ? friendlyRosterSlug : hostileRosterSlug;
+  if (!sideRosterSlug) return [];
+  const cached = await ensureRosterCached(sideRosterSlug);
+  if (!cached) return [];
+  let catalogueUnit = null;
+  try { catalogueUnit = await getUnit(squadSlug); } catch { return []; }
+  if (!catalogueUnit) return [];
+  const ledBy = new Set((catalogueUnit.led_by ?? [])
+    .map(s => String(s).toLowerCase().split('/').pop()));
+  const candidates = [];
+  for (const [candInstanceId, info] of cached.unitsByInstanceId.entries()) {
+    let isCandidate = ledBy.has(info.slug);
+    if (!isCandidate) {
+      try {
+        const candUnit = await getUnit(info.slug);
+        const canJoin = (candUnit?.can_join ?? [])
+          .map(s => String(s).toLowerCase().split('/').pop());
+        if (canJoin.includes(squadSlug)) isCandidate = true;
+      } catch { /* best effort */ }
+    }
+    if (isCandidate) candidates.push({ instanceId: candInstanceId, slug: info.slug, name: info.name });
+  }
+  // Disambiguate duplicate-name candidates (mirror detail-panel labelling).
+  const nameCounts = new Map();
+  for (const c of candidates) nameCounts.set(c.name, (nameCounts.get(c.name) ?? 0) + 1);
+  const seenNames = new Map();
+  for (const c of candidates) {
+    if ((nameCounts.get(c.name) ?? 0) <= 1) continue;
+    const k = (seenNames.get(c.name) ?? 0) + 1;
+    seenNames.set(c.name, k);
+    c.name = `${c.name} (${k})`;
+  }
+  return candidates;
+}
+
+function buildContextMenuHtml({
+  unit, modelIdx, side, instanceId,
+  leaderCandidates, currentLeader,
+  squadTargets, currentAttachedToSquad,
+  currentSimRole,
+}) {
   const dead = isDestroyed(instanceId, modelIdx);
-  const killLabel = dead ? 'REVIVE MODEL' : `KILL MODEL #${modelIdx + 1}`;
+  const killLabel = dead ? 'REVIVE' : 'KILL';
   const rot = unit._rotationDeg ?? 0;
   const gap = unit._spacingGapIn ?? 0.5;
+  const formation = unit._formation ?? 'cluster';
+  const formationOpts = FORMATIONS
+    .map(f => `<option value="${f.id}"${f.id === formation ? ' selected' : ''}>${escapeHtml(f.label)}</option>`)
+    .join('');
+  // ATTACH LEADER (squad → leader): renders when this unit is a squad.
+  let leaderHtml = '';
+  if (leaderCandidates && leaderCandidates.length > 0) {
+    const opts = ['<option value="">(none)</option>',
+      ...leaderCandidates.map(c =>
+        `<option value="${escapeHtml(c.instanceId)}"${c.instanceId === currentLeader ? ' selected' : ''}>${escapeHtml(c.name)}</option>`),
+    ].join('');
+    leaderHtml = `
+      <div class="ctx-slider">
+        <label><span>ATTACH LEADER</span></label>
+        <select id="ctx-attach" class="select" style="width:100%;margin-left:0;">${opts}</select>
+      </div>
+    `;
+  }
+  // ATTACH TO SQUAD (leader → squad): renders when this unit is a leader
+  // with at least one valid same-side squad to join.
+  let squadHtml = '';
+  if (squadTargets && squadTargets.length > 0) {
+    const opts = ['<option value="">(unattached)</option>',
+      ...squadTargets.map(s =>
+        `<option value="${escapeHtml(s.instanceId)}"${s.instanceId === currentAttachedToSquad ? ' selected' : ''}>${escapeHtml(s.name)}</option>`),
+    ].join('');
+    squadHtml = `
+      <div class="ctx-slider">
+        <label><span>ATTACH TO SQUAD</span></label>
+        <select id="ctx-attach-squad" class="select" style="width:100%;margin-left:0;">${opts}</select>
+      </div>
+    `;
+  }
+  // COMBAT AUSPEX role assignment.
+  const simRole = currentSimRole ?? '';
   return `
     <div class="ctx-header">${escapeHtml(unit.name)}</div>
-    <button class="ctx-item" data-act="kill">${killLabel}</button>
-    <hr>
     <div class="ctx-slider">
-      <label><span>ROTATE</span><span class="ctx-value" id="ctx-rot-val">${Math.round(rot)}°</span></label>
+      <label>
+        <span>ROTATE</span>
+        <span class="ctx-row">
+          <span class="ctx-value" id="ctx-rot-val">${Math.round(rot)}°</span>
+          <button class="ctx-reset" id="ctx-rot-reset" title="Reset rotation to 0°" type="button">↺</button>
+        </span>
+      </label>
       <input id="ctx-rot" type="range" min="0" max="359" step="1" value="${Math.round(rot)}">
     </div>
     <div class="ctx-slider">
-      <label><span>SPACING</span><span class="ctx-value" id="ctx-spacing-val">${gap.toFixed(2)}"</span></label>
+      <label>
+        <span>SPACING</span>
+        <span class="ctx-row">
+          <span class="ctx-value" id="ctx-spacing-val">${gap.toFixed(2)}"</span>
+          <button class="ctx-reset" id="ctx-spacing-reset" title="Reset spacing to 0.5&quot;" type="button">↺</button>
+        </span>
+      </label>
       <input id="ctx-spacing" type="range" min="0" max="2" step="0.05" value="${gap}">
     </div>
+    <div class="ctx-slider">
+      <label><span>FORMATION</span></label>
+      <select id="ctx-formation" class="select" style="width:100%;margin-left:0;">${formationOpts}</select>
+    </div>
+    ${leaderHtml}
+    ${squadHtml}
+    <div class="ctx-slider">
+      <label><span>COMBAT AUSPEX</span></label>
+      <select id="ctx-sim-role" class="select" style="width:100%;margin-left:0;">
+        <option value=""${simRole === '' ? ' selected' : ''}>(none)</option>
+        <option value="attacker"${simRole === 'attacker' ? ' selected' : ''}>ATTACKER</option>
+        <option value="defender"${simRole === 'defender' ? ' selected' : ''}>DEFENDER</option>
+      </select>
+    </div>
     <hr>
-    <button class="ctx-item" data-act="attach">ATTACH LEADER…</button>
-    <button class="ctx-item" data-act="formation">FORMATION…</button>
+    <button class="ctx-item" data-act="kill">${killLabel}</button>
   `;
 }
 
-function showContextMenu(clientX, clientY, ctx) {
+async function showContextMenu(clientX, clientY, ctx) {
   ctxMenuContext = ctx;
-  ctxMenuEl.innerHTML = buildContextMenuHtml(ctx);
+  // Pre-resolve BOTH attach modes in parallel: squad → leader (if this unit
+  // is a squad) and leader → squad (if this unit is a leader). Whichever
+  // returns a non-empty list controls which dropdown the menu shows.
+  const ownSlug = (ctx.placement?.unit?.datasheet ?? '').split('/').pop();
+  const [leaderCandidates, squadTargets] = await Promise.all([
+    getLeaderCandidates(ownSlug, ctx.side),
+    getSquadTargets(ownSlug, ctx.side, ctx.instanceId),
+  ]);
+  const currentLeader = attachedLeaderSlug(ctx.side, ctx.instanceId);
+  // For a leader unit: which same-side squad currently has it attached?
+  // Walk the side's attachments map and return the squadInstanceId where
+  // this leaderInstanceId appears in the leader-array value.
+  let currentAttachedToSquad = null;
+  for (const [squadInstanceId, leaders] of attachments[ctx.side].entries()) {
+    if ((leaders ?? []).includes(ctx.instanceId)) { currentAttachedToSquad = squadInstanceId; break; }
+  }
+  // Current sim-role of this unit, derived from the live click pair so
+  // the dropdown reflects whatever the captain assigned earlier.
+  let currentSimRole = '';
+  if (simClickPair[0]?.instanceId === ctx.instanceId && simClickPair[0]?.side === ctx.side) currentSimRole = 'attacker';
+  else if (simClickPair[1]?.instanceId === ctx.instanceId && simClickPair[1]?.side === ctx.side) currentSimRole = 'defender';
+  // If the right-click was preempted by an outside-click hide, bail out.
+  if (ctxMenuContext !== ctx) return;
+  ctxMenuEl.innerHTML = buildContextMenuHtml({
+    ...ctx,
+    leaderCandidates, currentLeader,
+    squadTargets, currentAttachedToSquad,
+    currentSimRole,
+  });
   ctxMenuEl.classList.add('show');
   // Position; clamp inside viewport.
   const rect = ctxMenuEl.getBoundingClientRect();
@@ -1937,37 +2377,109 @@ function showContextMenu(clientX, clientY, ctx) {
 
   const rotInput = ctxMenuEl.querySelector('#ctx-rot');
   const rotVal = ctxMenuEl.querySelector('#ctx-rot-val');
-  rotInput.addEventListener('input', () => {
-    const deg = Number(rotInput.value);
+  const applyRotation = (deg) => {
+    rotInput.value = String(deg);
     rotVal.textContent = `${deg}°`;
     setUnitRotation(ctx.side, ctx.instanceId, deg);
     for (const p of lastPlacements) {
-      if (p.role === ctx.side && p._instanceId === ctx.instanceId) p.unit._rotationDeg = deg;
+      if (p.role === ctx.side && p._instanceId === ctx.instanceId) {
+        p.unit._rotationDeg = deg;
+        // The cluster shape changed — drop any per-model override so the
+        // unit goes back to its formation lattice (resolver may re-pack).
+        delete p.unit._modelPositions;
+      }
     }
+    resolveOverlapForInstance(ctx.instanceId, ctx.side);
     rerenderBoard();
-  });
+  };
+  rotInput.addEventListener('input', () => applyRotation(Number(rotInput.value)));
+  ctxMenuEl.querySelector('#ctx-rot-reset').addEventListener('click', () => applyRotation(0));
 
   const spacingInput = ctxMenuEl.querySelector('#ctx-spacing');
   const spacingVal = ctxMenuEl.querySelector('#ctx-spacing-val');
-  spacingInput.addEventListener('input', () => {
-    const gap = Number(spacingInput.value);
-    spacingVal.textContent = `${gap.toFixed(2)}"`;
-    setUnitSpacing(ctx.side, ctx.instanceId, gap);
+  const applySpacing = (g) => {
+    spacingInput.value = String(g);
+    spacingVal.textContent = `${g.toFixed(2)}"`;
+    setUnitSpacing(ctx.side, ctx.instanceId, g);
     for (const p of lastPlacements) {
-      if (p.role === ctx.side && p._instanceId === ctx.instanceId) p.unit._spacingGapIn = gap;
+      if (p.role === ctx.side && p._instanceId === ctx.instanceId) {
+        p.unit._spacingGapIn = g;
+        delete p.unit._modelPositions; // cluster shape changed
+      }
     }
+    resolveOverlapForInstance(ctx.instanceId, ctx.side);
     rerenderBoard();
+  };
+  spacingInput.addEventListener('input', () => applySpacing(Number(spacingInput.value)));
+  ctxMenuEl.querySelector('#ctx-spacing-reset').addEventListener('click', () => applySpacing(0.5));
+
+  const formationSel = ctxMenuEl.querySelector('#ctx-formation');
+  formationSel.addEventListener('change', () => {
+    const fid = formationSel.value;
+    setUnitFormation(ctx.side, ctx.instanceId, fid);
+    for (const p of lastPlacements) {
+      if (p.role === ctx.side && p._instanceId === ctx.instanceId) {
+        p.unit._formation = fid;
+        delete p.unit._modelPositions; // cluster shape changed
+      }
+    }
+    resolveOverlapForInstance(ctx.instanceId, ctx.side);
+    rerenderBoard();
+    scheduleAutoSave();
   });
 
-  const openDetail = () => {
-    const placement = ctx.placement;
-    const unit = placement?.unit ?? findUnitByName(placement?.unit?.name ?? '');
-    const ds = placement?.datasheet;
-    if (unit && ds) renderDetailPanel(unit, ds, { instanceId: ctx.instanceId });
-    hideContextMenu();
-  };
-  ctxMenuEl.querySelector('[data-act="attach"]').addEventListener('click', openDetail);
-  ctxMenuEl.querySelector('[data-act="formation"]').addEventListener('click', openDetail);
+  // ATTACH TO SQUAD (this unit IS the leader; pick a squad to attach to).
+  const squadSel = ctxMenuEl.querySelector('#ctx-attach-squad');
+  if (squadSel) {
+    squadSel.addEventListener('change', () => {
+      // Clear any previous squad attachment for this leader on this side.
+      for (const [squadInstanceId, leaders] of attachments[ctx.side].entries()) {
+        if ((leaders ?? []).includes(ctx.instanceId)) {
+          // Drop this leader from that squad's attachment record.
+          if (attachments[ctx.side].get(squadInstanceId)?.[0] === ctx.instanceId) {
+            // Was the primary leader → clear primary (also clears co-leader).
+            setAttachedLeader(ctx.side, squadInstanceId, null);
+          } else if (attachments[ctx.side].get(squadInstanceId)?.[1] === ctx.instanceId) {
+            // Was the co-leader → keep primary, drop secondary.
+            setAttachedSecondaryLeader(ctx.side, squadInstanceId, null);
+          }
+        }
+      }
+      // Apply new attachment if a target squad was chosen.
+      const newSquadInstanceId = squadSel.value || null;
+      if (newSquadInstanceId) {
+        setAttachedLeader(ctx.side, newSquadInstanceId, ctx.instanceId);
+      }
+      rerenderBoard();
+      hideContextMenu();
+    });
+  }
+
+  // COMBAT AUSPEX role assignment (attacker / defender / none).
+  const simRoleSel = ctxMenuEl.querySelector('#ctx-sim-role');
+  if (simRoleSel) {
+    simRoleSel.addEventListener('change', () => {
+      const role = simRoleSel.value; // '', 'attacker', 'defender'
+      assignToSimRole(ctx.instanceId, ctx.side, role)
+        .catch(err => console.warn('[ctx] sim-role assign failed:', err));
+      hideContextMenu();
+    });
+  }
+
+  const attachSel = ctxMenuEl.querySelector('#ctx-attach');
+  if (attachSel) {
+    attachSel.addEventListener('change', () => {
+      setAttachedLeader(ctx.side, ctx.instanceId, attachSel.value || null);
+      resolveOverlapForInstance(ctx.instanceId, ctx.side);
+      rerenderBoard();
+      // Refresh the detail panel if it's currently showing this same unit
+      // so the leader dropdown there reflects the new selection.
+      const placement = ctx.placement;
+      if (placement?.unit && placement?.datasheet) {
+        renderDetailPanel(placement.unit, placement.datasheet, { instanceId: ctx.instanceId });
+      }
+    });
+  }
 }
 
 boardEl.addEventListener('contextmenu', (e) => {
@@ -1985,9 +2497,11 @@ boardEl.addEventListener('contextmenu', (e) => {
   const modelIdx = circle ? parseInt(circle.dataset.modelIdx, 10) : 0;
   const placement = lastPlacements.find(p => p._instanceId === instanceId);
   if (!placement) return;
+  // showContextMenu is async (loads leader candidates). Catch any failure so
+  // a transient cogitator hiccup doesn't leave the menu in a half-open state.
   showContextMenu(e.clientX, e.clientY, {
     side, instanceId, modelIdx: Number.isNaN(modelIdx) ? 0 : modelIdx, placement, unit: placement.unit,
-  });
+  }).catch(err => { console.warn('[ctx-menu] failed to open:', err); hideContextMenu(); });
 });
 
 document.addEventListener('click', (e) => {
@@ -2657,9 +3171,7 @@ document.getElementById('boot-overlay').addEventListener('click', () => {
 if (window.__TAURI_INTERNALS__) {
   const { listen } = window.__TAURI__.event;
   await listen('menu-action', (e) => {
-    if (e.payload === 'connect_repo') {
-      document.getElementById('pick-repo').click();
-    } else if (e.payload === 'save_scenario') {
+    if (e.payload === 'save_scenario') {
       document.getElementById('save-scenario').click();
     } else if (e.payload === 'recall_scenario') {
       document.getElementById('open-scenario').click();

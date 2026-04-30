@@ -11,7 +11,8 @@
 //
 // To run: `npm test`
 // To run live-browser smoke: navigate to `http://localhost:<port>/app/command-auspex.html`
-// after `python3 -m http.server` from the repo root, then click CONNECT REPO.
+// after `python3 -m http.server` from the repo root. The bundled catalogue
+// auto-loads on DOMContentLoaded — no manual connect step.
 
 import { test } from 'node:test';
 import assert from 'node:assert';
@@ -32,7 +33,6 @@ test('smoke: topbar chrome — title, subtitle, status, LED', () => {
 
 test('smoke: all control element IDs exist', () => {
   for (const id of [
-    'pick-repo',
     'mission-select',
     'defender-select',
     'attacker-select',
@@ -111,11 +111,13 @@ test('smoke: auto-save wired', () => {
   assert.match(HTML, /currentScenarioPath/, 'currentScenarioPath state missing');
 });
 
-test('smoke: catalogue.js wired and CONNECT REPO loads via openCatalogue', () => {
+test('smoke: catalogue.js wired and auto-loaded on DOMContentLoaded', () => {
   assert.match(HTML, /import\s*\{[^}]*openCatalogue[^}]*\}\s*from\s*'\.\/lib\/catalogue\.js'/,
     'openCatalogue not imported from ./lib/catalogue.js');
   assert.match(HTML, /catalogue = await openCatalogue\(\)/,
-    'CONNECT REPO handler must call openCatalogue()');
+    'catalogue load handler must call openCatalogue()');
+  assert.match(HTML, /DOMContentLoaded[\s\S]*?loadCatalogueAndPopulate/,
+    'catalogue must auto-load on DOMContentLoaded (no manual connect step)');
   assert.match(HTML, /import\s*\{[^}]*isTauri[^}]*\}\s*from\s*'\.\/lib\/runtime\.js'/,
     'isTauri not imported from ./lib/runtime.js');
 });
@@ -144,22 +146,24 @@ test('smoke: combat sim wired — simulate import + click handler + buildSimInpu
   assert.match(HTML, /getElementById\(['"]sim-run['"]\)\.addEventListener/);
 });
 
-test('smoke: model click-to-destroy + sim model-count refresh wired', () => {
+test('smoke: destroy/revive bookkeeping wired (right-click context menu)', () => {
+  // Single-click destroy was removed; KILL is right-click-only via the
+  // per-unit context menu. The destroyed-state bookkeeping must still exist
+  // so the menu KILL/REVIVE action and scenario load can drive it.
   assert.match(HTML, /destroyedModels = new Map/);
   assert.match(HTML, /toggleDestroyed/);
   assert.match(HTML, /destroyedCountFor/);
   assert.match(HTML, /applyDestroyedVisual/);
-  assert.match(HTML, /classList\.contains\(['"]model-circle['"]\)/);
   assert.match(HTML, /refreshSimModelCountsFor/);
   assert.match(HTML, /restoreDestroyedVisuals/);
+  assert.match(HTML, /unit-ctx-menu/);
+  assert.match(HTML, /data-act="kill"/);
 });
 
 test('smoke: native menu listener wired (Tauri-only path present)', () => {
   assert.match(HTML, /listen\(['"]menu-action['"]/,
     'menu-action listener missing');
   // Each menu action must click its corresponding existing button id.
-  assert.match(HTML, /e\.payload === 'connect_repo'[\s\S]*?getElementById\(['"]pick-repo['"]\)/,
-    'connect_repo must click #pick-repo');
   assert.match(HTML, /e\.payload === 'save_scenario'[\s\S]*?getElementById\(['"]save-scenario['"]\)/,
     'save_scenario must click #save-scenario');
   assert.match(HTML, /e\.payload === 'recall_scenario'[\s\S]*?getElementById\(['"]open-scenario['"]\)/,
@@ -207,11 +211,20 @@ test('smoke: render emits data-side on unit groups', () => {
 });
 
 test('smoke: refreshSimPairLine queries by per-unit-instance ID', () => {
-  // Post-2026-04-29 refactor: clusterCenter takes an instanceId (e.g.
-  // "hormagaunts:0") so duplicate units on the board resolve to the
-  // specific clicked instance, not the first slug match.
-  assert.match(HTML, /clusterCenter\(attackerInstanceId\)/);
+  // clusterCenter takes (instanceId, side) so duplicate units on the board
+  // — and instanceIds that collide across attacker/defender — resolve to
+  // the specific clicked instance, not the first slug match.
+  assert.match(HTML, /clusterCenter\(attackerInstanceId,\s*attackerSide\)/);
   assert.match(HTML, /data-instance-id=/);
+});
+
+test('smoke: shift+click drives the COMBAT AUSPEX pair', () => {
+  // Pair lives in [attacker|null, defender|null]. Plain clicks open the
+  // detail panel only — shift+click is the sim selector, with a same-side
+  // rejection so a defender can't be picked from the attacker's roster.
+  assert.match(HTML, /simClickPair\s*=\s*\[null,\s*null\]/);
+  assert.match(HTML, /recordShiftClick\(/);
+  assert.match(HTML, /e\.shiftKey/);
 });
 
 test('smoke: sim model-count inputs are read-only', () => {
