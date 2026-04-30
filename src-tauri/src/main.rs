@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod catalogue;
+mod seed;
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -87,26 +88,59 @@ fn user_delete(app: tauri::AppHandle, path: String) -> Result<(), String> {
     fs::remove_file(&abs).map_err(|e| e.to_string())
 }
 
-// Copy the bundled catalogue.db from the resource directory into the app data
-// directory on every launch so plugin-sql (which always resolves paths relative
-// to BaseDirectory::App) can find it. The bundled DB is read-only canonical
-// data; overwriting on every launch ensures app upgrades pick up the latest
-// schema and content. User-mutable state lives in a separate user.db (future).
-fn install_catalogue(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    // Bundle.resources entry is "resources/catalogue.db" (relative to src-tauri/)
-    // so the bundled file lives at <resource_dir>/resources/catalogue.db.
-    let resource_db = app
-        .path()
-        .resource_dir()?
-        .join("resources")
-        .join(CATALOGUE_FILENAME);
+// Reparse one mission MD file into catalogue.db without rebuilding the
+// whole catalogue. Phase 2B's mission editor calls this after writing
+// edits to <app_data>/missions/<slug>.md so the panel can re-render
+// against fresh DB data.
+#[tauri::command]
+fn reparse_mission(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_path = app_data_dir.join(CATALOGUE_FILENAME);
+    catalogue::reparse_mission(&db_path, &app_data_dir, &slug).map_err(|e| e.to_string())
+}
+
+// Phase 2C twin of reparse_mission for datasheets. Reads
+// <app_data>/datasheets/<faction_slug>/units/<slug>.md, drops the unit
+// + its child rows (loadouts, keywords, led_by, weapons), re-inserts.
+#[tauri::command]
+fn reparse_unit(app: tauri::AppHandle, faction_slug: String, slug: String) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_path = app_data_dir.join(CATALOGUE_FILENAME);
+    catalogue::reparse_unit(&db_path, &app_data_dir, &faction_slug, &slug)
+        .map_err(|e| e.to_string())
+}
+
+// Rebuild catalogue.db from the user-editable markdown trees in
+// <app_data>/{datasheets,missions} on every launch (Phase 1C). Three
+// reasons this lives at startup, not bundle time:
+//   * Editors (Phase 2) write to those trees — the DB must reflect
+//     latest edits without a manual rebuild.
+//   * Bundle.resources no longer ships catalogue.db, so there's no
+//     stale copy to install.
+//   * The rebuild is fast (<1s for the current corpus) and the
+//     plugin-sql connection opens after this returns.
+//
+// Hard fails on error: without a working DB the frontend has nothing
+// to query, so abort startup loudly rather than silently shipping a
+// broken app.
+fn rebuild_catalogue(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     fs::create_dir_all(&app_data_dir)?;
-    let dest_db = app_data_dir.join(CATALOGUE_FILENAME);
-    if !resource_db.exists() {
-        return Err(format!("bundled catalogue.db not found at {}", resource_db.display()).into());
+    let db_path = app_data_dir.join(CATALOGUE_FILENAME);
+    let result = catalogue::build_catalogue(&app_data_dir, &db_path)?;
+    eprintln!(
+        "catalogue: rebuilt from {} → {} units ({} enriched), {} missions",
+        app_data_dir.display(),
+        result.unit_count,
+        result.enriched_count,
+        result.mission_count,
+    );
+    if !result.warnings.is_empty() {
+        eprintln!("catalogue: {} parse warnings:", result.warnings.len());
+        for w in &result.warnings {
+            eprintln!("  [{}] {} — {}", w.kind, w.source_path, w.message);
+        }
     }
-    fs::copy(&resource_db, &dest_db)?;
     Ok(())
 }
 
@@ -122,9 +156,34 @@ fn main() {
             user_file_exists,
             user_mkdir,
             user_delete,
+            reparse_mission,
+            reparse_unit,
         ])
         .setup(|app| {
-            install_catalogue(&app.handle())?;
+            // Seed bundled markdown trees into app-data on first launch
+            // so the in-app editors (Phase 2) can mutate them. Must run
+            // BEFORE rebuild — the rebuild reads from these trees.
+            let res_dir = app.handle().path().resource_dir()?;
+            let data_dir = app.handle().path().app_data_dir()?;
+            match seed::seed_user_data(&res_dir, &data_dir) {
+                Ok(report) => {
+                    if !report.seeded_trees.is_empty() {
+                        eprintln!(
+                            "seed: copied bundled trees → app-data: {}",
+                            report.seeded_trees.join(", ")
+                        );
+                    }
+                    if !report.skipped_trees.is_empty() {
+                        eprintln!(
+                            "seed: trees already present, skipped: {}",
+                            report.skipped_trees.join(", ")
+                        );
+                    }
+                }
+                Err(e) => return Err(format!("seed: failed: {e}").into()),
+            }
+
+            rebuild_catalogue(&app.handle())?;
 
             let handle = app.handle();
 

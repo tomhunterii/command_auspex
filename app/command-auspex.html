@@ -263,10 +263,9 @@
     stroke-dasharray: 3 2;
   }
 
-  /* Compact delete-roster button next to each force dropdown. Disabled
-     by default; enabled only when the dropdown's currently-selected
-     roster is filesystem-pasted (origin=filesystem). Bundled rosters
-     are read-only and the button stays disabled for them. */
+  /* Compact delete- and edit-roster buttons next to each force
+     dropdown. Both gate on having a roster selected; everything in
+     user-save.md is mutable post-Phase-2A. */
   .delete-roster-btn {
     margin-left: 4px;
     padding: 2px 8px;
@@ -283,6 +282,23 @@
   }
   .delete-roster-btn:not(:disabled):hover {
     background: rgba(255, 93, 108, 0.15);
+  }
+  .edit-roster-btn {
+    margin-left: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--phosphor);
+    border-color: var(--phosphor-dim);
+  }
+  .edit-roster-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    color: var(--dim);
+    border-color: var(--phosphor-dim);
+  }
+  .edit-roster-btn:not(:disabled):hover {
+    background: rgba(0, 255, 153, 0.10);
   }
 
   /* Sidebar auspex-tab toggles — switches between COMBAT and MISSION
@@ -469,8 +485,8 @@
     <div class="status-msg"><span class="led"></span><span id="status">AUSPEX PRIMARIS // INITIALISING…</span></div>
     <div id="controls" style="display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;">
       <label class="status-msg">MISSION <select id="mission-select" class="select"><option value="">— NONE —</option></select></label>
-      <label class="status-msg">DEFENDER FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select><button id="delete-defender" class="btn delete-roster-btn" type="button" disabled title="Delete the user-pasted list selected in this dropdown (bundled lists cannot be deleted)">✕</button></label>
-      <label class="status-msg">ATTACKER FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select><button id="delete-attacker" class="btn delete-roster-btn" type="button" disabled title="Delete the user-pasted list selected in this dropdown (bundled lists cannot be deleted)">✕</button></label>
+      <label class="status-msg">DEFENDER FORCE <select id="defender-select" class="select"><option value="">— NONE —</option></select><button id="edit-defender" class="btn edit-roster-btn" type="button" disabled title="Edit the selected list">✎</button><button id="delete-defender" class="btn delete-roster-btn" type="button" disabled title="Delete the selected list">✕</button></label>
+      <label class="status-msg">ATTACKER FORCE <select id="attacker-select" class="select"><option value="">— NONE —</option></select><button id="edit-attacker" class="btn edit-roster-btn" type="button" disabled title="Edit the selected list">✎</button><button id="delete-attacker" class="btn delete-roster-btn" type="button" disabled title="Delete the selected list">✕</button></label>
       <button id="load-scenario" class="btn" disabled>ENGAGE</button>
       <button id="open-scenario" class="btn">RECALL SCENARIO</button>
       <button id="save-scenario" class="btn" disabled>COMMIT TO ARCHIVE</button>
@@ -540,13 +556,19 @@
         </div>
       </div>
       <div id="mission-panel" style="border:1px solid var(--phosphor-dim); padding:12px; margin-bottom:16px; position:relative; display:none;">
-        <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">▤ MISSION AUSPEX</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor);">▤ MISSION AUSPEX</div>
+          <button id="edit-mission" class="btn edit-roster-btn" type="button" disabled title="Edit the loaded mission's rules">✎</button>
+        </div>
         <div id="mission-rules-body">
           <div class="status-msg">LOAD A MISSION TO REVEAL RULES</div>
         </div>
       </div>
       <div id="unit-details-panel" style="border:1px solid var(--phosphor-dim); padding:12px; position:relative;">
-        <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor); margin-bottom:8px;">⊙ UNIT DETAILS</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <div style="font-family:'Bank Gothic',sans-serif; font-weight:700; font-size:11px; letter-spacing:3px; color:var(--phosphor);">⊙ UNIT DETAILS</div>
+          <button id="edit-unit" class="btn edit-roster-btn" type="button" disabled title="Edit the inspected unit's datasheet">✎</button>
+        </div>
         <div id="detail-panel">
           <div class="status-msg">SELECT A UNIT TO INSPECT</div>
         </div>
@@ -575,12 +597,16 @@ import { findMeleeChoices, applyMeleeSelection } from './lib/melee-selection.js'
 import { mergeLeaderGrants } from './lib/leader-grants.js';
 import { buildScenario, serializeScenario, parseScenario } from './lib/scenario.js';
 import {
-  writeFilesystemRoster,
-  deleteFilesystemRoster,
   writeFilesystemScenario,
   readFilesystemScenario,
   listFilesystemScenarios,
 } from './lib/fs-tauri.js';
+import {
+  upsertRosterInUserSave,
+  deleteRosterFromUserSave,
+  getUserSaveRoster,
+  entryToRosterMarkdown,
+} from './lib/user-save.js';
 
 const statusEl = document.getElementById('status');
 const missionSel = document.getElementById('mission-select');
@@ -601,10 +627,9 @@ let currentScenarioName = null;
 let autoSaveTimer = null;
 let rosterDropdownsLoaded = false;
 
-// Origin lookup populated by refreshRosterDropdowns — keyed on slug,
-// values are 'bundled' or 'filesystem'. Bundled rosters are baked into
-// catalogue.db at build time and are read-only; filesystem rosters live
-// in <app_data>/rosters and CAN be deleted via the per-dropdown ✕ button.
+// Origin lookup populated by refreshRosterDropdowns — keyed on slug.
+// Post-Phase-2A every roster lives in user-save.md and is deletable;
+// the map is retained for future origin tags (e.g. shared-list imports).
 const rosterOriginBySlug = new Map();
 
 // Re-fetch the roster list (catalogue + filesystem-pasted) and rebuild both
@@ -613,15 +638,9 @@ async function refreshRosterDropdowns({ selectDefender = null, selectAttacker = 
   if (!rosterDropdownsLoaded) return;
   const rosters = await listRosters();
   rosterOriginBySlug.clear();
-  for (const r of rosters) rosterOriginBySlug.set(r.slug, r.origin ?? 'bundled');
+  for (const r of rosters) rosterOriginBySlug.set(r.slug, r.origin ?? 'user-save');
   const optHtml = (items) => '<option value="">— SELECT —</option>' +
-    items.map(i => {
-      // Append a [USER] tag to filesystem-pasted entries so the captain
-      // can see at a glance which lists are deletable. Bundled (canonical
-      // catalogue) entries print plain.
-      const tag = i.origin === 'filesystem' ? ' [USER]' : '';
-      return `<option value="${i.slug}">${i.name}${tag}</option>`;
-    }).join('');
+    items.map(i => `<option value="${i.slug}">${i.name}</option>`).join('');
   const prevDef = defenderSel.value;
   const prevAtt = attackerSel.value;
   defenderSel.innerHTML = optHtml(rosters);
@@ -631,16 +650,18 @@ async function refreshRosterDropdowns({ selectDefender = null, selectAttacker = 
   refreshRosterDeleteButtons();
 }
 
-// Enable the per-dropdown ✕ button only when the currently-selected
-// roster is a user-pasted (filesystem) list. Bundled lists keep the
-// button disabled — they can't be deleted from inside the app.
+// Enable the per-dropdown ✕ and ✎ buttons when a roster is selected.
+// All rosters live in user-save.md post-Phase-2A and are mutable; the
+// buttons gate purely on whether something is selected.
 function refreshRosterDeleteButtons() {
-  const defBtn = document.getElementById('delete-defender');
-  const attBtn = document.getElementById('delete-attacker');
-  const defOrig = rosterOriginBySlug.get(defenderSel.value);
-  const attOrig = rosterOriginBySlug.get(attackerSel.value);
-  if (defBtn) defBtn.disabled = defOrig !== 'filesystem';
-  if (attBtn) attBtn.disabled = attOrig !== 'filesystem';
+  const defDel = document.getElementById('delete-defender');
+  const attDel = document.getElementById('delete-attacker');
+  const defEdit = document.getElementById('edit-defender');
+  const attEdit = document.getElementById('edit-attacker');
+  if (defDel) defDel.disabled = !defenderSel.value;
+  if (attDel) attDel.disabled = !attackerSel.value;
+  if (defEdit) defEdit.disabled = !defenderSel.value;
+  if (attEdit) attEdit.disabled = !attackerSel.value;
 }
 
 // Cached parsed rosters for sim filtering. Populated by friendly/hostile
@@ -1223,12 +1244,11 @@ attackerSel.addEventListener('change', async () => {
 async function handleDeleteRoster(selectEl, label) {
   const slug = selectEl.value;
   if (!slug) return;
-  if (rosterOriginBySlug.get(slug) !== 'filesystem') return;
   const optionText = selectEl.options[selectEl.selectedIndex]?.text ?? slug;
-  const ok = confirm(`Delete the user-pasted list "${optionText.replace(/\s*\[USER\]\s*$/, '')}"?\n\nThis cannot be undone.`);
+  const ok = confirm(`Delete the list "${optionText}"?\n\nThis cannot be undone.`);
   if (!ok) return;
   try {
-    await deleteFilesystemRoster(slug);
+    await deleteRosterFromUserSave(slug);
     rosterCache.delete(slug);
     // Drop the slug from BOTH dropdowns if either pointed at it.
     if (defenderSel.value === slug) {
@@ -1241,13 +1261,209 @@ async function handleDeleteRoster(selectEl, label) {
     }
     await refreshRosterDropdowns();
     await refreshSimGate();
-    statusEl.textContent = `LIST PURGED: ${optionText.replace(/\s*\[USER\]\s*$/, '')}`;
+    statusEl.textContent = `LIST PURGED: ${optionText}`;
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT REFUSED: ${err?.message ?? err}`;
   }
 }
 document.getElementById('delete-defender')?.addEventListener('click', () => handleDeleteRoster(defenderSel, 'DEFENDER'));
 document.getElementById('delete-attacker')?.addEventListener('click', () => handleDeleteRoster(attackerSel, 'ATTACKER'));
+
+// ── Roster editor (Phase 2A.2) ─────────────────────────────────────────────
+// Click ✎ next to a force dropdown to open the selected roster's full
+// markdown (frontmatter + body) in a textarea. Save re-runs the same
+// upsert path VOX-SCRIBE uses, so frontmatter changes — list_name,
+// faction, list_points — flow through normalize/parse identically.
+const editRosterModal = document.getElementById('edit-roster-modal');
+const editRosterTextarea = document.getElementById('edit-roster-textarea');
+const editRosterSlugLabel = document.getElementById('edit-roster-slug');
+let editingSlug = null;
+let editingSelectEl = null;
+
+async function openRosterEditor(selectEl) {
+  const slug = selectEl.value;
+  if (!slug) return;
+  const roster = await getUserSaveRoster(slug);
+  if (!roster) {
+    statusEl.textContent = `MACHINE-SPIRIT: roster "${slug}" not found in user-save.md`;
+    return;
+  }
+  editingSlug = slug;
+  editingSelectEl = selectEl;
+  editRosterSlugLabel.textContent = slug.toUpperCase();
+  // entryToRosterMarkdown emits frontmatter+body in canonical form so
+  // edits round-trip cleanly through upsertRosterInUserSave.
+  editRosterTextarea.value = entryToRosterMarkdown({
+    slug: roster.slug,
+    name: roster.name,
+    faction_slug: roster.faction_slug,
+    detachment_slug: roster.detachment_slug,
+    points_cap: roster.points_cap,
+    body_md: roster.body_md,
+  });
+  editRosterModal.classList.add('show');
+  editRosterTextarea.focus();
+}
+
+function closeRosterEditor() {
+  editRosterModal.classList.remove('show');
+  editingSlug = null;
+  editingSelectEl = null;
+  editRosterTextarea.value = '';
+}
+
+async function confirmRosterEdit() {
+  if (!editingSlug) return;
+  const slug = editingSlug;
+  const select = editingSelectEl;
+  const md = editRosterTextarea.value;
+  try {
+    await upsertRosterInUserSave(slug, md);
+    rosterCache.delete(slug);
+    closeRosterEditor();
+    // Re-select the slug so the dropdown stays pointed at the edited list.
+    const opts = select === defenderSel
+      ? { selectDefender: slug }
+      : { selectAttacker: slug };
+    await refreshRosterDropdowns(opts);
+    await refreshSimGate();
+    statusEl.textContent = `LIST UPDATED: ${slug.toUpperCase()}`;
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT REFUSED: ${err?.message ?? err}`;
+  }
+}
+
+document.getElementById('edit-defender')?.addEventListener('click', () => openRosterEditor(defenderSel));
+document.getElementById('edit-attacker')?.addEventListener('click', () => openRosterEditor(attackerSel));
+document.getElementById('edit-roster-cancel')?.addEventListener('click', closeRosterEditor);
+document.getElementById('edit-roster-confirm')?.addEventListener('click', confirmRosterEdit);
+// Click on the modal backdrop (not the dialog) to dismiss.
+editRosterModal?.addEventListener('click', (ev) => {
+  if (ev.target === editRosterModal) closeRosterEditor();
+});
+
+// ── Mission rules editor (Phase 2B) ────────────────────────────────────────
+// Mission MDs live at <app_data>/missions/<slug>.md (Phase 1B). The
+// editor reads the file directly, presents the full frontmatter+body
+// for editing, then on save writes the file back and asks the Rust
+// side to reparse just this mission into catalogue.db (no full rebuild).
+const editMissionModal = document.getElementById('edit-mission-modal');
+const editMissionTextarea = document.getElementById('edit-mission-textarea');
+const editMissionSlugLabel = document.getElementById('edit-mission-slug');
+
+function tauriInvoke() {
+  if (typeof window === 'undefined' || !window.__TAURI_INTERNALS__) {
+    throw new Error('Tauri runtime not detected');
+  }
+  return window.__TAURI_INTERNALS__.invoke;
+}
+
+async function openMissionEditor() {
+  if (!lastMissionPath) return;
+  const slug = lastMissionPath;
+  let text;
+  try {
+    text = await tauriInvoke()('user_read_text', { path: `missions/${slug}.md` });
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT: missions/${slug}.md not readable — ${err?.message ?? err}`;
+    return;
+  }
+  editMissionSlugLabel.textContent = slug.toUpperCase();
+  editMissionTextarea.value = text;
+  editMissionModal.classList.add('show');
+  editMissionTextarea.focus();
+}
+
+function closeMissionEditor() {
+  editMissionModal.classList.remove('show');
+  editMissionTextarea.value = '';
+}
+
+async function confirmMissionEdit() {
+  if (!lastMissionPath) return;
+  const slug = lastMissionPath;
+  const md = editMissionTextarea.value;
+  try {
+    await tauriInvoke()('user_write_text', { path: `missions/${slug}.md`, contents: md });
+    await tauriInvoke()('reparse_mission', { slug });
+    // Re-fetch the mission so the in-memory frontmatter reflects the edit.
+    // getMission already returns parsed frontmatter from frontmatter_json.
+    const refreshed = await getMission(slug);
+    if (refreshed?.frontmatter) {
+      lastMissionFrontmatter = refreshed.frontmatter;
+      renderMissionRules(refreshed.frontmatter);
+    }
+    closeMissionEditor();
+    statusEl.textContent = `MISSION UPDATED: ${slug.toUpperCase()}`;
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT REFUSED: ${err?.message ?? err}`;
+  }
+}
+
+document.getElementById('edit-mission')?.addEventListener('click', openMissionEditor);
+document.getElementById('edit-mission-cancel')?.addEventListener('click', closeMissionEditor);
+document.getElementById('edit-mission-confirm')?.addEventListener('click', confirmMissionEdit);
+editMissionModal?.addEventListener('click', (ev) => {
+  if (ev.target === editMissionModal) closeMissionEditor();
+});
+
+// ── Datasheet editor (Phase 2C) ────────────────────────────────────────────
+// Reads the unit MD from <app_data>/datasheets/<faction_slug>/units/<slug>.md,
+// presents the full file, and on save writes back + calls reparse_unit
+// to update the catalogue without rebuilding the whole DB.
+const editUnitModal = document.getElementById('edit-unit-modal');
+const editUnitTextarea = document.getElementById('edit-unit-textarea');
+const editUnitSlugLabel = document.getElementById('edit-unit-slug');
+
+async function openUnitEditor() {
+  if (!lastDetailUnit) return;
+  const { slug, faction_slug } = lastDetailUnit;
+  const relPath = `datasheets/${faction_slug}/units/${slug}.md`;
+  let text;
+  try {
+    text = await tauriInvoke()('user_read_text', { path: relPath });
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT: ${relPath} not readable — ${err?.message ?? err}`;
+    return;
+  }
+  editUnitSlugLabel.textContent = `${faction_slug}/${slug}`.toUpperCase();
+  editUnitTextarea.value = text;
+  editUnitModal.classList.add('show');
+  editUnitTextarea.focus();
+}
+
+function closeUnitEditor() {
+  editUnitModal.classList.remove('show');
+  editUnitTextarea.value = '';
+}
+
+async function confirmUnitEdit() {
+  if (!lastDetailUnit) return;
+  const { slug, faction_slug } = lastDetailUnit;
+  const relPath = `datasheets/${faction_slug}/units/${slug}.md`;
+  const md = editUnitTextarea.value;
+  try {
+    await tauriInvoke()('user_write_text', { path: relPath, contents: md });
+    await tauriInvoke()('reparse_unit', { factionSlug: faction_slug, slug });
+    closeUnitEditor();
+    // Re-fetch the unit to refresh the panel against fresh DB state.
+    const fresh = await getUnit(slug);
+    if (fresh) {
+      lastDatasheets.set(fresh.name, fresh);
+      renderDetailPanel({ name: fresh.name, datasheet: fresh.slug }, fresh);
+    }
+    statusEl.textContent = `DATASHEET UPDATED: ${slug.toUpperCase()}`;
+  } catch (err) {
+    statusEl.textContent = `MACHINE-SPIRIT REFUSED: ${err?.message ?? err}`;
+  }
+}
+
+document.getElementById('edit-unit')?.addEventListener('click', openUnitEditor);
+document.getElementById('edit-unit-cancel')?.addEventListener('click', closeUnitEditor);
+document.getElementById('edit-unit-confirm')?.addEventListener('click', confirmUnitEdit);
+editUnitModal?.addEventListener('click', (ev) => {
+  if (ev.target === editUnitModal) closeUnitEditor();
+});
 
 // Auto-populate model count inputs from the roster when a sim unit is selected.
 // Subtracts any destroyed models from the live count. Lookups are per-
@@ -1574,6 +1790,10 @@ loadBtn.addEventListener('click', async () => {
 
 const sidebar = document.getElementById('sidebar');
 const lastDatasheets = new Map();
+// Identity of the unit currently shown in the UNIT DETAILS panel. The ✎
+// editor uses this to locate the source file. Reset whenever the panel
+// renders without a valid datasheet.
+let lastDetailUnit = null;
 
 const tooltipEl = document.getElementById('tooltip');
 
@@ -1907,6 +2127,9 @@ let simPairLine = null; // SVG <line> drawn between current attacker + defender 
 function renderMissionRules(frontmatter) {
   const body = document.getElementById('mission-rules-body');
   if (!body) return;
+  // Gate the ✎ EDIT button on having a mission loaded.
+  const editBtn = document.getElementById('edit-mission');
+  if (editBtn) editBtn.disabled = !frontmatter || !lastMissionPath;
   const rules = Array.isArray(frontmatter?.mission_rules) ? frontmatter.mission_rules : [];
   if (rules.length === 0) {
     body.innerHTML = `<div class="status-msg">${
@@ -2911,7 +3134,7 @@ async function handlePasteConfirm() {
 
   const md = buildRosterMarkdown(roster, '<vox-scribe paste>');
   try {
-    await writeFilesystemRoster(slug, md);
+    await upsertRosterInUserSave(slug, md);
   } catch (err) {
     statusEl.textContent = `MACHINE-SPIRIT OBJECTS: ${err.message}`;
     return;
@@ -2974,6 +3197,17 @@ function buildRosterMarkdown(roster, rawFilename) {
 
 function renderDetailPanel(unit, ds, opts = {}) {
   if (!unit) return;
+  // Stash the displayed unit's identity so the ✎ EDIT button knows which
+  // datasheet file to open. faction_slug + slug uniquely locate the source
+  // file under <app_data>/datasheets/<faction_slug>/units/<slug>.md.
+  const editBtn = document.getElementById('edit-unit');
+  if (ds?.faction_slug && ds?.slug) {
+    lastDetailUnit = { slug: ds.slug, faction_slug: ds.faction_slug, name: ds.name };
+    if (editBtn) editBtn.disabled = false;
+  } else {
+    lastDetailUnit = null;
+    if (editBtn) editBtn.disabled = true;
+  }
   const base = ds?.base
     ? (ds.base.shape === 'oval'
         ? `${ds.base.length_mm}mm × ${ds.base.width_mm}mm OVAL${ds.base.flight_stem ? ' (FLIGHT STEM)' : ''}`
@@ -3390,6 +3624,39 @@ if (window.__TAURI_INTERNALS__) {
     <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
       <button class="btn" id="paste-cancel">CANCEL</button>
       <button class="btn" id="paste-confirm">PARSE + SAVE</button>
+    </div>
+  </div>
+</div>
+<div id="edit-roster-modal" class="paste-modal">
+  <div class="paste-dialog" style="width:720px;">
+    <div class="title" style="font-size:13px;">EDIT ROSTER · <span id="edit-roster-slug" style="color:var(--phosphor);"></span></div>
+    <div class="status-msg">Frontmatter (top) controls metadata; body is unit list. Save re-parses both.</div>
+    <textarea id="edit-roster-textarea" class="paste-textarea" style="min-height:420px;" spellcheck="false"></textarea>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" id="edit-roster-cancel">CANCEL</button>
+      <button class="btn" id="edit-roster-confirm">SAVE</button>
+    </div>
+  </div>
+</div>
+<div id="edit-mission-modal" class="paste-modal">
+  <div class="paste-dialog" style="width:720px;">
+    <div class="title" style="font-size:13px;">EDIT MISSION · <span id="edit-mission-slug" style="color:var(--phosphor);"></span></div>
+    <div class="status-msg">Frontmatter holds mission_rules. Save writes the file and reparses just this mission into the catalogue.</div>
+    <textarea id="edit-mission-textarea" class="paste-textarea" style="min-height:480px;" spellcheck="false"></textarea>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" id="edit-mission-cancel">CANCEL</button>
+      <button class="btn" id="edit-mission-confirm">SAVE</button>
+    </div>
+  </div>
+</div>
+<div id="edit-unit-modal" class="paste-modal">
+  <div class="paste-dialog" style="width:820px;">
+    <div class="title" style="font-size:13px;">EDIT DATASHEET · <span id="edit-unit-slug" style="color:var(--phosphor);"></span></div>
+    <div class="status-msg">Full datasheet markdown — frontmatter, profile, weapons, keywords, loadouts. Save reparses this unit into the catalogue.</div>
+    <textarea id="edit-unit-textarea" class="paste-textarea" style="min-height:520px;" spellcheck="false"></textarea>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn" id="edit-unit-cancel">CANCEL</button>
+      <button class="btn" id="edit-unit-confirm">SAVE</button>
     </div>
   </div>
 </div>

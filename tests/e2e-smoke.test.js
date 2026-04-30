@@ -137,10 +137,26 @@ test('smoke: delete-roster buttons present and gated by origin', () => {
   // Origin map + gating helper wired up.
   assert.match(HTML, /rosterOriginBySlug/);
   assert.match(HTML, /function refreshRosterDeleteButtons/);
-  // Delete handler imports the filesystem-roster delete function.
-  assert.match(HTML, /deleteFilesystemRoster/);
-  // [USER] tag rendered for filesystem-pasted entries so origin is visible.
-  assert.match(HTML, /\[USER\]/);
+  // Delete handler routes through user-save (Phase 2A).
+  assert.match(HTML, /deleteRosterFromUserSave/);
+  // Phase 2A.2 — edit ✎ button + modal markup wired up.
+  assert.match(HTML, /id="edit-defender"/);
+  assert.match(HTML, /id="edit-attacker"/);
+  assert.match(HTML, /id="edit-roster-modal"/);
+  assert.match(HTML, /id="edit-roster-textarea"/);
+  assert.match(HTML, /id="edit-roster-confirm"/);
+  assert.match(HTML, /function openRosterEditor/);
+  // Phase 2B — mission rules editor markup + reparse_mission wiring.
+  assert.match(HTML, /id="edit-mission"/);
+  assert.match(HTML, /id="edit-mission-modal"/);
+  assert.match(HTML, /id="edit-mission-textarea"/);
+  assert.match(HTML, /reparse_mission/);
+  // Phase 2C — datasheet editor markup + reparse_unit wiring.
+  assert.match(HTML, /id="edit-unit"/);
+  assert.match(HTML, /id="edit-unit-modal"/);
+  assert.match(HTML, /id="edit-unit-textarea"/);
+  assert.match(HTML, /reparse_unit/);
+  assert.match(HTML, /function openUnitEditor/);
 });
 
 test('smoke: mission auspex panel + tab toggle present', () => {

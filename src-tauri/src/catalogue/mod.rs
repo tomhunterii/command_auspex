@@ -180,6 +180,96 @@ fn build_one_mission(
     Ok(())
 }
 
+/// Single-unit reparse — reads `<source_root>/datasheets/<faction_slug>/units/<slug>.md`,
+/// drops every existing row tied to that unit (loadouts, keywords,
+/// led_by, weapons, then the unit row itself), and re-inserts via
+/// `insert_datasheet`. Used by the datasheet editor (Phase 2C) so a
+/// unit save doesn't trigger a full catalogue rebuild — the same
+/// pattern as `reparse_mission`.
+///
+/// Schema FKs aren't declared with ON DELETE CASCADE, so each child
+/// table is dropped explicitly. The `UNIQUE(faction_id, slug)` constraint
+/// on `units` makes the delete-then-insert safe.
+pub fn reparse_unit(
+    db_path: &Path,
+    source_root: &Path,
+    faction_slug: &str,
+    slug: &str,
+) -> Result<(), CatalogueError> {
+    let path = source_root
+        .join("datasheets")
+        .join(faction_slug)
+        .join("units")
+        .join(format!("{slug}.md"));
+    if !path.exists() {
+        return Err(CatalogueError::Other(format!(
+            "datasheet file not found: {}",
+            path.display()
+        )));
+    }
+    let text = std::fs::read_to_string(&path)?;
+    let fm = parse_frontmatter(&text).map_err(|e| CatalogueError::Yaml {
+        path: path.clone(),
+        source: e,
+    })?;
+    let ds = crate::catalogue::parsers::datasheet::parse_datasheet(&text);
+    let source_path = relative_source_path(source_root, &path);
+
+    let conn = Connection::open(db_path)?;
+    let faction_id = ensure_faction(&conn, faction_slug)?;
+    let existing_id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM units WHERE faction_id = ?1 AND slug = ?2",
+            rusqlite::params![faction_id, slug],
+            |r| r.get(0),
+        )
+        .ok();
+    if let Some(id) = existing_id {
+        conn.execute("DELETE FROM unit_loadouts WHERE unit_id = ?1", [id])?;
+        conn.execute("DELETE FROM unit_keywords WHERE unit_id = ?1", [id])?;
+        conn.execute("DELETE FROM unit_led_by WHERE unit_id = ?1", [id])?;
+        conn.execute("DELETE FROM weapons WHERE unit_id = ?1", [id])?;
+        conn.execute("DELETE FROM units WHERE id = ?1", [id])?;
+    }
+    insert_datasheet(&conn, faction_id, &ds, fm.as_ref(), &text, slug, &source_path)?;
+    Ok(())
+}
+
+/// Single-mission reparse — reads `<source_root>/missions/<slug>.md`,
+/// deletes any existing row in `<db_path>` keyed on that slug, and
+/// inserts the freshly parsed row. Used by the editor (Phase 2B) so a
+/// mission save doesn't trigger a full catalogue rebuild.
+///
+/// The DB connection is opened with WAL already in effect from the
+/// initial build; we just open a fresh connection to operate on it.
+/// Errors propagate as CatalogueError so the Tauri command can format
+/// them for the frontend.
+pub fn reparse_mission(
+    db_path: &Path,
+    source_root: &Path,
+    slug: &str,
+) -> Result<(), CatalogueError> {
+    let path = source_root.join("missions").join(format!("{slug}.md"));
+    if !path.exists() {
+        return Err(CatalogueError::Other(format!(
+            "mission file not found: {}",
+            path.display()
+        )));
+    }
+    let text = std::fs::read_to_string(&path)?;
+    let fm = parse_frontmatter(&text).map_err(|e| CatalogueError::Yaml {
+        path: path.clone(),
+        source: e,
+    })?;
+    let mission = parse_mission(&text, slug, fm.as_ref())?;
+    let source_path = relative_source_path(source_root, &path);
+
+    let conn = Connection::open(db_path)?;
+    conn.execute("DELETE FROM missions WHERE slug = ?1", [slug])?;
+    insert_mission(&conn, &mission, &source_path)?;
+    Ok(())
+}
+
 /// RFC-3339 timestamp without pulling in chrono (one tiny stdlib snippet
 /// keeps the dep tree small). Format: 2026-04-29T22:14:00Z.
 fn chrono_now() -> String {
@@ -228,6 +318,150 @@ mod tests {
         assert_eq!(result.mission_count, 0);
         assert_eq!(result.warnings.len(), 0);
         assert!(db.exists());
+    }
+
+    #[test]
+    fn reparse_mission_updates_existing_row() {
+        let tmp = TempDir::new().unwrap();
+        let source = tmp.path();
+        let db = source.join("catalogue.db");
+
+        // Seed a mission file and build the catalogue once.
+        let missions_dir = source.join("missions");
+        std::fs::create_dir_all(&missions_dir).unwrap();
+        let mission_path = missions_dir.join("test-mission.md");
+        std::fs::write(
+            &mission_path,
+            "---\nname: Original Name\nmission_rules:\n  - name: First Rule\n    description: original\n---\n\n## DEPLOYMENT\n\nbody",
+        ).unwrap();
+        build_catalogue(source, &db).unwrap();
+
+        // Sanity check the original row is present.
+        let conn = Connection::open(&db).unwrap();
+        let original_name: String = conn
+            .query_row("SELECT name FROM missions WHERE slug = 'test-mission'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(original_name, "Original Name");
+        drop(conn);
+
+        // Edit the file on disk, then reparse just this slug.
+        std::fs::write(
+            &mission_path,
+            "---\nname: Updated Name\nmission_rules:\n  - name: New Rule\n    description: revised\n---\n\n## DEPLOYMENT\n\nbody",
+        ).unwrap();
+        reparse_mission(&db, source, "test-mission").unwrap();
+
+        // Verify the row was replaced (not duplicated).
+        let conn = Connection::open(&db).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM missions WHERE slug = 'test-mission'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "reparse must replace, not insert a duplicate");
+        let new_name: String = conn
+            .query_row("SELECT name FROM missions WHERE slug = 'test-mission'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(new_name, "Updated Name");
+        let fm_json: String = conn
+            .query_row("SELECT frontmatter_json FROM missions WHERE slug = 'test-mission'", [], |r| r.get(0))
+            .unwrap();
+        assert!(fm_json.contains("New Rule"), "frontmatter_json should reflect the edit");
+    }
+
+    #[test]
+    fn reparse_unit_replaces_unit_and_child_rows() {
+        let tmp = TempDir::new().unwrap();
+        let source = tmp.path();
+        let db = source.join("catalogue.db");
+
+        // Stage a real datasheet from the repo so all the parsing
+        // edge-cases (profile/weapons/keywords) actually fire.
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let src_md = repo.join("datasheets/space-marines/units/captain.md");
+        let dst_md = source.join("datasheets/space-marines/units/captain.md");
+        std::fs::create_dir_all(dst_md.parent().unwrap()).unwrap();
+        std::fs::copy(&src_md, &dst_md).unwrap();
+
+        build_catalogue(source, &db).unwrap();
+
+        let conn = Connection::open(&db).unwrap();
+        let unit_id: i64 = conn
+            .query_row("SELECT id FROM units WHERE slug = 'captain'", [], |r| r.get(0))
+            .unwrap();
+        let original_weapon_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM weapons WHERE unit_id = ?1",
+                [unit_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(original_weapon_count > 0, "captain should have weapons after build");
+        drop(conn);
+
+        // Edit the file: rename the unit and remove the weapons sections.
+        let original_text = std::fs::read_to_string(&dst_md).unwrap();
+        let edited_text = original_text
+            .replace("# Captain", "# Captain (Edited)")
+            // Strip the weapons sections by renaming their headers so the
+            // datasheet parser doesn't pick them up.
+            .replace("## Ranged Weapons", "## Ranged Weapons (removed)")
+            .replace("## Melee Weapons", "## Melee Weapons (removed)");
+        std::fs::write(&dst_md, &edited_text).unwrap();
+
+        reparse_unit(&db, source, "space-marines", "captain").unwrap();
+
+        let conn = Connection::open(&db).unwrap();
+        // Single row, name updated.
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM units WHERE slug = 'captain'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "reparse must replace, not duplicate");
+        let new_name: String = conn
+            .query_row("SELECT name FROM units WHERE slug = 'captain'", [], |r| r.get(0))
+            .unwrap();
+        assert!(new_name.contains("Edited"), "renamed unit name should land in DB; got {new_name}");
+
+        // Child rows should now reflect the EDIT, not the original. Weapons
+        // were stripped from the source so the count must be zero.
+        let new_unit_id: i64 = conn
+            .query_row("SELECT id FROM units WHERE slug = 'captain'", [], |r| r.get(0))
+            .unwrap();
+        let new_weapon_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM weapons WHERE unit_id = ?1",
+                [new_unit_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(new_weapon_count, 0, "weapons table should reflect the edit");
+
+        // Orphan rows from the previous unit_id must have been deleted —
+        // total weapons in DB tied to ANY captain id should be zero.
+        let orphan: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM weapons WHERE unit_id NOT IN (SELECT id FROM units)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(orphan, 0, "no orphan weapons should remain after reparse");
+    }
+
+    #[test]
+    fn reparse_unit_errors_on_missing_file() {
+        let tmp = TempDir::new().unwrap();
+        let db = tmp.path().join("catalogue.db");
+        build_catalogue(tmp.path(), &db).unwrap();
+        let err = reparse_unit(&db, tmp.path(), "space-marines", "does-not-exist").unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn reparse_mission_errors_on_missing_file() {
+        let tmp = TempDir::new().unwrap();
+        let db = tmp.path().join("catalogue.db");
+        build_catalogue(tmp.path(), &db).unwrap();
+        let err = reparse_mission(&db, tmp.path(), "does-not-exist").unwrap_err();
+        assert!(err.to_string().contains("not found"));
     }
 
     #[test]

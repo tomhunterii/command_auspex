@@ -21,3 +21,5 @@ src-tauri/icons/Square*.png
 src-tauri/icons/android/
 src-tauri/icons/ios/
 src-tauri/resources/catalogue.db
+src-tauri/resources/datasheets/
+src-tauri/resources/missions/
