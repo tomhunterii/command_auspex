@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod catalogue;
+
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri::{
