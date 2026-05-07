@@ -14,7 +14,8 @@ loadouts:
 keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Grenades, Jump Pack, Fly, Vanguard Veteran Squad, Vanguard Veteran Squad with Jump Packs]
-led_by: []
+led_by:
+  - chaplain-with-jump-pack
 ---
 
 # Vanguard Veteran Squad with Jump Packs
@@ -22,7 +23,7 @@ led_by: []
 **Faction:** Space Marines (Adeptus Astartes)
 **Source:** Codex: Space Marines (10th Edition) / Wahapedia / MFM v3.9
 
-> **Armageddon launch box (2026-06-14):** This squad ships in the 11th-Edition launch box. Captain Hunter's collection lists this unit as 1st Co Squad Cornelius. 32mm bases on flight stems.
+> **Armageddon launch box:** This squad ships in the 11th-Edition launch box. Contents previewed 2026-05-01 via warhammer-community; release date TBC. Captain Hunter's collection lists this unit as 1st Co Squad Cornelius. 32mm bases on flight stems.
 
 ---
 
@@ -107,9 +108,9 @@ Every model is equipped with: bolt pistol; Vanguard Veteran weapon.
 
 This unit can be led by the following Characters (mono-Codex SM / Ultramarines):
 
-- *(none currently in repo)*
+- Chaplain with Jump Pack
 
-> Wahapedia's full Led By list: Captain with Jump Pack, Chaplain with Jump Pack, Librarian with Jump Pack, Kayvaan Shrike (Raven Guard), Commander Dante (Blood Angels), Sanguinary Priest with Jump Pack, Brother Corbulo, Captain Tycho, Chaplain Cassius, Gabriel Seth, Imperial Space Marine. **None of those leader datasheets currently exist in this repo**, so `led_by:` is empty in the frontmatter. Rules-legality vs. flavour-incongruity distinction (per QA convention): all jump-pack character leaders are rules-legal; the Blood Angels / Raven Guard variants are flavour-incongruous with mono-Ultramarines but legal in Codex SM Detachments.
+> Wahapedia's full Led By list also includes: Captain with Jump Pack, Librarian with Jump Pack, Kayvaan Shrike (Raven Guard), Commander Dante (Blood Angels), Sanguinary Priest with Jump Pack, Brother Corbulo, Captain Tycho, Chaplain Cassius, Gabriel Seth, Imperial Space Marine. **Captain with Jump Pack and Librarian with Jump Pack datasheets not yet in repo.** Rules-legality vs. flavour-incongruity distinction (per QA convention): all jump-pack character leaders are rules-legal; the Blood Angels / Raven Guard variants are flavour-incongruous with mono-Ultramarines but legal in Codex SM Detachments.
 > Not an Epic Hero — the squad CAN host an Enhancement on its leader (subject to that leader's own eligibility).
 
 ---
@@ -127,6 +128,6 @@ This unit can be led by the following Characters (mono-Codex SM / Ultramarines):
 
 - Wahapedia: https://wahapedia.ru/wh40k10ed/factions/space-marines/Vanguard-Veteran-Squad-With-Jump-Packs
 - Munitorum Field Manual v3.9 (Feb 2026), Codex: Space Marines section
-- Ships in the 11th-Edition Armageddon launch box, 2026-06-14.
+- Ships in the 11th-Edition Armageddon launch box (release TBC, contents previewed 2026-05-01).
 
 <!-- Last verified: 2026-04-29 — source: Wahapedia https://wahapedia.ru/wh40k10ed/factions/space-marines/Vanguard-Veteran-Squad-With-Jump-Packs / MFM v3.9 -->

@@ -16,6 +16,7 @@ keywords:
   unit: [Infantry, Battleline, Grenades, Tacticus, Assault Intercessor Squad]
 led_by:
   - adrax-agatone
+  - ancient
   - apothecary
   - captain
   - captain-titus
@@ -23,6 +24,7 @@ led_by:
   - chief-librarian-tigurius
   - judiciar
   - kor-sarro-khan
+  - librarian
   - lieutenant
   - marneus-calgar
   - uriel-ventris
@@ -112,6 +114,7 @@ Every model is equipped with: heavy bolt pistol; Astartes chainsword.
 This unit can be led by the following Characters (mono-Codex SM / Ultramarines):
 
 - Adrax Agatone
+- Ancient
 - Apothecary
 - Captain
 - Captain Titus (Demetrian Titus)
@@ -119,11 +122,12 @@ This unit can be led by the following Characters (mono-Codex SM / Ultramarines):
 - Chief Librarian Tigurius
 - Judiciar
 - Kor'sarro Khan
+- Librarian
 - Lieutenant
 - Marneus Calgar in Armour of Antilochus
 - Uriel Ventris
 
-> Wahapedia's full list also includes Ancient (generic), Librarian (generic), Techmarine, Vulkan He'stan, Primaris Company Champion, plus Black Templars / Blood Angels / Dark Angels / Deathwatch / Inquisition characters. Generic Ancient/Librarian/Techmarine and the cross-Chapter / Inquisition leaders are absent from `led_by:` here only because no datasheets for those slugs exist in this repo. Rules-legality vs. flavour-incongruity distinction: all are rules-legal in Codex SM lists; the non-Ultramarines variants are flavour-incongruous in mono-Ultramarines.
+> Wahapedia's full list also includes Techmarine, Vulkan He'stan, Primaris Company Champion, plus Black Templars / Blood Angels / Dark Angels / Deathwatch / Inquisition characters. Techmarine and the cross-Chapter / Inquisition leaders are absent from `led_by:` here only because no datasheets for those slugs exist in this repo. Rules-legality vs. flavour-incongruity distinction: all are rules-legal in Codex SM lists; the non-Ultramarines variants are flavour-incongruous in mono-Ultramarines.
 > Not an Epic Hero — the squad CAN host an Enhancement on its leader (subject to that leader's own eligibility).
 
 ---

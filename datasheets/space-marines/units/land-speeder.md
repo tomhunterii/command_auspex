@@ -20,8 +20,8 @@ led_by: []
 **Faction:** Space Marines (Adeptus Astartes)
 **Source:** Codex: Space Marines (10th Edition) / Wahapedia / MFM v3.9
 
-> **Armageddon launch box (2026-06-14):** Captain Hunter noted this vehicle ships in the 11th-Edition launch box. 2nd Company asset. Round Vehicle / 60mm flying base.
-> **Wahapedia Legends flag:** Wahapedia currently lists the Land Speeder under Warhammer Legends (v1.7). It remains a points-costed datasheet in MFM v3.9 and is legal in Crusade / open play; matched-play tournament organisers may exclude Legends. Captain to confirm matched-play legality once 11th-Edition codex drops.
+> **Armageddon launch box:** Ships in the 11th-Edition launch box. Contents previewed 2026-05-01 via warhammer-community; release date TBC. 2nd Company asset. Round Vehicle / 60mm flying base.
+> **LEGENDS — confirmed via Warhammer Community:** Per the official "Space Marine Range Update" article, Land Speeders have been moved out of the Codex into Warhammer Legends. Wahapedia lists this datasheet under Legends v1.7. Remains points-costed in MFM v3.9 and legal in Crusade / open play; matched-play tournament organisers may exclude Legends. **Captain flagged 2026-05-01:** the Armageddon-box Land Speeder ships with a Legends-only datasheet — there is no current 10th Ed Codex profile.
 
 ---
 
@@ -102,6 +102,6 @@ This model is equipped with: heavy bolter; close combat weapon.
 
 - Wahapedia: https://wahapedia.ru/wh40k10ed/factions/space-marines/Land-Speeder (Warhammer Legends v1.7)
 - Munitorum Field Manual v3.9 (Feb 2026), Codex: Space Marines section
-- Ships in the 11th-Edition Armageddon launch box, 2026-06-14.
+- Ships in the 11th-Edition Armageddon launch box (release TBC, contents previewed 2026-05-01). Datasheet is Legends-only per official Warhammer Community range update.
 
 <!-- Last verified: 2026-04-29 — source: Wahapedia https://wahapedia.ru/wh40k10ed/factions/space-marines/Land-Speeder / MFM v3.9. Currently flagged as Legends on Wahapedia; revisit once 11th-Ed Codex drops with the Armageddon box. -->

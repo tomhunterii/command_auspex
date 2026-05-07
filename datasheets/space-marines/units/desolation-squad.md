@@ -13,8 +13,10 @@ keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Grenades, Tacticus, Desolation Squad]
 led_by:
+  - ancient
   - apothecary
   - chief-librarian-tigurius
+  - librarian
 ---
 
 # Desolation Squad
@@ -100,10 +102,12 @@ Every model is equipped with: bolt pistol; superfrag rocket launcher; close comb
 
 This unit can be led by the following Characters (mono-Codex SM / Ultramarines):
 
+- Ancient
 - Apothecary
 - Chief Librarian Tigurius
+- Librarian
 
-> Wahapedia's full Led By list also includes generic Ancient, generic Librarian, Techmarine, and (cross-Chapter / ally) Sanguinary Priest, Brother Corbulo. Those datasheets do not exist in this repo, so they are absent from `led_by:`. Rules-legality vs. flavour-incongruity distinction: all are rules-legal in Codex SM Detachments; Sanguinary Priest / Brother Corbulo are flavour-incongruous in mono-Ultramarines.
+> Wahapedia's full Led By list also includes Techmarine, and (cross-Chapter / ally) Sanguinary Priest, Brother Corbulo. Those datasheets do not exist in this repo, so they are absent from `led_by:`. Rules-legality vs. flavour-incongruity distinction: all are rules-legal in Codex SM Detachments; Sanguinary Priest / Brother Corbulo are flavour-incongruous in mono-Ultramarines.
 > **Conflict flag (per MFM-skepticism directive):** Captain Hunter's brief asserted **Iron Father Feirros** and **Tor Garadon** as the Desolation Squad's leaders. **Wahapedia 2026-04-29 disagrees** — neither is listed in this unit's Led By. Iron Father Feirros and Tor Garadon are Wahapedia-confirmed leaders of the Heavy Intercessor Squad, not Desolation. Adopting Wahapedia for Desolation. Captain to confirm if a different/older list applied.
 > Not an Epic Hero — the squad CAN host an Enhancement on its leader (subject to that leader's own eligibility).
 

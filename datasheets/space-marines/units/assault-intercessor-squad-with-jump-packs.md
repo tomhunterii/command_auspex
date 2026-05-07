@@ -14,7 +14,8 @@ loadouts:
 keywords:
   faction: [Adeptus Astartes, Imperium]
   unit: [Infantry, Grenades, Jump Pack, Fly, Tacticus, Assault Intercessors with Jump Packs]
-led_by: []
+led_by:
+  - chaplain-with-jump-pack
 ---
 
 # Assault Intercessors with Jump Packs
@@ -102,9 +103,9 @@ Every model is equipped with: heavy bolt pistol; Astartes chainsword.
 
 This unit can be led by the following Characters (mono-Codex SM / Ultramarines):
 
-- *(none currently in repo)*
+- Chaplain with Jump Pack
 
-> Wahapedia's full Led By list: Captain with Jump Pack, Chaplain with Jump Pack, Kayvaan Shrike (Raven Guard), Commander Dante (Blood Angels), Sanguinary Priest with Jump Pack. **None of those leader datasheets currently exist in this repo**, so `led_by:` is empty in the frontmatter. Rules-legality vs. flavour-incongruity distinction: all are rules-legal in Codex SM Detachments; the Blood Angels / Raven Guard variants are flavour-incongruous with mono-Ultramarines.
+> Wahapedia's full Led By list also includes: Captain with Jump Pack, Kayvaan Shrike (Raven Guard), Commander Dante (Blood Angels), Sanguinary Priest with Jump Pack. **Captain with Jump Pack datasheet not yet in repo**; Blood Angels / Raven Guard variants are flavour-incongruous with mono-Ultramarines but rules-legal in Codex SM Detachments.
 > Not an Epic Hero — the squad CAN host an Enhancement on its leader (subject to that leader's own eligibility).
 
 ---
