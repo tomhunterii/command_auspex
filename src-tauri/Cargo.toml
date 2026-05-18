@@ -26,11 +26,17 @@ regex = "1.10"
 walkdir = "2.5"
 once_cell = "1.19"
 thiserror = "1"
+# HTTPS client for on-launch sync against raw.githubusercontent.com.
+# Blocking (sync) — fine because sync runs once in setup(), before window.
+ureq = { version = "2", features = ["tls"] }
+sha2 = "0.10"
 
 [dev-dependencies]
 # Integration tests live in src-tauri/tests/ and build a catalogue against
 # the repo's actual datasheets/ tree (path resolved via CARGO_MANIFEST_DIR).
 tempfile = "3"
+# In-process HTTP server for sync_test.rs.
+tiny_http = "0.12"
 
 [[bin]]
 # CLI entrypoint that builds the catalogue from a given input dir without
