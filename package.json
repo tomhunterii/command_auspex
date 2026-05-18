@@ -10,7 +10,6 @@
   "scripts": {
     "test": "node --test",
     "audit:sim": "node scripts/audit-sim-math.js",
-    "build:catalogue": "node scripts/build-catalogue.js",
     "build:icons": "node scripts/build-icons.js",
     "stage:bundled-md": "node scripts/stage-bundled-md.js",
     "tauri": "tauri",
