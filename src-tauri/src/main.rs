@@ -2,6 +2,7 @@
 
 mod catalogue;
 mod seed;
+mod sync;
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -181,6 +182,22 @@ fn main() {
                     }
                 }
                 Err(e) => return Err(format!("seed: failed: {e}").into()),
+            }
+
+            // Sync datasheets from GitHub before rebuilding the catalogue.
+            // Failures are logged; startup proceeds with whatever's on disk.
+            let datasheets_dir = data_dir.join("datasheets");
+            match sync::sync_datasheets(&datasheets_dir) {
+                Ok(r) => {
+                    eprintln!(
+                        "sync: datasheets fetched={} skipped={} errors={}",
+                        r.fetched, r.skipped, r.errors.len()
+                    );
+                    for e in &r.errors {
+                        eprintln!("sync: {}", e);
+                    }
+                }
+                Err(e) => eprintln!("sync: fatal (continuing with local copy): {}", e),
             }
 
             rebuild_catalogue(&app.handle())?;

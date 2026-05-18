@@ -5,6 +5,7 @@ description = "Command Auspex — list-building battle simulator"
 authors = ["Tom Hunter"]
 edition = "2021"
 rust-version = "1.77"
+default-run = "command-auspex"
 
 [lib]
 name = "command_auspex"
