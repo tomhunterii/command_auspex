@@ -1,0 +1,3 @@
+[submodule "datasheets"]
+	path = datasheets
+	url = https://github.com/tomhunterii/datasheets-40k.git
